@@ -1,9 +1,8 @@
 #!/bin/sh 
 
 # -------------------------------------------------------------------------- # 
-# Copyright 2015, Miguel Angel Alvarez Cabrerizo (http://artemit.com.es)     # 
 #                                                                            # 
-# This contextualization script configure the VyOS VM's network              # 
+# This contextualization script configures the VyOS VM's network             # 
 # interfaces on startup. Configuration is commited and saved on startup.     # 
 #									     # 
 # VyOS is a community fork of Vyatta, a Linux-based network operating system #
@@ -28,6 +27,10 @@
 
 # -------------------------------------------------------------------------- #
 # Copyright 2002-2015, OpenNebula Project (OpenNebula.org), C12G Labs        #
+# Copyright 2015, Miguel Angel Alvarez Cabrerizo (http://artemit.com.es)     # 
+# Copyright 2022-23,                                                         # 
+#   George Louthan <george@southwestccdc.com> <duplico@dupli.co> and         #
+#   TALON Cyber League, Inc. <talon@southwestccdc.com>                       #
 #                                                                            #
 # Licensed under the Apache License, Version 2.0 (the "License"); you may    #
 # not use this file except in compliance with the License. You may obtain    #
@@ -62,11 +65,15 @@ fi
 # Set vyos user ssh key
 if [ -n "$SSH_PUBLIC_KEY" ]
 then
-  user=`echo $SSH_PUBLIC_KEY | cut -f 3 -d " "`
+  keyname=`echo $SSH_PUBLIC_KEY | cut -f 3 -d " "`
   key=`echo $SSH_PUBLIC_KEY | cut -f 2 -d " "`
   type=`echo $SSH_PUBLIC_KEY | cut -f 1 -d " "`
-  $WRAPPER set system login user vyos authentication public-keys $user key $key
-  $WRAPPER set system login user vyos authentication public-keys $user type $type
+  if [ -z $keyname ]
+  then
+    keyname="opennebula"
+  fi
+  $WRAPPER set system login user vyos authentication public-keys $keyname key $key
+  $WRAPPER set system login user vyos authentication public-keys $keyname type $type
 fi
 
 
@@ -82,17 +89,13 @@ mac2ip() {
     echo $ip 
 } 
 
-get_dev() { 
-    echo $1 | cut -d'-' -f 1 
-} 
-
 get_mac() { 
-    echo $1 | cut -d'-' -f 2 
+    ethtool -P $1 | cut -d ' ' -f 3
 } 
 
 get_interfaces() { 
     IFCMD="/sbin/ifconfig -a" 
-    $IFCMD | grep ^eth | sed 's/ *Link encap:Ethernet.*HWaddr /-/g' 
+    $IFCMD | grep ^eth | cut -d ':' -f 1 
 } 
 
 ### Thanks to: https://forum.openwrt.org/viewtopic.php?pid=220781#p220781
@@ -107,10 +110,8 @@ mask2cdr ()
 
 IFACES=`get_interfaces` 
 
-for i in $IFACES; do 
-    MASTER_DEV_MAC=$i 
-    DEV=`get_dev $i` 
-    MAC=`get_mac $i` 
+for DEV in $IFACES; do
+    MAC=`get_mac $DEV` 
     IP=`mac2ip $MAC`
     MASK=24
 
@@ -129,9 +130,18 @@ for i in $IFACES; do
 
     $WRAPPER set interfaces ethernet $DEV address $IP/$MASK
     $WRAPPER set interfaces ethernet $DEV duplex auto 
-    $WRAPPER set interfaces ethernet $DEV smp_affinity auto 
     $WRAPPER set interfaces ethernet $DEV speed auto 
 done 
+
+if [ -n "$ETH0_GATEWAY" ]
+then
+  $WRAPPER set protocols static route 0.0.0.0/0 next-hop "$ETH0_GATEWAY"
+fi
+
+if [ -n "$ETH0_DNS" ]
+then
+  $WRAPPER set system name-server $ETH0_DNS
+fi
 
 $WRAPPER commit 
 $WRAPPER end 
