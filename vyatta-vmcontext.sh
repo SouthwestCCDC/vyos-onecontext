@@ -157,6 +157,7 @@ for GUEST_NIC_NAME in $GUEST_NIC_NAMES; do
   CONTEXT_VAR_NIC_ADDRESS=${GUEST_NIC_NAME^^}_IP
   CONTEXT_VAR_NIC_MASK=${GUEST_NIC_NAME^^}_MASK
   CONTEXT_VAR_GATEWAY=${GUEST_NIC_NAME^^}_GATEWAY
+  CONTEXT_VAR_DNS=${GUEST_NIC_NAME^^}_DNS
 
   ##### Select network options
   # If context provides an IP address, set it.
@@ -191,6 +192,12 @@ for GUEST_NIC_NAME in $GUEST_NIC_NAMES; do
   $WRAPPER set interfaces ethernet $GUEST_NIC_NAME address $IP/$MASK
   $WRAPPER set interfaces ethernet $GUEST_NIC_NAME duplex auto 
   $WRAPPER set interfaces ethernet $GUEST_NIC_NAME speed auto 
+
+  ##### Configure DNS if present in context on this interface.
+  if [ -n "${!CONTEXT_VAR_DNS}" ]
+  then
+    $WRAPPER set system name-server ${!CONTEXT_VAR_DNS}
+  fi
 
 done 
 
@@ -235,13 +242,6 @@ do
   $WRAPPER set protocols $IFACE_VRF static route $ROUTE_DEST next-hop $ROUTE_GW
 
 done <<< "$GW_NETS"
-
-
-# TODO: Possibly not this:
-if [ -n "$ETH0_DNS" ]
-then
-  $WRAPPER set system name-server $ETH0_DNS
-fi
 
 ##### Services
 ##############################################################################
