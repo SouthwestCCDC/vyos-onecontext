@@ -47,7 +47,11 @@
 
 if [ -f /mnt/context.sh ]
 then
+  echo "Detected OpenNebula context. Contextualizing."
   . /mnt/context.sh
+else
+  echo "No OpenNebula context detected. Proceeding with boot."
+  exit
 fi
 
 WRAPPER=/opt/vyatta/sbin/vyatta-cfg-cmd-wrapper 
