@@ -162,6 +162,7 @@ for GUEST_NIC_NAME in $GUEST_NIC_NAMES; do
   ##### Derive important context variable names:
   CONTEXT_VAR_NIC_ADDRESS=${GUEST_NIC_NAME^^}_IP
   CONTEXT_VAR_NIC_MASK=${GUEST_NIC_NAME^^}_MASK
+  CONTEXT_VAR_GATEWAY=${GUEST_NIC_NAME^^}_GATEWAY
 
   ##### Select network options
   # If context provides an IP address, set it.
@@ -175,21 +176,21 @@ for GUEST_NIC_NAME in $GUEST_NIC_NAMES; do
     MASK=`mask2cdr ${!CONTEXT_VAR_NIC_MASK}`
   fi
 
+  ##### If this interface has a gateway set, add it with a default route.
+  # (However, if this device IS the gateway, we obviously don't want that.)
+  if [ -n ${!CONTEXT_VAR_GATEWAY} ] && [ ${!CONTEXT_VAR_GATEWAY} != ${!CONTEXT_VAR_NIC_ADDRESS} ]
+  then
+    $WRAPPER set protocols static route 0.0.0.0/0 next-hop ${!CONTEXT_VAR_GATEWAY}
+  fi
+
   ##### Write the configuration.
   $WRAPPER set interfaces ethernet $GUEST_NIC_NAME address $IP/$MASK
   $WRAPPER set interfaces ethernet $GUEST_NIC_NAME duplex auto 
   $WRAPPER set interfaces ethernet $GUEST_NIC_NAME speed auto 
+
 done 
 
-# TODO: Not this:
-# If the first interface has a gateway set, make that the default gateway.
-if [ -n "$ETH0_GATEWAY" ]
-then
-  $WRAPPER set protocols static route 0.0.0.0/0 next-hop "$ETH0_GATEWAY"
-fi
-
 # TODO: Possibly not this:
-# If the first interface has a gateway set, make that the default gateway.
 if [ -n "$ETH0_DNS" ]
 then
   $WRAPPER set system name-server $ETH0_DNS
