@@ -45,6 +45,11 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 
+##### Determine whether we're in OpenNebula at all.
+##############################################################################
+
+# This script is run after the context CD is already mounted. So,
+#  check to see if context exists. If not, exit. If so, let's go.
 if [ -f /mnt/context.sh ]
 then
   echo "Detected OpenNebula context. Contextualizing."
@@ -54,98 +59,144 @@ else
   exit
 fi
 
+# If we get here, we're in OpenNebula and need to contextualize.
+
+##### Helper functions
+##############################################################################
+
+# Derive a likely unique IP address from a MAC address.
+#  We use this if there's no IP provided by context.
+mac2ip() { 
+  mac=$1 
+  let ip_a=0x`echo $mac | cut -d: -f 3` 
+  let ip_b=0x`echo $mac | cut -d: -f 4` 
+  let ip_c=0x`echo $mac | cut -d: -f 5` 
+  let ip_d=0x`echo $mac | cut -d: -f 6` 
+  ip="$ip_a.$ip_b.$ip_c.$ip_d" 
+  echo $ip 
+} 
+
+get_mac() { 
+  ethtool -P $1 | cut -d ' ' -f 3
+} 
+
+# Get the short name of the guest's network interfaces.
+# Note: this depends on their staying in the old eth0,eth1... style.
+get_interfaces() { 
+  IFCMD="/sbin/ifconfig -a" 
+  $IFCMD | grep ^eth | cut -d ':' -f 1 
+} 
+
+# Thanks to: https://forum.openwrt.org/viewtopic.php?pid=220781#p220781
+mask2cdr ()
+{
+  # Assumes there's no "255." after a non-255 byte in the mask
+  local x=${1##*255.}
+  set -- 0^^^128^192^224^240^248^252^254^ $(( (${#1} - ${#x})*2 )) ${x%%.*}
+  x=${1%%$3*}
+  echo $(( $2 + (${#x}/4) ))
+}
+
+##### Start using VyOs
+##############################################################################
+
+# VyOS needs its system's commands wrapped with this command begin and end:
 WRAPPER=/opt/vyatta/sbin/vyatta-cfg-cmd-wrapper 
 $WRAPPER begin 
 
-# Let's start the SSH service
+##### Services
+##############################################################################
+
 $WRAPPER set service ssh
 
-# Set system host-name 
+##### Host name
+##############################################################################
+
 if [ -n "$HOSTNAME" ]
 then
   $WRAPPER set system host-name $HOSTNAME
 fi
 
+##### SSH keys
+##############################################################################
+
 # Set vyos user ssh key
 if [ -n "$SSH_PUBLIC_KEY" ]
 then
+  # The third field is the key comment.
   keyname=`echo $SSH_PUBLIC_KEY | cut -f 3 -d " "`
+  # Second field is the key material.
   key=`echo $SSH_PUBLIC_KEY | cut -f 2 -d " "`
+  # First field is the key type.
   type=`echo $SSH_PUBLIC_KEY | cut -f 1 -d " "`
+
+  # Check to see whether the key comment is blank.
   if [ -z $keyname ]
   then
+    # Add a default comment, as it's optional.
+    # TODO: should add an auto-increment token at the beginning, here.
     keyname="opennebula"
   fi
+
+  # Save the key.
   $WRAPPER set system login user vyos authentication public-keys $keyname key $key
   $WRAPPER set system login user vyos authentication public-keys $keyname type $type
 fi
 
+##### Networking
+##############################################################################
 
-# Many tools to define network parameters
+# Grab the local names of our NICs.
+GUEST_NIC_NAMES=`get_interfaces`
 
-mac2ip() { 
-    mac=$1 
-    let ip_a=0x`echo $mac | cut -d: -f 3` 
-    let ip_b=0x`echo $mac | cut -d: -f 4` 
-    let ip_c=0x`echo $mac | cut -d: -f 5` 
-    let ip_d=0x`echo $mac | cut -d: -f 6` 
-    ip="$ip_a.$ip_b.$ip_c.$ip_d" 
-    echo $ip 
-} 
+# For each,
+for GUEST_NIC_NAME in $GUEST_NIC_NAMES; do
 
-get_mac() { 
-    ethtool -P $1 | cut -d ' ' -f 3
-} 
+  ##### Generate some reasonable defaults to optional context data.
+    # MAC-based IP address selection:
+  CURR_NIC_MAC=`get_mac $GUEST_NIC_NAME` 
+  IP=`mac2ip $CURR_NIC_MAC`
+  # Default to a /24
+  MASK=24
 
-get_interfaces() { 
-    IFCMD="/sbin/ifconfig -a" 
-    $IFCMD | grep ^eth | cut -d ':' -f 1 
-} 
+  ##### Derive important context variable names:
+  CONTEXT_VAR_NIC_ADDRESS=${GUEST_NIC_NAME^^}_IP
+  CONTEXT_VAR_NIC_MASK=${GUEST_NIC_NAME^^}_MASK
 
-### Thanks to: https://forum.openwrt.org/viewtopic.php?pid=220781#p220781
-mask2cdr ()
-{
-   # Assumes there's no "255." after a non-255 byte in the mask
-   local x=${1##*255.}
-   set -- 0^^^128^192^224^240^248^252^254^ $(( (${#1} - ${#x})*2 )) ${x%%.*}
-   x=${1%%$3*}
-   echo $(( $2 + (${#x}/4) ))
-}
+  ##### Select network options
+  # If context provides an IP address, set it.
+  if [ -n ${!CONTEXT_VAR_NIC_ADDRESS} ]
+  then
+    IP=${!CONTEXT_VAR_NIC_ADDRESS}
+  fi
+  # If context provides a netmask, set it.
+  if [ -n ${!CONTEXT_VAR_NIC_MASK} ]
+  then
+    MASK=`mask2cdr ${!CONTEXT_VAR_NIC_MASK}`
+  fi
 
-IFACES=`get_interfaces` 
-
-for DEV in $IFACES; do
-    MAC=`get_mac $DEV` 
-    IP=`mac2ip $MAC`
-    MASK=24
-
-    IFACE_IP=${DEV^^}_IP
-    IFACE_MASK=${DEV^^}_MASK
-
-    if [ -n ${!IFACE_IP} ]
-    then
-      IP=${!IFACE_IP}
-    fi
-
-    if [ -n ${!IFACE_MASK} ]
-    then
-      MASK=`mask2cdr ${!IFACE_MASK}`
-    fi
-
-    $WRAPPER set interfaces ethernet $DEV address $IP/$MASK
-    $WRAPPER set interfaces ethernet $DEV duplex auto 
-    $WRAPPER set interfaces ethernet $DEV speed auto 
+  ##### Write the configuration.
+  $WRAPPER set interfaces ethernet $GUEST_NIC_NAME address $IP/$MASK
+  $WRAPPER set interfaces ethernet $GUEST_NIC_NAME duplex auto 
+  $WRAPPER set interfaces ethernet $GUEST_NIC_NAME speed auto 
 done 
 
+# TODO: Not this:
+# If the first interface has a gateway set, make that the default gateway.
 if [ -n "$ETH0_GATEWAY" ]
 then
   $WRAPPER set protocols static route 0.0.0.0/0 next-hop "$ETH0_GATEWAY"
 fi
 
+# TODO: Possibly not this:
+# If the first interface has a gateway set, make that the default gateway.
 if [ -n "$ETH0_DNS" ]
 then
   $WRAPPER set system name-server $ETH0_DNS
 fi
+
+##### Done---commit.
+##############################################################################
 
 $WRAPPER commit 
 $WRAPPER end 
