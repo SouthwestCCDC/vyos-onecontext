@@ -138,13 +138,12 @@ then
   $WRAPPER set system login user vyos authentication public-keys $keyname type $type
 fi
 
-##### Networking
+##### Host Networking
 ##############################################################################
 
 # Grab the local names of our NICs.
 GUEST_NIC_NAMES=`get_interfaces`
 
-# For each,
 for GUEST_NIC_NAME in $GUEST_NIC_NAMES; do
 
   ##### Generate some reasonable defaults to optional context data.
@@ -194,6 +193,49 @@ for GUEST_NIC_NAME in $GUEST_NIC_NAMES; do
   $WRAPPER set interfaces ethernet $GUEST_NIC_NAME speed auto 
 
 done 
+
+##### Routes
+##############################################################################
+
+# Read the multi-line GW_NETS context, one route per line.
+while IFS= read -r ROUTE_LINE
+do
+  # If the line is empty, skip it.
+  if [ -z "$ROUTE_LINE" ]
+  then
+    echo "Empty line"
+    break
+  fi
+
+  # Tokenize with spaces.
+  ROUTE=($ROUTE_LINE)
+  # First token is the interface name (as seen by the guest)
+  ROUTE_IFACE=${ROUTE[0]}
+  # Second token is the network in CIDR notation with a slash
+  ROUTE_DEST=${ROUTE[1]}
+  # Third token is optionally the gateway.
+  ROUTE_GW=${ROUTE[2]}
+
+  # If the gateway was not provided, set it to the interface's default GW.
+  if [ -z "$ROUTE_GW" ]
+  then
+    ROUTE_GW_VAR=${ROUTE_IFACE^^}_GATEWAY
+    ROUTE_GW=${!ROUTE_GW_VAR}
+  fi
+
+  # If a management interface is being used, and routes are specified on the
+  #  management interface, add them to the management VRF.
+  IFACE_VRF=""
+  if [ $ROUTE_IFACE = $MGT_IFACE ]
+  then
+    IFACE_VRF="vrf management"
+  fi
+
+  # Execute the configuration.
+  $WRAPPER set protocols $IFACE_VRF static route $ROUTE_DEST next-hop $ROUTE_GW
+
+done <<< "$GW_NETS"
+
 
 # TODO: Possibly not this:
 if [ -n "$ETH0_DNS" ]
