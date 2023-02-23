@@ -104,11 +104,6 @@ mask2cdr ()
 WRAPPER=/opt/vyatta/sbin/vyatta-cfg-cmd-wrapper 
 $WRAPPER begin 
 
-##### Services
-##############################################################################
-
-$WRAPPER set service ssh
-
 ##### Host name
 ##############################################################################
 
@@ -176,11 +171,21 @@ for GUEST_NIC_NAME in $GUEST_NIC_NAMES; do
     MASK=`mask2cdr ${!CONTEXT_VAR_NIC_MASK}`
   fi
 
+  ##### Set up any management VRF
+  IFACE_VRF=""
+  if [ "$MGT_IFACE" = $GUEST_NIC_NAME ]
+  then
+    $WRAPPER set vrf name management table 100
+    $WRAPPER set vrf name management description OOB
+    $WRAPPER set interfaces ethernet $GUEST_NIC_NAME vrf management
+    IFACE_VRF="vrf management"
+  fi
+
   ##### If this interface has a gateway set, add it with a default route.
   # (However, if this device IS the gateway, we obviously don't want that.)
   if [ -n ${!CONTEXT_VAR_GATEWAY} ] && [ ${!CONTEXT_VAR_GATEWAY} != ${!CONTEXT_VAR_NIC_ADDRESS} ]
   then
-    $WRAPPER set protocols static route 0.0.0.0/0 next-hop ${!CONTEXT_VAR_GATEWAY}
+    $WRAPPER set protocols $IFACE_VRF static route 0.0.0.0/0 next-hop ${!CONTEXT_VAR_GATEWAY}
   fi
 
   ##### Write the configuration.
@@ -195,6 +200,17 @@ if [ -n "$ETH0_DNS" ]
 then
   $WRAPPER set system name-server $ETH0_DNS
 fi
+
+##### Services
+##############################################################################
+
+if [ -n $MGT_IFACE ]
+then
+  $WRAPPER set service ssh vrf management
+else
+  $WRAPPER set service ssh
+fi
+
 
 ##### Done---commit.
 ##############################################################################
