@@ -210,7 +210,6 @@ do
   # If the line is empty, skip it.
   if [ -z "$ROUTE_LINE" ]
   then
-    echo "Empty line"
     break
   fi
 
@@ -253,9 +252,45 @@ else
   $WRAPPER set service ssh
 fi
 
+##### Firewall: NAT
+##############################################################################
+
+RULE_NO=1000
+
+while IFS= read -r NAT_RULE_LINE
+do
+  # If the line is empty, skip it.
+  if [ -z "$NAT_RULE_LINE" ]
+  then
+    break
+  fi
+
+  let "RULE_NO+=1"
+
+  # Tokenize with spaces.
+  NAT_RULE=($NAT_RULE_LINE)
+  # First token is the interface name (as seen by the guest)
+  NAT_IFACE=${NAT_RULE[0]}
+  # Second token is the optional source network in CIDR notation with a slash
+  NAT_SRC=${NAT_RULE[1]}
+
+  # Set the outbound interface to masquerade.
+  $WRAPPER set nat source rule $RULE_NO outbound-interface $NAT_IFACE
+  $WRAPPER set nat source rule $RULE_NO translation address masquerade
+
+  # If a source network is provided, restrict the rule to it.
+  if [ -n "$NAT_SRC" ]
+  then
+    $WRAPPER set nat source rule $RULE_NO source address $NAT_SRC
+  fi
+
+done <<< "$NAT_OUT_IFACES"
+
 
 ##### Done---commit.
 ##############################################################################
 
 $WRAPPER commit 
 $WRAPPER end 
+
+echo "Contextualized. OK to delete /opt/vyatta/sbin/vyatta-vmcontext.sh"
