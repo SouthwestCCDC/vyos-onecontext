@@ -183,7 +183,7 @@ for GUEST_NIC_NAME in $GUEST_NIC_NAMES; do
 
   ##### If this interface has a gateway set, add it with a default route.
   # (However, if this device IS the gateway, we obviously don't want that.)
-  if [ -n ${!CONTEXT_VAR_GATEWAY} ] && [ ${!CONTEXT_VAR_GATEWAY} != ${!CONTEXT_VAR_NIC_ADDRESS} ]
+  if [ -n "${!CONTEXT_VAR_GATEWAY}" ] && [ "${!CONTEXT_VAR_GATEWAY}" != "${!CONTEXT_VAR_NIC_ADDRESS}" ]
   then
     $WRAPPER set protocols $IFACE_VRF static route 0.0.0.0/0 next-hop ${!CONTEXT_VAR_GATEWAY}
   fi
