@@ -334,7 +334,7 @@ do
   $WRAPPER set interface ethernet $NAT_IFACE_IN address $NAT_DEST/$PREFIXLEN
   
   let "RULE_NO+=1"
-done <<< "$NAT_OUT_IFACES"
+done <<< "$NAT_DNATS"
 
 ##### ONE_TO_ONE
 # TODO
