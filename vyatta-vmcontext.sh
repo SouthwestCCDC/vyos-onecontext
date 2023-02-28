@@ -102,6 +102,14 @@ mask2cdr ()
 
 # VyOS needs its system's commands wrapped with this command begin and end:
 WRAPPER=/opt/vyatta/sbin/vyatta-cfg-cmd-wrapper 
+
+##### Clear whatever the existing config is.
+# TODO: Try this
+# $WRAPPER begin
+# $WRAPPER load /opt/vyatta/etc/config.boot.default
+# $WRAPPER commit
+# $WRAPPER end
+
 $WRAPPER begin 
 
 ##### Host name
@@ -183,7 +191,7 @@ for GUEST_NIC_NAME in $GUEST_NIC_NAMES; do
 
   ##### If this interface has a gateway set, add it with a default route.
   # (However, if this device IS the gateway, we obviously don't want that.)
-  if [ -n ${!CONTEXT_VAR_GATEWAY} ] && [ ${!CONTEXT_VAR_GATEWAY} != ${!CONTEXT_VAR_NIC_ADDRESS} ]
+  if [ -n "${!CONTEXT_VAR_GATEWAY}" ] && [ "${!CONTEXT_VAR_GATEWAY}" != "${!CONTEXT_VAR_NIC_ADDRESS}" ]
   then
     $WRAPPER set protocols $IFACE_VRF static route 0.0.0.0/0 next-hop ${!CONTEXT_VAR_GATEWAY}
   fi
@@ -255,17 +263,20 @@ fi
 ##### Firewall: NAT
 ##############################################################################
 
-RULE_NO=1000
+##### SNAT
+
+# Here, we're receiving rules of the following form, one per line:
+# IFACE_OUT [SRC_NETWORK/SRC_MASK]
+
+RULE_NO=10000
 
 while IFS= read -r NAT_RULE_LINE
 do
-  # If the line is empty, skip it.
+  # If the line is empty, end.
   if [ -z "$NAT_RULE_LINE" ]
   then
     break
   fi
-
-  let "RULE_NO+=1"
 
   # Tokenize with spaces.
   NAT_RULE=($NAT_RULE_LINE)
@@ -284,7 +295,49 @@ do
     $WRAPPER set nat source rule $RULE_NO source address $NAT_SRC
   fi
 
+  let "RULE_NO+=1"
 done <<< "$NAT_OUT_IFACES"
+
+##### DNAT
+# Here, we're receiving rules of the following form, one per line:
+#  IFACE_IN DEST_ADDR TRANSLATED_ADDR
+# TODO: Allow port forwards
+
+RULE_NO=30000
+
+while IFS= read -r NAT_RULE_LINE
+do
+  # If the line is empty, end.
+  if [ -z "$NAT_RULE_LINE" ]
+  then
+    break
+  fi
+
+  # Tokenize with spaces.
+  NAT_RULE=($NAT_RULE_LINE)
+  # First token is the inbound interface name (as seen by the guest)
+  NAT_IFACE_IN=${NAT_RULE[0]}
+  # Second is the untranslated destination address
+  NAT_DEST=${NAT_RULE[1]}
+  # Fourth is the translated destination address
+  NAT_TRANSLATION=${NAT_RULE[2]}
+  # Get the netmask for the inbound interface from context.
+  CONTEXT_VAR_NIC_MASK=${NAT_IFACE_IN^^}_MASK
+  PREFIXLEN=`mask2cdr ${!CONTEXT_VAR_NIC_MASK}`
+
+  $WRAPPER set nat destination rule $RULE_NO inbound-interface $NAT_IFACE_IN
+  $WRAPPER set nat destination rule $RULE_NO destination address $NAT_DEST
+  $WRAPPER set nat destination rule $RULE_NO protocol ip
+  $WRAPPER set nat destination rule $RULE_NO translation address $NAT_TRANSLATION
+  
+  # Add the destination address to the inbound interface.
+  $WRAPPER set interface ethernet $NAT_IFACE_IN address $NAT_DEST/$PREFIXLEN
+  
+  let "RULE_NO+=1"
+done <<< "$NAT_OUT_IFACES"
+
+##### ONE_TO_ONE
+# TODO
 
 
 ##### Done---commit.
