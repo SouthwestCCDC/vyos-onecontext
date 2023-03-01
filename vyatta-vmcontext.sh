@@ -364,10 +364,10 @@ do
   RELAY_PREFIXLEN=`mask2cdr ${!CONTEXT_VAR_NIC_MASK}`
 
   # Add gateway if provided
-  # if [ -n "$PIVOT_GW" ]
-  # then
-    # TODO: implement
-  # fi
+  if [ -n "$PIVOT_GW" ]
+  then
+    $WRAPPER set protocols static route $TARGET_ADDR_PREFIX.0/24 next-hop $PIVOT_GW
+  fi
 
   # Stuff sent out PIVOT_OUT_IFACE gets its source address changed to MASQ.
   $WRAPPER set nat source rule $RULE_NO outbound-interface $PIVOT_OUT_IFACE
