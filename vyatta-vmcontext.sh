@@ -364,10 +364,10 @@ do
   RELAY_PREFIXLEN=`mask2cdr ${!CONTEXT_VAR_NIC_MASK}`
 
   # Add gateway if provided
-  if [ -n "$PIVOT_GW" ]
-  then
+  # if [ -n "$PIVOT_GW" ]
+  # then
     # TODO: implement
-  fi
+  # fi
 
   # Stuff sent out PIVOT_OUT_IFACE gets its source address changed to MASQ.
   $WRAPPER set nat source rule $RULE_NO outbound-interface $PIVOT_OUT_IFACE
@@ -380,7 +380,7 @@ do
     $WRAPPER set nat destination rule $RULE_NO destination address $RELAY_ADDR_PREFIX.$last_octet
     $WRAPPER set nat destination rule $RULE_NO translation address $TARGET_ADDR_PREFIX.$last_octet
     # Add the interface address: 
-    $WRAPPER set interfaces ethernet $RELAY_IN_IFACE $RELAY_ADDR_PREFIX.$last_octet/$RELAY_PREFIXLEN
+    $WRAPPER set interfaces ethernet $RELAY_IN_IFACE address $RELAY_ADDR_PREFIX.$last_octet/$RELAY_PREFIXLEN
     
     let "RULE_NO+=1"
   done
