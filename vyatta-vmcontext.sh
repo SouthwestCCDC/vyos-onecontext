@@ -303,7 +303,7 @@ done <<< "$NAT_OUT_IFACES"
 #  IFACE_IN DEST_ADDR TRANSLATED_ADDR
 # TODO: Allow port forwards
 
-RULE_NO=30000
+RULE_NO=20000
 
 while IFS= read -r NAT_RULE_LINE
 do
@@ -331,14 +331,10 @@ do
   $WRAPPER set nat destination rule $RULE_NO translation address $NAT_TRANSLATION
   
   # Add the destination address to the inbound interface.
-  $WRAPPER set interface ethernet $NAT_IFACE_IN address $NAT_DEST/$PREFIXLEN
+  $WRAPPER set interfaces ethernet $NAT_IFACE_IN address $NAT_DEST/$PREFIXLEN
   
   let "RULE_NO+=1"
-done <<< "$NAT_OUT_IFACES"
-
-##### ONE_TO_ONE
-# TODO
-
+done <<< "$NAT_DNATS"
 
 ##### Done---commit.
 ##############################################################################
