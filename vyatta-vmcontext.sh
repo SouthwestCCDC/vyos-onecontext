@@ -303,7 +303,7 @@ done <<< "$NAT_OUT_IFACES"
 #  IFACE_IN DEST_ADDR TRANSLATED_ADDR
 # TODO: Allow port forwards
 
-RULE_NO=30000
+RULE_NO=20000
 
 while IFS= read -r NAT_RULE_LINE
 do
@@ -335,51 +335,6 @@ do
   
   let "RULE_NO+=1"
 done <<< "$NAT_DNATS"
-
-##### ONE_TO_ONE
-# Expecting:
-#   IFACE_IN ADDR_IN IFACE_OUT ADDR_OUT
-
-RULE_NO=40000
-
-while IFS= read -r NAT_RULE_LINE
-do
-  # If the line is empty, end.
-  if [ -z "$NAT_RULE_LINE" ]
-  then
-    break
-  fi
-
-  # Tokenize with spaces.
-  NAT_RULE=($NAT_RULE_LINE)
-  # First token is the inbound interface name (as seen by the guest)
-  NAT_IFACE_IN=${NAT_RULE[0]}
-  # Second is the untranslated destination address
-  NAT_DEST=${NAT_RULE[1]}
-  # Third is the outbound interface
-  NAT_IFACE_OUT=${NAT_RULE[2]}
-  # Fourth is the translated destination address
-  NAT_TRANSLATION=${NAT_RULE[3]}
-  # Get the netmask for the inbound interface from context.
-  CONTEXT_VAR_NIC_MASK=${NAT_IFACE_IN^^}_MASK
-  PREFIXLEN=`mask2cdr ${!CONTEXT_VAR_NIC_MASK}`
-
-  # Add the destination address to the inbound interface.
-  $WRAPPER set interfaces ethernet $NAT_IFACE_IN address $NAT_DEST/$PREFIXLEN
-
-  # Translate the destination from the inbound address to the target address
-  $WRAPPER set nat destination rule $RULE_NO inbound-interface $NAT_IFACE_IN
-  $WRAPPER set nat destination rule $RULE_NO destination address $NAT_DEST
-  $WRAPPER set nat destination rule $RULE_NO translation address $NAT_TRANSLATION
-  
-  # Translate the source from the original source to my outbound address
-  $WRAPPER set nat source rule $RULE_NO outbound-interface $NAT_IFACE_OUT
-  $WRAPPER set nat source rule $RULE_NO source address $NAT_TRANSLATION
-  $WRAPPER set nat source rule $RULE_NO translation address masquerade
-  
-  let "RULE_NO+=1"
-done <<< "$NAT_ONE_TO_ONES"
-
 
 ##### Done---commit.
 ##############################################################################
