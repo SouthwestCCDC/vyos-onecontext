@@ -336,6 +336,57 @@ do
   let "RULE_NO+=1"
 done <<< "$NAT_DNATS"
 
+##### SCORING RELAY 1:1 NATS
+# Here, we're receiving rules of the following form, one per line:
+#  RELAY_IN_IFACE RELAY_ADDR_PREFIX PIVOT_OUT_IFACE TARGET_ADDR_PREFIX [PIVOT_GATEWAY]
+
+RULE_NO=40000
+
+while IFS= read -r NAT_RULE_LINE
+do
+  # If the line is empty, end.
+  if [ -z "$NAT_RULE_LINE" ]
+  then
+    break
+  fi
+
+  # Tokenize with spaces.
+  NAT_RULE=($NAT_RULE_LINE)
+  
+  RELAY_IN_IFACE=${NAT_RULE[0]}
+  RELAY_ADDR_PREFIX=${NAT_RULE[1]}
+  PIVOT_OUT_IFACE=${NAT_RULE[2]}
+  TARGET_ADDR_PREFIX=${NAT_RULE[3]}
+  PIVOT_GW=${NAT_RULE[4]} # Optional
+
+  # RELAY_PREFIXLEN is the CIDR prefixlen of the relay network
+  CONTEXT_VAR_NIC_MASK=${RELAY_IN_IFACE^^}_MASK
+  RELAY_PREFIXLEN=`mask2cdr ${!CONTEXT_VAR_NIC_MASK}`
+
+  # Add gateway if provided
+  if [ -n "$PIVOT_GW" ]
+  then
+    $WRAPPER set protocols static route $TARGET_ADDR_PREFIX.0/24 next-hop $PIVOT_GW
+  fi
+
+  # Stuff sent out PIVOT_OUT_IFACE gets its source address changed to MASQ.
+  $WRAPPER set nat source rule $RULE_NO outbound-interface $PIVOT_OUT_IFACE
+  $WRAPPER set nat source rule $RULE_NO translation address masquerade
+
+  for last_octet in {1..255}
+  do
+    # And stuff to RELAY_ADDR_PREFIX.x gets its destination changed to TARGET_ADDR_PREFIX.x
+    $WRAPPER set nat destination rule $RULE_NO inbound-interface $RELAY_IN_IFACE
+    $WRAPPER set nat destination rule $RULE_NO destination address $RELAY_ADDR_PREFIX.$last_octet
+    $WRAPPER set nat destination rule $RULE_NO translation address $TARGET_ADDR_PREFIX.$last_octet
+    # Add the interface address: 
+    $WRAPPER set interfaces ethernet $RELAY_IN_IFACE address $RELAY_ADDR_PREFIX.$last_octet/$RELAY_PREFIXLEN
+    
+    let "RULE_NO+=1"
+  done
+
+done <<< "$SCORING_RELAY_NATS"
+
 ##### Done---commit.
 ##############################################################################
 
