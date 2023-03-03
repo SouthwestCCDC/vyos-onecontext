@@ -298,17 +298,17 @@ do
   NETWORK_WITH_PREFIXLEN=${nw_out[1]}
 
   # Set DHCP pool range
-  set service dhcp-server shared-network-name $DHCP_IFACE subnet $NETWORK_WITH_PREFIXLEN range $RANGE_NO start $DHCP_POOL_START 
-  set service dhcp-server shared-network-name $DHCP_IFACE subnet $NETWORK_WITH_PREFIXLEN range $RANGE_NO stop $DHCP_POOL_END
+  $WRAPPER set service dhcp-server shared-network-name $DHCP_IFACE subnet $NETWORK_WITH_PREFIXLEN range $RANGE_NO start $DHCP_POOL_START 
+  $WRAPPER set service dhcp-server shared-network-name $DHCP_IFACE subnet $NETWORK_WITH_PREFIXLEN range $RANGE_NO stop $DHCP_POOL_END
   
   # Set default route
-  set service dhcp-server shared-network-name $DHCP_IFACE subnet $NETWORK_WITH_PREFIXLEN default-router $DHCP_GW
+  $WRAPPER set service dhcp-server shared-network-name $DHCP_IFACE subnet $NETWORK_WITH_PREFIXLEN default-router $DHCP_GW
 
   # Never issue our own primary address as a DHCP lease. (Just in case)
-  set service dhcp-server shared-network-name $DHCP_IFACE subnet $NETWORK_WITH_PREFIXLEN exclude ${!CONTEXT_VAR_NIC_ADDRESS}
+  $WRAPPER set service dhcp-server shared-network-name $DHCP_IFACE subnet $NETWORK_WITH_PREFIXLEN exclude ${!CONTEXT_VAR_NIC_ADDRESS}
 
   # Set DNS server
-  set service dhcp-server shared-network-name $DHCP_IFACE subnet $NETWORK_WITH_PREFIXLEN name-server $DHCP_DNS
+  $WRAPPER set service dhcp-server shared-network-name $DHCP_IFACE subnet $NETWORK_WITH_PREFIXLEN name-server $DHCP_DNS
 
   let "RANGE_NO+=1"
 done <<< "$DHCP_SERVERS"
