@@ -253,12 +253,65 @@ done <<< "$GW_NETS"
 ##### Services
 ##############################################################################
 
+##### SSH
+
 if [ -n $MGT_IFACE ]
 then
   $WRAPPER set service ssh vrf management
 else
   $WRAPPER set service ssh
 fi
+
+##### DHCP server
+
+# We expect a context variable called DHCP_SERVERS. It contains the following,
+#  one per line:
+#
+# DHCP_IFACE DHCP_POOL_START DHCP_POOL_END DHCP_GW DHCP_DNS
+
+RANGE_NO=0
+
+while IFS= read -r DHCP_LINE
+do
+  # If the line is empty, end.
+  if [ -z "$DHCP_LINE" ]
+  then
+    break
+  fi
+
+  DHCP_DEF=($DHCP_LINE)
+  DHCP_IFACE=${DHCP_DEF[0]}
+  DHCP_POOL_START=${DHCP_DEF[1]}
+  DHCP_POOL_END=${DHCP_DEF[2]}
+  DHCP_GW=${DHCP_DEF[3]}
+  DHCP_DNS=${DHCP_DEF[4]}
+  
+  ##### Derive important context variable names:
+  CONTEXT_VAR_NIC_ADDRESS=${DHCP_IFACE^^}_IP
+  CONTEXT_VAR_NIC_MASK=${DHCP_IFACE^^}_MASK
+  CONTEXT_VAR_GATEWAY=${DHCP_IFACE^^}_GATEWAY
+  CONTEXT_VAR_DNS=${DHCP_IFACE^^}_DNS
+
+  # Get the interface's network number and CIDR prefixlen together:
+  nw_out=`ipcalc -b ${!CONTEXT_VAR_NIC_ADDRESS}/${!CONTEXT_VAR_NIC_MASK} | grep 'Network'`
+  nw_out=($nw_out)
+  NETWORK_WITH_PREFIXLEN=${nw_out[1]}
+
+  # Set DHCP pool range
+  set service dhcp-server shared-network-name $DHCP_IFACE subnet $NETWORK_WITH_PREFIXLEN range $RANGE_NO start $DHCP_POOL_START 
+  set service dhcp-server shared-network-name $DHCP_IFACE subnet $NETWORK_WITH_PREFIXLEN range $RANGE_NO stop $DHCP_POOL_END
+  
+  # Set default route
+  set service dhcp-server shared-network-name $DHCP_IFACE subnet $NETWORK_WITH_PREFIXLEN default-router $DHCP_GW
+
+  # Never issue our own primary address as a DHCP lease. (Just in case)
+  set service dhcp-server shared-network-name $DHCP_IFACE subnet $NETWORK_WITH_PREFIXLEN exclude ${!CONTEXT_VAR_NIC_ADDRESS}
+
+  # Set DNS server
+  set service dhcp-server shared-network-name $DHCP_IFACE subnet $NETWORK_WITH_PREFIXLEN name-server $DHCP_DNS
+
+  let "RANGE_NO+=1"
+done <<< "$DHCP_SERVERS"
 
 ##### Firewall: NAT
 ##############################################################################
