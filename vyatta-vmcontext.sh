@@ -314,6 +314,38 @@ do
   let "RANGE_NO+=1"
 done <<< "$DHCP_SERVERS"
 
+# DHCP reservations.
+
+# We expect a context variable called DHCP_RESERVATIONS containing lines like:
+#  DHCP_IFACE MAC_ADDRESS IP_ADDRESS
+
+while IFS= read -r DHCP_LINE
+do
+  # If the line is empty, end.
+  if [ -z "$DHCP_LINE" ]
+  then
+    break
+  fi
+
+  DHCP_DEF=($DHCP_LINE)
+  DHCP_IFACE=${DHCP_DEF[0]}
+  DHCP_MAC=${DHCP_DEF[1]}
+  DHCP_IP=${DHCP_DEF[2]}
+
+  ##### Derive important context variable names:
+  CONTEXT_VAR_NIC_ADDRESS=${DHCP_IFACE^^}_IP
+  CONTEXT_VAR_NIC_MASK=${DHCP_IFACE^^}_MASK
+
+  # Get the interface's network number and CIDR prefixlen together:
+  nw_out=`ipcalc -b ${!CONTEXT_VAR_NIC_ADDRESS}/${!CONTEXT_VAR_NIC_MASK} | grep 'Network'`
+  nw_out=($nw_out)
+  NETWORK_WITH_PREFIXLEN=${nw_out[1]}
+
+  DESCRIPTION="one-context-$DHCP_IFACE-$DHCP_IP"
+  $WRAPPER set service dhcp-server shared-network-name $DHCP_IFACE subnet $NETWORK_WITH_PREFIXLEN static-mapping $DESCRIPTION mac-address $DHCP_MAC
+  $WRAPPER set service dhcp-server shared-network-name $DHCP_IFACE subnet $NETWORK_WITH_PREFIXLEN static-mapping $DESCRIPTION ip-address $DHCP_IP
+done <<< "$DHCP_RESERVATIONS"
+
 ##### Firewall: NAT
 ##############################################################################
 
