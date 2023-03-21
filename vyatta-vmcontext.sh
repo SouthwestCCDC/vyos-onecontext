@@ -251,6 +251,45 @@ do
 
 done <<< "$GW_NETS"
 
+# Check if we're going to do OSPF
+if [ -n "$OSPF" ]
+then
+  # We're doing OSPF.
+  # Configure the redistribution.
+  while IFS= read -r REDISTRIBUTE
+  do
+    # If the line is empty, end.
+    if [ -z "$REDISTRIBUTE" ]
+    then
+      break
+    fi
+
+    $WRAPPER set protocols ospf redistribute $REDISTRIBUTE
+  done <<< "$OSPF_REDISTRIBUTES"
+
+  # Configure the areas and the networks to find their interfaces in
+  #  NB: Monitor this for the upgrade from equuleus; it may get deprecated.
+  while IFS= read -r OSPF_AREA_NET
+  do
+    # If the line is empty, end.
+    if [ -z "$OSPF_AREA_NET" ]
+    then
+      break
+    fi
+
+    # Tokenize with spaces.
+    AREA_NET=($OSPF_AREA_NET)
+    # First token is area
+    AREA=${AREA_NET[0]}
+    # Second token is the network
+    NETWORK=${AREA_NET[1]}
+
+    # Execute the configuration.
+    $WRAPPER set protocols ospf area $AREA network $NETWORK
+
+  done <<< "$OSPF_AREAS_NETS"
+fi
+
 ##### Services
 ##############################################################################
 
