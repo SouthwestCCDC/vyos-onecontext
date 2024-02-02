@@ -538,6 +538,7 @@ then
   echo "$START_SCRIPT_BASE64" | base64 -d - > /tmp/startup-script-onecontext
   chmod 700 /tmp/startup-script-onecontext
   /tmp/startup-script-onecontext
+  rm /tmp/startup-script-onecontext
 fi
 
 if [ -n "$START_SCRIPT" ]
@@ -545,6 +546,7 @@ then
   echo "$START_SCRIPT" > /tmp/startup-script-onecontext
   chmod 700 /tmp/startup-script-onecontext
   /tmp/startup-script-onecontext
+  rm /tmp/startup-script-onecontext
 fi
 
 echo "Contextualized. OK to delete /opt/vyatta/sbin/vyatta-vmcontext.sh"
