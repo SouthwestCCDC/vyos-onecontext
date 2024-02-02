@@ -517,7 +517,7 @@ done <<< "$SCORING_RELAY_NATS"
 
 while IFS= read -r CONFIG_LINE
 do
-  # If the line is empty, end.
+  # If the line is empty, continue.
   if [ -z "$CONFIG_LINE" ]
   then
     continue
