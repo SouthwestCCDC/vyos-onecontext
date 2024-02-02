@@ -512,10 +512,39 @@ do
 
 done <<< "$SCORING_RELAY_NATS"
 
+##### Run startup commands
+##############################################################################
+
+while IFS= read -r CONFIG_LINE
+do
+  # If the line is empty, end.
+  if [ -z "$CONFIG_LINE" ]
+  then
+    continue
+  fi
+
+  $WRAPPER $CONFIG_LINE
+
+done <<< "$START_CONFIG"
+
 ##### Done---commit.
 ##############################################################################
 
 $WRAPPER commit 
 $WRAPPER end 
+
+if [ -n "$START_SCRIPT_BASE64" ]
+then
+  echo "$START_SCRIPT_BASE64" | base64 -d - > /tmp/startup-script-onecontext
+  chmod 700 /tmp/startup-script-onecontext
+  /tmp/startup-script-onecontext
+fi
+
+if [ -n "$START_SCRIPT" ]
+then
+  echo "$START_SCRIPT" > /tmp/startup-script-onecontext
+  chmod 700 /tmp/startup-script-onecontext
+  /tmp/startup-script-onecontext
+fi
 
 echo "Contextualized. OK to delete /opt/vyatta/sbin/vyatta-vmcontext.sh"
