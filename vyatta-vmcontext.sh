@@ -167,6 +167,7 @@ for GUEST_NIC_NAME in $GUEST_NIC_NAMES; do
   CONTEXT_VAR_GATEWAY=${GUEST_NIC_NAME^^}_GATEWAY
   CONTEXT_VAR_DNS=${GUEST_NIC_NAME^^}_DNS
   CONTEXT_VAR_IGNORE_GW=${GUEST_NIC_NAME^^}_IGNORE_GATEWAY
+  CONTEXT_VAR_MTU=${GUEST_NIC_NAME^^}_MTU
 
   ##### Select network options
   # If context provides an IP address, set it.
@@ -201,6 +202,7 @@ for GUEST_NIC_NAME in $GUEST_NIC_NAMES; do
   $WRAPPER set interfaces ethernet $GUEST_NIC_NAME address $IP/$MASK
   $WRAPPER set interfaces ethernet $GUEST_NIC_NAME duplex auto 
   $WRAPPER set interfaces ethernet $GUEST_NIC_NAME speed auto 
+  $WRAPPER set interfaces ethernet $GUEST_NIC_NAME ${!CONTEXT_VAR_MTU}
 
   ##### Configure DNS if present in context on this interface.
   if [ -n "${!CONTEXT_VAR_DNS}" ]
