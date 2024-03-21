@@ -202,7 +202,7 @@ for GUEST_NIC_NAME in $GUEST_NIC_NAMES; do
   $WRAPPER set interfaces ethernet $GUEST_NIC_NAME address $IP/$MASK
   $WRAPPER set interfaces ethernet $GUEST_NIC_NAME duplex auto 
   $WRAPPER set interfaces ethernet $GUEST_NIC_NAME speed auto 
-  $WRAPPER set interfaces ethernet $GUEST_NIC_NAME ${!CONTEXT_VAR_MTU}
+  $WRAPPER set interfaces ethernet $GUEST_NIC_NAME mtu ${!CONTEXT_VAR_MTU}
 
   ##### Configure DNS if present in context on this interface.
   if [ -n "${!CONTEXT_VAR_DNS}" ]
