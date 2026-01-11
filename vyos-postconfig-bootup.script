@@ -1,0 +1,16 @@
+#!/bin/sh
+# VyOS Sagitta Post-Config Bootup Script
+#
+# This script runs from /config/scripts/vyos-postconfig-bootup.script
+# after VyOS configuration is fully applied. It mounts the OpenNebula
+# context CD and invokes the contextualization script.
+#
+# TODO: Implement sagitta boot script
+# See legacy/equuleus branch for reference implementation.
+
+# Mount context CD and run contextualization
+mount -t iso9660 /dev/sr0 /mnt 2>/dev/null
+if [ $? -eq 0 ]; then
+    sg vyattacfg -c "/opt/vyatta/sbin/vyos-vmcontext.sh"
+    umount /mnt
+fi
