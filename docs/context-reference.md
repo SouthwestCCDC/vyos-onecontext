@@ -169,12 +169,7 @@ OSPF dynamic routing configuration.
   "areas": [
     {
       "id": "0.0.0.0",
-      "networks": ["10.0.0.0/8", "192.168.0.0/16"],
-      "authentication": {
-        "type": "md5",
-        "key_id": 1,
-        "key": "secretkey"
-      }
+      "networks": ["10.0.0.0/8", "192.168.0.0/16"]
     }
   ],
   "redistribute": ["connected", "static", "kernel"],
@@ -196,13 +191,13 @@ OSPF dynamic routing configuration.
 | `areas` | Array | Yes | OSPF area definitions |
 | `areas[].id` | String | Yes | Area ID (dotted-decimal, e.g., `0.0.0.0`) |
 | `areas[].networks` | Array | Yes | Networks to advertise in this area |
-| `areas[].authentication` | Object | No | Area authentication settings |
-| `areas[].authentication.type` | String | No | `md5` or `plaintext` |
-| `areas[].authentication.key_id` | Integer | No | Key ID (for MD5) |
-| `areas[].authentication.key` | String | No | Authentication key |
 | `redistribute` | Array | No | Protocols to redistribute |
 | `passive_interfaces` | Array | No | Interfaces that don't send OSPF hellos |
 | `default_information` | Object | No | Default route origination settings |
+
+> **Note:** OSPF authentication is not included in v1. The OSPF networks run on isolated
+> point-to-point links with adequate protection at the infrastructure level. Authentication
+> support may be added in a future version if needed.
 
 **Terraform Example:**
 
@@ -218,11 +213,6 @@ OSPF_JSON = jsonencode({
     {
       id = "10.64.0.0"
       networks = ["10.0.0.0/8"]
-      authentication = {
-        type = "md5"
-        key_id = 1
-        key = "ospf-secret"
-      }
     }
   ]
   redistribute = ["connected", "static"]
@@ -232,13 +222,11 @@ OSPF_JSON = jsonencode({
 
 **Generated VyOS Commands:**
 
-```
+```text
 set protocols ospf parameters router-id '10.64.0.1'
 set protocols ospf area 0.0.0.0 network '10.63.253.0/24'
 set protocols ospf area 0.0.0.0 network '10.4.0.0/24'
 set protocols ospf area 10.64.0.0 network '10.0.0.0/8'
-set protocols ospf area 10.64.0.0 authentication 'md5'
-set protocols ospf interface eth1 authentication md5 key-id 1 md5-key 'ospf-secret'
 set protocols ospf redistribute connected
 set protocols ospf redistribute static
 set protocols ospf passive-interface 'eth0'
@@ -766,7 +754,7 @@ Raw VyOS commands executed within the configuration transaction.
 
 | Variable | Type | Description |
 |----------|------|-------------|
-| `START_CONFIG` | String | VyOS commands (one per line, without `set` prefix optional) |
+| `START_CONFIG` | String | VyOS commands (one per line; `set` prefix is optional) |
 
 **Terraform Example:**
 
@@ -883,8 +871,8 @@ resource "opennebula_virtual_machine" "router" {
 
 **Project documentation (mkdocs site):**
 
-- [VyOS Router v3 Project](../../../../docs/docs/projects/backlog/vyos-router-v3/index.md) - Project overview and status
-- [Implementation Plan](../../../../docs/docs/projects/backlog/vyos-router-v3/implementation-plan.md) - Phased implementation approach
+- [VyOS Router v3 Project](../../../../docs/docs/projects/active/vyos-router-v3/index.md) - Project overview and status
+- [Implementation Plan](../../../../docs/docs/projects/active/vyos-router-v3/implementation-plan.md) - Phased implementation approach
 
 **Technical reference:**
 

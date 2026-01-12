@@ -170,7 +170,7 @@ START_SCRIPT="#!/bin/bash\necho 'Custom setup'"
 
 | Feature | Reason |
 |---------|--------|
-| VLAN-tagged interfaces | OpenNebula provides virtual NICs; no qinq support |
+| VLAN-tagged interfaces | OpenNebula provides virtual NICs; no QinQ support |
 | VPN (WireGuard/OpenVPN) | Handled by dedicated VPN infrastructure |
 | Captive portal | Not needed; guest access handled differently |
 | Schedule-based rules | Complexity not justified for current use cases |
@@ -628,9 +628,9 @@ These items are not in v1 scope but are documented for future consideration:
 
 **Project documentation (mkdocs site):**
 
-- [VyOS Router v3 Project](../../../../docs/docs/projects/backlog/vyos-router-v3/index.md) - Project overview and status
-- [Requirements](../../../../docs/docs/projects/backlog/vyos-router-v3/requirements.md) - Detailed requirements analysis
-- [Implementation Plan](../../../../docs/docs/projects/backlog/vyos-router-v3/implementation-plan.md) - Phased implementation approach
+- [VyOS Router v3 Project](../../../../docs/docs/projects/active/vyos-router-v3/index.md) - Project overview and status
+- [Requirements](../../../../docs/docs/projects/active/vyos-router-v3/requirements.md) - Detailed requirements analysis
+- [Implementation Plan](../../../../docs/docs/projects/active/vyos-router-v3/implementation-plan.md) - Phased implementation approach
 
 **Technical reference:**
 
