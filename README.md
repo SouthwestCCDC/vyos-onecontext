@@ -4,8 +4,8 @@ OpenNebula contextualization for VyOS router images.
 
 ## Branches
 
-- **main** - VyOS sagitta (1.4.x LTS) - active development
-- **legacy/equuleus** - VyOS equuleus (1.3.x) - maintenance only, EOL upstream
+- **sagitta** - VyOS Sagitta (1.4.x LTS) - active development
+- **legacy/equuleus** - VyOS Equuleus (1.3.x) - maintenance only, EOL upstream
 
 ## Status
 
