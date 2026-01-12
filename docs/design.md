@@ -14,6 +14,33 @@ context variables provided by OpenNebula.
 4. **Testability**: Python implementation with comprehensive unit tests
 5. **Validation**: Catch configuration errors before applying to VyOS
 
+## Operational Model
+
+**Stateless by default:** Routers regenerate their entire configuration from context on every
+boot. The config is committed but not saved to persistent storage. This ensures routers always
+reflect their current context without drift.
+
+**Implications:**
+- Manual changes via SSH are lost on reboot
+- To change config: update context in Terraform, reboot (or replace VM)
+- No incremental updates or config merging
+- Generator assumes blank slate every boot
+
+**Frozen/graduated mode:** Operators can transition a router to stateful management:
+
+1. Boot router with desired context
+2. Save configuration: `save` in VyOS
+3. Disable contextualization (remove boot hook or set flag)
+4. Future boots use saved config; context is ignored
+
+**Use cases for freezing:**
+- Complex customizations beyond what context supports
+- Handing off to Ansible or other config management
+- One-off special-purpose routers
+
+Once frozen, the operator owns consistency. The contextualization system makes no attempt to
+detect drift or merge with existing config.
+
 ## Architecture
 
 ### Hybrid Approach: Shell + Python
@@ -563,15 +590,27 @@ Within a zone-to-zone policy, rules can have varying specificity:
 
 ### Rule Auto-Numbering
 
-The generator auto-numbers rules starting at 100, incrementing by 100 (100, 200, 300...).
+**Firewall rules** (per-policy namespace - each zone-pair ruleset has its own numbering):
 
-This leaves room for operators to inject manual rules via `START_CONFIG`:
-- Rules 1-99: Reserved for manual "early" rules (highest priority)
-- Rules 100+: Auto-generated from FIREWALL_JSON
-- Rules 900+: Reserved for manual "late" rules (before default-action)
+| Range | Purpose |
+|-------|---------|
+| 1-99 | Reserved for manual "early" rules via `START_CONFIG` |
+| 100, 110, 120... | Auto-generated from FIREWALL_JSON (increment by 10) |
+| 9000+ | Reserved for manual "late" rules (before default-action) |
 
-**TODO:** Finalize numbering scheme during implementation. Consider whether to expose
-rule priority in the JSON schema or keep it implicit.
+**NAT rules** (global namespace - separate for source and destination NAT):
+
+| Range | Purpose |
+|-------|---------|
+| 1-99 | Reserved for manual rules via `START_CONFIG` |
+| 100, 110, 120... | Auto-generated (increment by 10) |
+
+NAT rule assignment order within the auto-generated range:
+- Source NAT: masquerade rules, then binat outbound rules
+- Dest NAT: port forwards, then binat inbound rules
+
+Rule priority is implicit based on position in the JSON arrays. The schema does not expose
+rule numbers directly - operators who need precise control should use `START_CONFIG`.
 
 ### Generated Configuration
 
