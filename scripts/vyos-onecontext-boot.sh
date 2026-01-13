@@ -63,7 +63,12 @@ main() {
     # Re-exec with vyattacfg group if needed
     if ! has_vyattacfg_group; then
         log_debug "Re-executing with vyattacfg group"
-        exec sg vyattacfg -c "$0 $*"
+        # Properly quote script path and all arguments to prevent shell injection
+        cmd="$(printf '%q' "$0")"
+        for arg in "$@"; do
+            cmd="$cmd $(printf '%q' "$arg")"
+        done
+        exec sg vyattacfg -c "$cmd"
     fi
 
     # Verify Python venv exists
