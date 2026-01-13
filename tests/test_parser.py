@@ -373,7 +373,12 @@ class TestJsonVariables:
                 }
             ]
         }
-        context_file.write_text(f'ROUTES_JSON=\'{json.dumps(routes_data)}\'\n')
+        # Need interface to satisfy RouterConfig validation
+        content = f"""ETH1_IP="10.0.1.1"
+ETH1_MASK="255.255.255.0"
+ROUTES_JSON='{json.dumps(routes_data)}'
+"""
+        context_file.write_text(content)
 
         config = parse_context(str(context_file))
 
@@ -391,7 +396,12 @@ class TestJsonVariables:
             "interfaces": [{"name": "eth1", "area": "0.0.0.0"}],
             "redistribute": ["connected"],
         }
-        context_file.write_text(f'OSPF_JSON=\'{json.dumps(ospf_data)}\'\n')
+        # Need interface to satisfy RouterConfig validation
+        content = f"""ETH1_IP="10.0.1.1"
+ETH1_MASK="255.255.255.0"
+OSPF_JSON='{json.dumps(ospf_data)}'
+"""
+        context_file.write_text(content)
 
         config = parse_context(str(context_file))
 
@@ -414,7 +424,12 @@ class TestJsonVariables:
                 }
             ]
         }
-        context_file.write_text(f'DHCP_JSON=\'{json.dumps(dhcp_data)}\'\n')
+        # Need interface to satisfy RouterConfig validation
+        content = f"""ETH1_IP="10.1.1.1"
+ETH1_MASK="255.255.255.0"
+DHCP_JSON='{json.dumps(dhcp_data)}'
+"""
+        context_file.write_text(content)
 
         config = parse_context(str(context_file))
 
@@ -461,7 +476,12 @@ NAT_JSON='{json.dumps(nat_data)}'
             },
             "policies": [],
         }
-        context_file.write_text(f'FIREWALL_JSON=\'{json.dumps(firewall_data)}\'\n')
+        # Need interface to satisfy RouterConfig validation
+        content = f"""ETH0_IP="10.0.1.1"
+ETH0_MASK="255.255.255.0"
+FIREWALL_JSON='{json.dumps(firewall_data)}'
+"""
+        context_file.write_text(content)
 
         config = parse_context(str(context_file))
 

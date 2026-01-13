@@ -456,7 +456,10 @@ class TestRouterConfig:
             hostname="router-01",
             ssh_public_key="ssh-rsa AAAA...",
             onecontext_mode=OnecontextMode.FREEZE,
-            interfaces=[InterfaceConfig(name="eth0", ip="10.0.1.1", mask="255.255.255.0")],
+            interfaces=[
+                InterfaceConfig(name="eth0", ip="10.0.1.1", mask="255.255.255.0"),
+                InterfaceConfig(name="eth1", ip="10.1.1.1", mask="255.255.255.0"),
+            ],
             routes=RoutesConfig(
                 static=[
                     StaticRoute(interface="eth1", destination="0.0.0.0/0", gateway="10.0.1.254")
@@ -495,7 +498,7 @@ class TestRouterConfig:
         )
         assert router.hostname == "router-01"
         assert router.onecontext_mode == OnecontextMode.FREEZE
-        assert len(router.interfaces) == 1
+        assert len(router.interfaces) == 2
         assert router.routes is not None
         assert router.ospf is not None
         assert router.dhcp is not None
@@ -853,7 +856,9 @@ class TestValidationEnhancements:
 
     def test_firewall_zone_invalid_interface(self) -> None:
         """Test that firewall zone interfaces must exist."""
-        with pytest.raises(ValidationError, match="Firewall zone.*references non-existent interface"):
+        with pytest.raises(
+            ValidationError, match="Firewall zone.*references non-existent interface"
+        ):
             RouterConfig(
                 interfaces=[InterfaceConfig(name="eth0", ip="10.0.1.1", mask="255.255.255.0")],
                 firewall=FirewallConfig(
@@ -875,7 +880,9 @@ class TestValidationEnhancements:
             ],
             firewall=FirewallConfig(
                 zones={
-                    "WAN": FirewallZone(name="WAN", interfaces=["eth0", "eth1"], default_action="drop")
+                    "WAN": FirewallZone(
+                        name="WAN", interfaces=["eth0", "eth1"], default_action="drop"
+                    )
                 }
             ),
         )
@@ -920,7 +927,11 @@ class TestValidationEnhancements:
             RouterConfig(
                 interfaces=[InterfaceConfig(name="eth0", ip="10.0.1.1", mask="255.255.255.0")],
                 routes=RoutesConfig(
-                    static=[StaticRoute(interface="eth99", destination="0.0.0.0/0", gateway="10.0.1.254")]
+                    static=[
+                        StaticRoute(
+                            interface="eth99", destination="0.0.0.0/0", gateway="10.0.1.254"
+                        )
+                    ]
                 ),
             )
 
@@ -930,7 +941,11 @@ class TestValidationEnhancements:
         RouterConfig(
             interfaces=[InterfaceConfig(name="eth1", ip="10.0.1.1", mask="255.255.255.0")],
             routes=RoutesConfig(
-                static=[StaticRoute(interface="eth1", destination="0.0.0.0/0", gateway="10.0.1.254")]
+                static=[
+                    StaticRoute(
+                        interface="eth1", destination="0.0.0.0/0", gateway="10.0.1.254"
+                    )
+                ]
             ),
         )
 
