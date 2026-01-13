@@ -31,6 +31,10 @@ state without drift.
 - Operational modes: stateless (default), save, freeze
 - START_SCRIPT execution after commit
 
+**Parsed (execution pending):**
+
+- START_CONFIG (raw VyOS commands)
+
 **Designed (models ready, generators in progress):**
 
 - Management VRF interface placement
@@ -41,7 +45,6 @@ state without drift.
 - Destination NAT (port forwarding)
 - Bidirectional 1:1 NAT
 - Zone-based firewall (groups, zones, policies)
-- START_CONFIG (raw VyOS commands)
 
 **Out of scope:**
 
