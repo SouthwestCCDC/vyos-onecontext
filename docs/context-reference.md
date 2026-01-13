@@ -87,6 +87,39 @@ HOSTNAME="router-01"
 SSH_PUBLIC_KEY="ssh-rsa AAAAB3NzaC1yc2EAAAA... user@host"
 ```
 
+### Operational Variables
+
+| Variable | Type | Required | Description |
+|----------|------|----------|-------------|
+| `ONECONTEXT_MODE` | String | No | Save behavior: `stateless` (default), `save`, `freeze` |
+
+**Values:**
+
+| Value | Behavior | Consistency | Recommended |
+|-------|----------|-------------|-------------|
+| `stateless` | Don't save. Regenerate fresh every boot. | Guaranteed | Yes (default) |
+| `save` | Save after commit. Still run onecontext on future boots. | **None** | No - escape hatch only |
+| `freeze` | Save and disable onecontext hook. Future boots use saved config. | N/A | For handoff to manual management |
+
+**Example:**
+
+```bash
+# Normal operation (default - can be omitted)
+ONECONTEXT_MODE="stateless"
+
+# Freeze router for manual management
+ONECONTEXT_MODE="freeze"
+```
+
+**Notes:**
+
+- Default is `stateless` if not specified
+- `save` mode has no consistency guarantees: next boot starts from saved state rather than
+  fresh, so context changes may conflict with leftover config. Use only if you have a specific need.
+- `freeze` mode disables the onecontext boot hook entirely. Once frozen, the operator owns
+  the configuration and the contextualization system is not involved in future boots.
+- All modes emit a descriptive message at the end of contextualization indicating what was done
+
 ---
 
 ## JSON Extension Variables
@@ -158,7 +191,7 @@ set vrf name management protocols static route 192.168.0.0/16 next-hop 10.0.1.25
 
 ### OSPF_JSON
 
-OSPF dynamic routing configuration.
+OSPF dynamic routing configuration using interface-based syntax (Sagitta best practice).
 
 **Schema:**
 
@@ -166,14 +199,20 @@ OSPF dynamic routing configuration.
 {
   "enabled": true,
   "router_id": "10.0.0.1",
-  "areas": [
+  "interfaces": [
     {
-      "id": "0.0.0.0",
-      "networks": ["10.0.0.0/8", "192.168.0.0/16"]
+      "name": "eth1",
+      "area": "0.0.0.0",
+      "passive": false,
+      "cost": 10
+    },
+    {
+      "name": "eth2",
+      "area": "0.0.0.0",
+      "passive": true
     }
   ],
-  "redistribute": ["connected", "static", "kernel"],
-  "passive_interfaces": ["eth0"],
+  "redistribute": ["connected", "static"],
   "default_information": {
     "originate": true,
     "always": true,
@@ -188,35 +227,49 @@ OSPF dynamic routing configuration.
 |-------|------|----------|-------------|
 | `enabled` | Boolean | Yes | Enable OSPF |
 | `router_id` | IP | No | OSPF router ID (auto-derived if not set) |
-| `areas` | Array | Yes | OSPF area definitions |
-| `areas[].id` | String | Yes | Area ID (dotted-decimal, e.g., `0.0.0.0`) |
-| `areas[].networks` | Array | Yes | Networks to advertise in this area |
-| `redistribute` | Array | No | Protocols to redistribute |
-| `passive_interfaces` | Array | No | Interfaces that don't send OSPF hellos |
+| `interfaces` | Array | Yes | OSPF interface configurations |
+| `interfaces[].name` | String | Yes | Interface name (e.g., `eth1`) |
+| `interfaces[].area` | String | Yes | Area ID (dotted-decimal, e.g., `0.0.0.0`) |
+| `interfaces[].passive` | Boolean | No | If true, advertise network but don't form adjacencies (default: false) |
+| `interfaces[].cost` | Integer | No | Interface cost metric (default: auto-calculated) |
+| `redistribute` | Array | No | Protocols to redistribute: `connected`, `static`, `kernel` |
 | `default_information` | Object | No | Default route origination settings |
+| `default_information.originate` | Boolean | No | Originate default route into OSPF |
+| `default_information.always` | Boolean | No | Always originate even without default route in RIB |
+| `default_information.metric` | Integer | No | Metric for originated default route |
 
 > **Note:** OSPF authentication is not included in v1. The OSPF networks run on isolated
 > point-to-point links with adequate protection at the infrastructure level. Authentication
 > support may be added in a future version if needed.
 
+**Passive interfaces explained:**
+
+A passive interface advertises its connected network into OSPF but does **not** form adjacencies
+(no hello packets sent/received). Use for:
+
+- LAN segments with only hosts (no other OSPF routers)
+- Interfaces where you want reachability advertised but no neighbors
+- Security: prevents unexpected adjacencies on untrusted interfaces
+
 **Terraform Example:**
 
 ```hcl
 OSPF_JSON = jsonencode({
-  enabled = true
+  enabled   = true
   router_id = "10.64.0.1"
-  areas = [
-    {
-      id = "0.0.0.0"
-      networks = ["10.63.253.0/24", "10.4.0.0/24"]
-    },
-    {
-      id = "10.64.0.0"
-      networks = ["10.0.0.0/8"]
-    }
+  interfaces = [
+    # Active OSPF on backbone links
+    { name = "eth1", area = "0.0.0.0" },
+    { name = "eth2", area = "0.0.0.0", cost = 100 },
+    # Passive on LAN (advertise but no neighbors)
+    { name = "eth3", area = "0.0.0.0", passive = true }
   ]
   redistribute = ["connected", "static"]
-  passive_interfaces = ["eth0"]
+  default_information = {
+    originate = true
+    always    = true
+    metric    = 100
+  }
 })
 ```
 
@@ -224,12 +277,15 @@ OSPF_JSON = jsonencode({
 
 ```text
 set protocols ospf parameters router-id '10.64.0.1'
-set protocols ospf area 0.0.0.0 network '10.63.253.0/24'
-set protocols ospf area 0.0.0.0 network '10.4.0.0/24'
-set protocols ospf area 10.64.0.0 network '10.0.0.0/8'
+set protocols ospf interface eth1 area '0.0.0.0'
+set protocols ospf interface eth2 area '0.0.0.0'
+set protocols ospf interface eth2 cost '100'
+set protocols ospf interface eth3 area '0.0.0.0'
+set protocols ospf interface eth3 passive
 set protocols ospf redistribute connected
 set protocols ospf redistribute static
-set protocols ospf passive-interface 'eth0'
+set protocols ospf default-information originate always
+set protocols ospf default-information originate metric '100'
 ```
 
 ---
@@ -367,12 +423,22 @@ bidirectional 1:1 NAT.
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `inbound_interface` | String | Yes | Ingress interface |
-| `protocol` | String | No | `tcp`, `udp`, or `tcp_udp` |
+| `protocol` | String | No | Protocol filter (see below) |
 | `destination_address` | IP | No | Original destination (for 1:1 NAT) |
-| `destination_port` | Integer | No | Original destination port |
+| `destination_port` | Integer | No | Original destination port (not valid for `icmp`) |
 | `translation_address` | IP | Yes | New destination address |
 | `translation_port` | Integer | No | New destination port |
 | `description` | String | No | Rule description |
+
+**Protocol values:**
+
+| Value | Description |
+|-------|-------------|
+| `tcp` | TCP only |
+| `udp` | UDP only |
+| `tcp_udp` | Both TCP and UDP |
+| `icmp` | ICMP only (port fields ignored) |
+| *(omitted)* | All protocols (no filtering) |
 
 **Bidirectional NAT (1:1) Fields:**
 
