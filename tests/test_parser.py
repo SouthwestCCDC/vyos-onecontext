@@ -89,6 +89,66 @@ VAR2='single'
         assert parser.variables["VAR1"] == "double"
         assert parser.variables["VAR2"] == "single"
 
+    def test_escaped_quotes_double(self, tmp_path: Path) -> None:
+        """Test parsing double-quoted value with escaped quotes."""
+        context_file = tmp_path / "one_env"
+        context_file.write_text('TEST="value with \\"quote\\""\n')
+
+        parser = ContextParser(str(context_file))
+        parser._read_variables()
+
+        assert parser.variables["TEST"] == 'value with "quote"'
+
+    def test_escaped_quotes_single(self, tmp_path: Path) -> None:
+        """Test parsing single-quoted value with escaped quotes."""
+        context_file = tmp_path / "one_env"
+        context_file.write_text("TEST='value with \\'quote\\''\n")
+
+        parser = ContextParser(str(context_file))
+        parser._read_variables()
+
+        assert parser.variables["TEST"] == "value with 'quote'"
+
+    def test_escaped_backslash(self, tmp_path: Path) -> None:
+        """Test parsing value with escaped backslash."""
+        context_file = tmp_path / "one_env"
+        context_file.write_text('TEST="path\\\\to\\\\file"\n')
+
+        parser = ContextParser(str(context_file))
+        parser._read_variables()
+
+        assert parser.variables["TEST"] == "path\\to\\file"
+
+    def test_mixed_escapes(self, tmp_path: Path) -> None:
+        """Test parsing value with mixed escape sequences."""
+        context_file = tmp_path / "one_env"
+        context_file.write_text('TEST="He said \\"Hello\\\\\\" to me"\n')
+
+        parser = ContextParser(str(context_file))
+        parser._read_variables()
+
+        assert parser.variables["TEST"] == 'He said "Hello\\" to me'
+
+    def test_whitespace_only_unquoted(self, tmp_path: Path) -> None:
+        """Test parsing unquoted value that is whitespace-only."""
+        context_file = tmp_path / "one_env"
+        context_file.write_text("TEST=   \n")
+
+        parser = ContextParser(str(context_file))
+        parser._read_variables()
+
+        assert parser.variables["TEST"] == ""
+
+    def test_empty_unquoted(self, tmp_path: Path) -> None:
+        """Test parsing unquoted value that is empty."""
+        context_file = tmp_path / "one_env"
+        context_file.write_text("TEST=\n")
+
+        parser = ContextParser(str(context_file))
+        parser._read_variables()
+
+        assert parser.variables["TEST"] == ""
+
 
 class TestInterfaceParsing:
     """Tests for interface parsing."""

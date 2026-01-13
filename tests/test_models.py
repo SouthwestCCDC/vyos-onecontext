@@ -749,3 +749,205 @@ class TestValidationEnhancements:
                     ]
                 ),
             )
+
+    def test_binat_external_address_not_configured(self) -> None:
+        """Test that binat external_address must be configured on interface."""
+        with pytest.raises(
+            ValidationError, match="is not configured on interface.*must be primary IP or alias"
+        ):
+            RouterConfig(
+                interfaces=[InterfaceConfig(name="eth0", ip="10.0.1.1", mask="255.255.255.0")],
+                nat=NatConfig(
+                    binat=[
+                        BinatRule(
+                            external_address="10.0.1.99",  # not configured
+                            internal_address="192.168.1.10",
+                            interface="eth0",
+                        )
+                    ]
+                ),
+            )
+
+    def test_binat_external_address_as_primary_ip(self) -> None:
+        """Test that binat external_address can be the primary IP."""
+        # Should pass validation
+        RouterConfig(
+            interfaces=[InterfaceConfig(name="eth0", ip="10.0.1.1", mask="255.255.255.0")],
+            nat=NatConfig(
+                binat=[
+                    BinatRule(
+                        external_address="10.0.1.1",  # primary IP
+                        internal_address="192.168.1.10",
+                        interface="eth0",
+                    )
+                ]
+            ),
+        )
+
+    def test_binat_external_address_as_alias(self) -> None:
+        """Test that binat external_address can be an alias IP."""
+        # Should pass validation
+        RouterConfig(
+            interfaces=[InterfaceConfig(name="eth0", ip="10.0.1.1", mask="255.255.255.0")],
+            aliases=[AliasConfig(interface="eth0", ip="10.0.1.2", mask="255.255.255.0")],
+            nat=NatConfig(
+                binat=[
+                    BinatRule(
+                        external_address="10.0.1.2",  # alias IP
+                        internal_address="192.168.1.10",
+                        interface="eth0",
+                    )
+                ]
+            ),
+        )
+
+    def test_dhcp_pool_invalid_interface(self) -> None:
+        """Test that DHCP pool interface must exist."""
+        with pytest.raises(ValidationError, match="DHCP pool references non-existent interface"):
+            RouterConfig(
+                interfaces=[InterfaceConfig(name="eth0", ip="10.0.1.1", mask="255.255.255.0")],
+                dhcp=DhcpConfig(
+                    pools=[
+                        DhcpPool(
+                            interface="eth99",  # doesn't exist
+                            range_start="10.1.1.100",
+                            range_end="10.1.1.200",
+                            gateway="10.1.1.1",
+                            dns=["10.1.1.1"],
+                        )
+                    ]
+                ),
+            )
+
+    def test_dhcp_pool_valid_interface(self) -> None:
+        """Test that DHCP pool with valid interface passes."""
+        # Should pass validation
+        RouterConfig(
+            interfaces=[InterfaceConfig(name="eth1", ip="10.1.1.1", mask="255.255.255.0")],
+            dhcp=DhcpConfig(
+                pools=[
+                    DhcpPool(
+                        interface="eth1",
+                        range_start="10.1.1.100",
+                        range_end="10.1.1.200",
+                        gateway="10.1.1.1",
+                        dns=["10.1.1.1"],
+                    )
+                ]
+            ),
+        )
+
+    def test_dhcp_reservation_invalid_interface(self) -> None:
+        """Test that DHCP reservation interface must exist."""
+        with pytest.raises(
+            ValidationError, match="DHCP reservation references non-existent interface"
+        ):
+            RouterConfig(
+                interfaces=[InterfaceConfig(name="eth0", ip="10.0.1.1", mask="255.255.255.0")],
+                dhcp=DhcpConfig(
+                    reservations=[
+                        DhcpReservation(interface="eth99", mac="00:11:22:33:44:55", ip="10.1.1.50")
+                    ]
+                ),
+            )
+
+    def test_firewall_zone_invalid_interface(self) -> None:
+        """Test that firewall zone interfaces must exist."""
+        with pytest.raises(ValidationError, match="Firewall zone.*references non-existent interface"):
+            RouterConfig(
+                interfaces=[InterfaceConfig(name="eth0", ip="10.0.1.1", mask="255.255.255.0")],
+                firewall=FirewallConfig(
+                    zones={
+                        "WAN": FirewallZone(
+                            name="WAN", interfaces=["eth0", "eth99"], default_action="drop"
+                        )
+                    }
+                ),
+            )
+
+    def test_firewall_zone_valid_interfaces(self) -> None:
+        """Test that firewall zone with valid interfaces passes."""
+        # Should pass validation
+        RouterConfig(
+            interfaces=[
+                InterfaceConfig(name="eth0", ip="10.0.1.1", mask="255.255.255.0"),
+                InterfaceConfig(name="eth1", ip="10.1.1.1", mask="255.255.255.0"),
+            ],
+            firewall=FirewallConfig(
+                zones={
+                    "WAN": FirewallZone(name="WAN", interfaces=["eth0", "eth1"], default_action="drop")
+                }
+            ),
+        )
+
+    def test_ospf_invalid_interface(self) -> None:
+        """Test that OSPF interfaces must exist."""
+        with pytest.raises(
+            ValidationError, match="OSPF configuration references non-existent interface"
+        ):
+            RouterConfig(
+                interfaces=[InterfaceConfig(name="eth0", ip="10.0.1.1", mask="255.255.255.0")],
+                ospf=OspfConfig(
+                    enabled=True,
+                    router_id="10.0.0.1",
+                    interfaces=[OspfInterface(name="eth99", area="0.0.0.0")],
+                ),
+            )
+
+    def test_ospf_valid_interfaces(self) -> None:
+        """Test that OSPF with valid interfaces passes."""
+        # Should pass validation
+        RouterConfig(
+            interfaces=[
+                InterfaceConfig(name="eth0", ip="10.0.1.1", mask="255.255.255.0"),
+                InterfaceConfig(name="eth1", ip="10.1.1.1", mask="255.255.255.0"),
+            ],
+            ospf=OspfConfig(
+                enabled=True,
+                router_id="10.0.0.1",
+                interfaces=[
+                    OspfInterface(name="eth0", area="0.0.0.0"),
+                    OspfInterface(name="eth1", area="0.0.0.0"),
+                ],
+            ),
+        )
+
+    def test_static_route_invalid_interface(self) -> None:
+        """Test that static route interfaces must exist."""
+        with pytest.raises(
+            ValidationError, match="Static route to.*references non-existent interface"
+        ):
+            RouterConfig(
+                interfaces=[InterfaceConfig(name="eth0", ip="10.0.1.1", mask="255.255.255.0")],
+                routes=RoutesConfig(
+                    static=[StaticRoute(interface="eth99", destination="0.0.0.0/0", gateway="10.0.1.254")]
+                ),
+            )
+
+    def test_static_route_valid_interface(self) -> None:
+        """Test that static route with valid interface passes."""
+        # Should pass validation
+        RouterConfig(
+            interfaces=[InterfaceConfig(name="eth1", ip="10.0.1.1", mask="255.255.255.0")],
+            routes=RoutesConfig(
+                static=[StaticRoute(interface="eth1", destination="0.0.0.0/0", gateway="10.0.1.254")]
+            ),
+        )
+
+    def test_alias_invalid_parent_interface(self) -> None:
+        """Test that alias parent interfaces must exist."""
+        with pytest.raises(
+            ValidationError, match="Alias IP.*references non-existent parent interface"
+        ):
+            RouterConfig(
+                interfaces=[InterfaceConfig(name="eth0", ip="10.0.1.1", mask="255.255.255.0")],
+                aliases=[AliasConfig(interface="eth99", ip="10.0.1.2", mask="255.255.255.0")],
+            )
+
+    def test_alias_valid_parent_interface(self) -> None:
+        """Test that alias with valid parent interface passes."""
+        # Should pass validation
+        RouterConfig(
+            interfaces=[InterfaceConfig(name="eth0", ip="10.0.1.1", mask="255.255.255.0")],
+            aliases=[AliasConfig(interface="eth0", ip="10.0.1.2", mask="255.255.255.0")],
+        )

@@ -134,7 +134,8 @@ class ContextParser:
 
             if not quote:
                 # Unquoted value (ends at first whitespace)
-                value = rest.split()[0] if rest else ""
+                parts = rest.split()
+                value = parts[0] if parts else ""
                 variables[var_name] = value
                 i += 1
             else:
@@ -142,11 +143,12 @@ class ContextParser:
                 value_parts = []
                 current_line = rest
 
-                # Check if quote closes on same line
-                if quote in current_line:
-                    end_idx = current_line.index(quote)
+                # Find closing quote, handling escapes
+                end_idx = self._find_closing_quote(current_line, quote)
+                if end_idx is not None:
+                    # Quote closes on same line
                     value_parts.append(current_line[:end_idx])
-                    variables[var_name] = "".join(value_parts)
+                    variables[var_name] = self._process_escapes("".join(value_parts), quote)
                     i += 1
                 else:
                     # Multi-line value
@@ -156,11 +158,11 @@ class ContextParser:
                     # Continue reading until we find the closing quote
                     while i < len(lines):
                         current_line = lines[i]
-                        if quote in current_line:
-                            end_idx = current_line.index(quote)
+                        end_idx = self._find_closing_quote(current_line, quote)
+                        if end_idx is not None:
                             value_parts.append("\n")
                             value_parts.append(current_line[:end_idx])
-                            variables[var_name] = "".join(value_parts)
+                            variables[var_name] = self._process_escapes("".join(value_parts), quote)
                             i += 1
                             break
                         else:
@@ -169,6 +171,69 @@ class ContextParser:
                             i += 1
 
         return variables
+
+    def _find_closing_quote(self, text: str, quote: str) -> int | None:
+        """Find the closing quote position, accounting for escape sequences.
+
+        Args:
+            text: Text to search for closing quote
+            quote: Quote character to search for (" or ')
+
+        Returns:
+            Index of closing quote, or None if not found
+        """
+        i = 0
+        while i < len(text):
+            if text[i] == "\\":
+                # Skip escaped character
+                i += 2
+            elif text[i] == quote:
+                return i
+            else:
+                i += 1
+        return None
+
+    def _process_escapes(self, value: str, quote: str) -> str:
+        """Process escape sequences in a quoted string.
+
+        Handles:
+        - \\" -> " (in double quotes)
+        - \\' -> ' (in single quotes)
+        - \\\\ -> \\
+
+        Args:
+            value: String with potential escape sequences
+            quote: Quote character used (" or ')
+
+        Returns:
+            String with escapes processed
+        """
+        result = []
+        i = 0
+        while i < len(value):
+            if value[i] == "\\":
+                if i + 1 < len(value):
+                    next_char = value[i + 1]
+                    if next_char == quote:
+                        # Escaped quote
+                        result.append(quote)
+                        i += 2
+                    elif next_char == "\\":
+                        # Escaped backslash
+                        result.append("\\")
+                        i += 2
+                    else:
+                        # Not a recognized escape, keep backslash
+                        result.append("\\")
+                        i += 1
+                else:
+                    # Backslash at end of string
+                    result.append("\\")
+                    i += 1
+            else:
+                result.append(value[i])
+                i += 1
+        return "".join(result)
 
     def _parse_interfaces(self) -> list[InterfaceConfig]:
         """Parse ETHx_* variables into InterfaceConfig objects.
