@@ -10,8 +10,9 @@ context on every boot.
 
 ## Documentation
 
-- [Design Document](docs/design.md) - Architecture and design decisions
+- [Design Document](docs/design.md) - Architecture and design decisions (vrouter-infra)
 - [Context Variable Reference](docs/context-reference.md) - All supported variables with examples
+- [Relay Requirements](docs/relay-requirements.md) - VRF-based scoring relay requirements (vrouter-relay)
 
 ## Branches
 

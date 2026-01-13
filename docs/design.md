@@ -26,20 +26,41 @@ reflect their current context without drift.
 - No incremental updates or config merging
 - Generator assumes blank slate every boot
 
-**Frozen/graduated mode:** Operators can transition a router to stateful management:
+### ONECONTEXT_MODE Variable
 
-1. Boot router with desired context
-2. Save configuration: `save` in VyOS
-3. Disable contextualization (remove boot hook or set flag)
-4. Future boots use saved config; context is ignored
+The `ONECONTEXT_MODE` context variable controls save behavior at the end of contextualization:
 
-**Use cases for freezing:**
+| Value | Behavior | Consistency |
+|-------|----------|-------------|
+| `stateless` (default) | Don't save. Regenerate fresh every boot. | Guaranteed |
+| `save` | Save after commit. Still run onecontext on future boots. | **None** - discouraged |
+| `freeze` | Save and disable onecontext hook. Future boots use saved config. | N/A - manual management |
+
+**Completion messages:**
+
+```
+stateless: "Configuration applied (stateless mode - not saved)"
+save:      "Configuration applied and saved (WARNING: will regenerate from non-fresh state on next boot)"
+freeze:    "Configuration applied, saved, and frozen (onecontext disabled for future boots)"
+```
+
+**Mode details:**
+
+- **stateless**: Normal operation. Config regenerated from context on every boot. Recommended.
+- **save**: Escape hatch only. Saves config but still runs onecontext on future boots. The next
+  boot starts from saved state rather than fresh, so context changes may conflict with leftover
+  config. No consistency guarantees. Use only if you have a specific need.
+- **freeze**: Transitions router to stateful management. Saves config and disables the onecontext
+  boot hook. Future boots use the saved config; context is ignored. Once frozen, the operator
+  owns consistency.
+
+**Use cases for freeze mode:**
 - Complex customizations beyond what context supports
 - Handing off to Ansible or other config management
 - One-off special-purpose routers
 
-Once frozen, the operator owns consistency. The contextualization system makes no attempt to
-detect drift or merge with existing config.
+Once frozen, the contextualization system makes no attempt to detect drift or merge with
+existing config.
 
 ## Architecture
 
@@ -193,7 +214,7 @@ START_SCRIPT="#!/bin/bash\necho 'Custom setup'"
 | Custom scripts | `START_SCRIPT` | Designed |
 | Zone-based firewall | `FIREWALL_JSON` | Designed |
 
-### Out of Scope
+### Out of Scope (for vrouter-infra)
 
 | Feature | Reason |
 |---------|--------|
@@ -201,9 +222,23 @@ START_SCRIPT="#!/bin/bash\necho 'Custom setup'"
 | VPN (WireGuard/OpenVPN) | Handled by dedicated VPN infrastructure |
 | Captive portal | Not needed; guest access handled differently |
 | Schedule-based rules | Complexity not justified for current use cases |
-| Scoring relay NAT | Requires VRF + policy routing redesign |
 | HA (keepalived/VRRP) | Future enhancement if needed |
 | IPv6 | Not currently used in infrastructure |
+
+### vrouter-relay (Separate Design)
+
+The scoring relay role (`vrouter-relay`) requires separate design work and is **not covered by
+this document**. Key differences:
+
+- Uses VRF + policy routing for scoring traffic isolation
+- Has relay-specific context variables (not the same as vrouter-infra)
+- Based on approach from 2025 (old one-context + Ansible combination)
+- May share implementation code with vrouter-infra but distinct semantics
+
+See:
+
+- [Relay Requirements](relay-requirements.md) - Detailed requirements for vrouter-relay
+- [Project Requirements](../../../../docs/docs/projects/active/vyos-router-v3/requirements.md#3-image-variants-roles) - Role definitions
 
 ## Management VRF
 
@@ -514,9 +549,11 @@ VyOS 1.4 (Sagitta) has syntax changes from 1.3 (Equuleus):
 | NAT interface | `outbound-interface eth0` | `outbound-interface name 'eth0'` |
 | Static route | `set protocols static interface-route ...` | `set protocols static route X interface Y` |
 | Firewall zones | `zone-policy zone` | `firewall zone` |
-| OSPF network | `area X network Y` | `area X network Y` (unchanged) |
+| OSPF config | `area X network Y` | `interface X area Y` (interface-based, preferred) |
+| Passive interface | `passive-interface X` | `interface X passive` |
 
-The generators produce Sagitta-compatible syntax.
+The generators produce Sagitta-compatible syntax using the interface-based OSPF approach
+for clarity and per-interface configuration.
 
 ## Firewall Design
 
