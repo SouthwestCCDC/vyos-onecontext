@@ -414,9 +414,12 @@ bidirectional 1:1 NAT.
 |-------|------|----------|-------------|
 | `outbound_interface` | String | Yes | Egress interface |
 | `source_address` | CIDR | No | Source network to NAT |
-| `translation` | String | No | `masquerade` for dynamic SNAT |
-| `translation_address` | IP/Range | No | Static SNAT address |
+| `translation` | String | Conditional | `masquerade` for dynamic SNAT |
+| `translation_address` | IP/Range | Conditional | Static SNAT address |
 | `description` | String | No | Rule description |
+
+**Note:** Exactly one of `translation` or `translation_address` must be specified (they are
+mutually exclusive).
 
 **Destination NAT Fields:**
 
@@ -947,3 +950,7 @@ resource "opennebula_virtual_machine" "router" {
 **Current production (Equuleus):**
 
 - [VyOS Operator Guide](../../../../docs/docs/network/vyos_operator_guide.md) - Current Equuleus context variables (different format)
+
+---
+
+*This document was updated with assistance from Claude Code (Opus 4.5).*
