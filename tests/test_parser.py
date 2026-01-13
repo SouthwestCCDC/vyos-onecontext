@@ -89,6 +89,81 @@ VAR2='single'
         assert parser.variables["VAR1"] == "double"
         assert parser.variables["VAR2"] == "single"
 
+    def test_escaped_quotes_double(self, tmp_path: Path) -> None:
+        """Test parsing double-quoted value with escaped quotes."""
+        context_file = tmp_path / "one_env"
+        context_file.write_text('TEST="value with \\"quote\\""\n')
+
+        parser = ContextParser(str(context_file))
+        parser._read_variables()
+
+        assert parser.variables["TEST"] == 'value with "quote"'
+
+    def test_escaped_quotes_single(self, tmp_path: Path) -> None:
+        """Test parsing single-quoted value with escaped quotes."""
+        context_file = tmp_path / "one_env"
+        context_file.write_text("TEST='value with \\'quote\\''\n")
+
+        parser = ContextParser(str(context_file))
+        parser._read_variables()
+
+        assert parser.variables["TEST"] == "value with 'quote'"
+
+    def test_escaped_backslash(self, tmp_path: Path) -> None:
+        """Test parsing value with escaped backslash."""
+        context_file = tmp_path / "one_env"
+        context_file.write_text('TEST="path\\\\to\\\\file"\n')
+
+        parser = ContextParser(str(context_file))
+        parser._read_variables()
+
+        assert parser.variables["TEST"] == "path\\to\\file"
+
+    def test_mixed_escapes(self, tmp_path: Path) -> None:
+        """Test parsing value with mixed escape sequences."""
+        context_file = tmp_path / "one_env"
+        context_file.write_text('TEST="He said \\"Hello\\\\\\" to me"\n')
+
+        parser = ContextParser(str(context_file))
+        parser._read_variables()
+
+        assert parser.variables["TEST"] == 'He said "Hello\\" to me'
+
+    def test_whitespace_only_unquoted(self, tmp_path: Path) -> None:
+        """Test parsing unquoted value that is whitespace-only."""
+        context_file = tmp_path / "one_env"
+        context_file.write_text("TEST=   \n")
+
+        parser = ContextParser(str(context_file))
+        parser._read_variables()
+
+        assert parser.variables["TEST"] == ""
+
+    def test_empty_unquoted(self, tmp_path: Path) -> None:
+        """Test parsing unquoted value that is empty."""
+        context_file = tmp_path / "one_env"
+        context_file.write_text("TEST=\n")
+
+        parser = ContextParser(str(context_file))
+        parser._read_variables()
+
+        assert parser.variables["TEST"] == ""
+
+    def test_trailing_backslash_bounds_check(self, tmp_path: Path) -> None:
+        """Test _find_closing_quote handles text ending with backslash."""
+        context_file = tmp_path / "one_env"
+        # Test case where the search string ends with a lone backslash
+        # This directly tests the bounds check fix in _find_closing_quote
+        # The value 'test\' (backslash at very end) followed by closing quote
+        context_file.write_text('TEST="test\\\\"\n')  # test\\ in file = test\ as value
+
+        parser = ContextParser(str(context_file))
+        parser._read_variables()
+
+        # Should parse successfully - value is 'test\' (single backslash)
+        assert "TEST" in parser.variables
+        assert parser.variables["TEST"] == "test\\"
+
 
 class TestInterfaceParsing:
     """Tests for interface parsing."""
@@ -313,7 +388,12 @@ class TestJsonVariables:
                 }
             ]
         }
-        context_file.write_text(f'ROUTES_JSON=\'{json.dumps(routes_data)}\'\n')
+        # Need interface to satisfy RouterConfig validation
+        content = f"""ETH1_IP="10.0.1.1"
+ETH1_MASK="255.255.255.0"
+ROUTES_JSON='{json.dumps(routes_data)}'
+"""
+        context_file.write_text(content)
 
         config = parse_context(str(context_file))
 
@@ -331,7 +411,12 @@ class TestJsonVariables:
             "interfaces": [{"name": "eth1", "area": "0.0.0.0"}],
             "redistribute": ["connected"],
         }
-        context_file.write_text(f'OSPF_JSON=\'{json.dumps(ospf_data)}\'\n')
+        # Need interface to satisfy RouterConfig validation
+        content = f"""ETH1_IP="10.0.1.1"
+ETH1_MASK="255.255.255.0"
+OSPF_JSON='{json.dumps(ospf_data)}'
+"""
+        context_file.write_text(content)
 
         config = parse_context(str(context_file))
 
@@ -354,7 +439,12 @@ class TestJsonVariables:
                 }
             ]
         }
-        context_file.write_text(f'DHCP_JSON=\'{json.dumps(dhcp_data)}\'\n')
+        # Need interface to satisfy RouterConfig validation
+        content = f"""ETH1_IP="10.1.1.1"
+ETH1_MASK="255.255.255.0"
+DHCP_JSON='{json.dumps(dhcp_data)}'
+"""
+        context_file.write_text(content)
 
         config = parse_context(str(context_file))
 
@@ -401,7 +491,12 @@ NAT_JSON='{json.dumps(nat_data)}'
             },
             "policies": [],
         }
-        context_file.write_text(f'FIREWALL_JSON=\'{json.dumps(firewall_data)}\'\n')
+        # Need interface to satisfy RouterConfig validation
+        content = f"""ETH0_IP="10.0.1.1"
+ETH0_MASK="255.255.255.0"
+FIREWALL_JSON='{json.dumps(firewall_data)}'
+"""
+        context_file.write_text(content)
 
         config = parse_context(str(context_file))
 
