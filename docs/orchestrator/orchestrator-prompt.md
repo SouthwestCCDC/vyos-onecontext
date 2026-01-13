@@ -1,6 +1,6 @@
-# VyOS-OneContext Orchestrator Prompt
+# vyos-onecontext Orchestrator Prompt
 
-Use this prompt when coordinating work on the VyOS-OneContext project and related infrastructure.
+Use this prompt when coordinating work on the vyos-onecontext project and related infrastructure.
 
 ---
 
