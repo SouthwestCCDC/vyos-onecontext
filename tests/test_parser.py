@@ -149,6 +149,21 @@ VAR2='single'
 
         assert parser.variables["TEST"] == ""
 
+    def test_trailing_backslash_bounds_check(self, tmp_path: Path) -> None:
+        """Test _find_closing_quote handles text ending with backslash."""
+        context_file = tmp_path / "one_env"
+        # Test case where the search string ends with a lone backslash
+        # This directly tests the bounds check fix in _find_closing_quote
+        # The value 'test\' (backslash at very end) followed by closing quote
+        context_file.write_text('TEST="test\\\\"\n')  # test\\ in file = test\ as value
+
+        parser = ContextParser(str(context_file))
+        parser._read_variables()
+
+        # Should parse successfully - value is 'test\' (single backslash)
+        assert "TEST" in parser.variables
+        assert parser.variables["TEST"] == "test\\"
+
 
 class TestInterfaceParsing:
     """Tests for interface parsing."""

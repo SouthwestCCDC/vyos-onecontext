@@ -185,8 +185,12 @@ class ContextParser:
         i = 0
         while i < len(text):
             if text[i] == "\\":
-                # Skip escaped character
-                i += 2
+                # Skip escaped character (with bounds check)
+                if i + 1 < len(text):
+                    i += 2
+                else:
+                    # Trailing backslash, move past it
+                    i += 1
             elif text[i] == quote:
                 return i
             else:
