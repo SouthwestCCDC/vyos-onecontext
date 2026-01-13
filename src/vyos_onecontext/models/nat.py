@@ -3,7 +3,7 @@
 from ipaddress import IPv4Address, IPv4Network
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class SourceNatRule(BaseModel):
@@ -53,10 +53,14 @@ class SourceNatRule(BaseModel):
             if len(parts) != 2:
                 raise ValueError("Invalid IP range format")
             try:
-                IPv4Address(parts[0].strip())
-                IPv4Address(parts[1].strip())
+                start_ip = IPv4Address(parts[0].strip())
+                end_ip = IPv4Address(parts[1].strip())
             except ValueError as e:
                 raise ValueError("Invalid IP addresses in range") from e
+
+            # Check order after we know both IPs are valid
+            if end_ip < start_ip:
+                raise ValueError("Invalid IP range: end address must be >= start address")
         else:
             # Single IP or CIDR
             try:
@@ -69,6 +73,18 @@ class SourceNatRule(BaseModel):
                     raise ValueError("Invalid IP address or CIDR") from e
 
         return v
+
+    @model_validator(mode="after")
+    def validate_translation_exclusivity(self) -> "SourceNatRule":
+        """Ensure exactly one of translation or translation_address is set."""
+        has_translation = self.translation is not None
+        has_address = self.translation_address is not None
+
+        if has_translation and has_address:
+            raise ValueError("Cannot specify both 'translation' and 'translation_address'")
+        if not has_translation and not has_address:
+            raise ValueError("Must specify either 'translation' or 'translation_address'")
+        return self
 
 
 class DestinationNatRule(BaseModel):

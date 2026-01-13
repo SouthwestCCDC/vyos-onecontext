@@ -3,7 +3,7 @@
 from ipaddress import IPv4Address, IPv4Network
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class StaticRoute(BaseModel):
@@ -128,3 +128,17 @@ class OspfConfig(BaseModel):
         OspfDefaultInformation | None,
         Field(None, description="Default route origination settings"),
     ]
+
+    @model_validator(mode="after")
+    def validate_enabled_consistency(self) -> "OspfConfig":
+        """Warn if OSPF is disabled but has configuration."""
+        if not self.enabled:
+            has_config = bool(
+                self.interfaces or self.redistribute or self.default_information
+            )
+            if has_config:
+                raise ValueError(
+                    "OSPF is disabled but has configuration (interfaces, redistribute, or "
+                    "default_information). Either enable OSPF or remove the configuration."
+                )
+        return self

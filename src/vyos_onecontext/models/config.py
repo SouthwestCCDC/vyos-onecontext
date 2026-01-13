@@ -3,7 +3,7 @@
 from enum import Enum
 from typing import Annotated
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from vyos_onecontext.models.dhcp import DhcpConfig
 from vyos_onecontext.models.firewall import FirewallConfig
@@ -80,3 +80,37 @@ class RouterConfig(BaseModel):
     start_script: Annotated[
         str | None, Field(None, description="Shell script executed after VyOS config commit")
     ]
+
+    @model_validator(mode="after")
+    def validate_nat_interface_references(self) -> "RouterConfig":
+        """Validate that NAT rules reference existing interfaces."""
+        if self.nat is None:
+            return self
+
+        # Build set of interface names
+        interface_names = {iface.name for iface in self.interfaces}
+
+        # Check source NAT rules
+        for src_rule in self.nat.source:
+            if src_rule.outbound_interface not in interface_names:
+                raise ValueError(
+                    f"Source NAT rule references non-existent outbound_interface: "
+                    f"'{src_rule.outbound_interface}'"
+                )
+
+        # Check destination NAT rules
+        for dst_rule in self.nat.destination:
+            if dst_rule.inbound_interface not in interface_names:
+                raise ValueError(
+                    f"Destination NAT rule references non-existent inbound_interface: "
+                    f"'{dst_rule.inbound_interface}'"
+                )
+
+        # Check binat rules
+        for binat_rule in self.nat.binat:
+            if binat_rule.interface not in interface_names:
+                raise ValueError(
+                    f"Binat rule references non-existent interface: '{binat_rule.interface}'"
+                )
+
+        return self

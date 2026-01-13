@@ -3,7 +3,7 @@
 from ipaddress import IPv4Address, IPv4Network
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class FirewallGroups(BaseModel):
@@ -155,6 +155,45 @@ class FirewallRule(BaseModel):
             raise ValueError("icmp_type can only be used with protocol='icmp'")
         return v
 
+    @model_validator(mode="after")
+    def validate_field_exclusivity(self) -> "FirewallRule":
+        """Ensure only one source/destination field type is used."""
+        # Check source field exclusivity
+        source_fields = [
+            self.source_address,
+            self.source_address_group,
+            self.source_network_group,
+        ]
+        source_count = sum(1 for field in source_fields if field is not None)
+        if source_count > 1:
+            raise ValueError(
+                "Only one of source_address, source_address_group, or "
+                "source_network_group may be specified"
+            )
+
+        # Check destination address field exclusivity
+        dest_address_fields = [
+            self.destination_address,
+            self.destination_address_group,
+            self.destination_network_group,
+        ]
+        dest_address_count = sum(1 for field in dest_address_fields if field is not None)
+        if dest_address_count > 1:
+            raise ValueError(
+                "Only one of destination_address, destination_address_group, or "
+                "destination_network_group may be specified"
+            )
+
+        # Check destination port field exclusivity
+        dest_port_fields = [self.destination_port, self.destination_port_group]
+        dest_port_count = sum(1 for field in dest_port_fields if field is not None)
+        if dest_port_count > 1:
+            raise ValueError(
+                "Only one of destination_port or destination_port_group may be specified"
+            )
+
+        return self
+
 
 class FirewallPolicy(BaseModel):
     """Firewall policy for traffic between two zones.
@@ -201,9 +240,69 @@ class FirewallConfig(BaseModel):
     @classmethod
     def validate_zones(cls, v: dict[str, FirewallZone]) -> dict[str, FirewallZone]:
         """Ensure zone names in dict match the zone.name field."""
+        new_zones: dict[str, FirewallZone] = {}
         for zone_name, zone in v.items():
             # Allow either dict key or zone.name field, but they should match if both present
             if zone.name != zone_name:
-                # Update zone.name to match key
-                zone.name = zone_name
-        return v
+                # Create a copy with updated name instead of mutating
+                new_zones[zone_name] = zone.model_copy(update={"name": zone_name})
+            else:
+                new_zones[zone_name] = zone
+        return new_zones
+
+    @model_validator(mode="after")
+    def validate_referential_integrity(self) -> "FirewallConfig":
+        """Validate that policies and rules reference existing zones and groups."""
+        # Check that policy zones exist
+        for policy in self.policies:
+            if policy.from_zone not in self.zones:
+                raise ValueError(
+                    f"Policy references non-existent from_zone: '{policy.from_zone}'"
+                )
+            if policy.to_zone not in self.zones:
+                raise ValueError(f"Policy references non-existent to_zone: '{policy.to_zone}'")
+
+            # Check that rules reference existing groups
+            for rule in policy.rules:
+                if (
+                    rule.source_address_group is not None
+                    and rule.source_address_group not in self.groups.address
+                ):
+                    raise ValueError(
+                        f"Rule references non-existent source_address_group: "
+                        f"'{rule.source_address_group}'"
+                    )
+                if (
+                    rule.source_network_group is not None
+                    and rule.source_network_group not in self.groups.network
+                ):
+                    raise ValueError(
+                        f"Rule references non-existent source_network_group: "
+                        f"'{rule.source_network_group}'"
+                    )
+                if (
+                    rule.destination_address_group is not None
+                    and rule.destination_address_group not in self.groups.address
+                ):
+                    raise ValueError(
+                        f"Rule references non-existent destination_address_group: "
+                        f"'{rule.destination_address_group}'"
+                    )
+                if (
+                    rule.destination_network_group is not None
+                    and rule.destination_network_group not in self.groups.network
+                ):
+                    raise ValueError(
+                        f"Rule references non-existent destination_network_group: "
+                        f"'{rule.destination_network_group}'"
+                    )
+                if (
+                    rule.destination_port_group is not None
+                    and rule.destination_port_group not in self.groups.port
+                ):
+                    raise ValueError(
+                        f"Rule references non-existent destination_port_group: "
+                        f"'{rule.destination_port_group}'"
+                    )
+
+        return self
