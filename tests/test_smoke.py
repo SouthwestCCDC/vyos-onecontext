@@ -191,7 +191,7 @@ class TestNatGateway:
         """Cross-reference validation passes.
 
         NAT rules reference existing interfaces,
-        DHCP pools reference existing interfaces.
+        DHCP pools and reservations reference existing interfaces.
         """
         # If we got here, validation passed during parsing
         # Explicitly check interface names match
@@ -199,6 +199,8 @@ class TestNatGateway:
         assert config.nat.source[0].outbound_interface in interface_names
         assert config.nat.destination[0].inbound_interface in interface_names
         assert config.dhcp.pools[0].interface in interface_names
+        for reservation in config.dhcp.reservations:
+            assert reservation.interface in interface_names
 
     def test_generate_commands(self, config) -> None:
         """Command generation produces expected output."""
@@ -450,8 +452,10 @@ class TestFullFeatured:
         for binat in config.nat.binat:
             assert binat.interface in interface_names
 
-        # DHCP interfaces
+        # DHCP interfaces (pools and reservations)
         assert config.dhcp.pools[0].interface in interface_names
+        for reservation in config.dhcp.reservations:
+            assert reservation.interface in interface_names
 
         # Firewall zone interfaces
         for zone in config.firewall.zones.values():
