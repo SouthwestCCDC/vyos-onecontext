@@ -23,7 +23,7 @@ context on every boot.
 
 - [Design Document](docs/design.md) - Architecture and design decisions
 - [Context Variable Reference](docs/context-reference.md) - All supported variables with examples
-- [Implementation Plan](../../../docs/docs/projects/active/vyos-router-v3/implementation-plan.md) - Phased implementation
+- [Implementation Plan](../../../docs/docs/projects/active/vyos-router-v3/implementation-plan.md) - Phased implementation (path is relative to this repository when used as a submodule under the `deployment` repo and may not resolve when viewing this repository standalone)
 
 ## VyOS Version
 
