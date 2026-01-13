@@ -1,32 +1,52 @@
 # vyos-onecontext
 
-OpenNebula contextualization scripts for VyOS router images.
+OpenNebula contextualization for VyOS Sagitta (1.4.x) router images.
 
 ## Project Context
 
-This repo provides scripts that run at VM boot to configure VyOS routers based on OpenNebula context variables. The scripts read from a context CD mounted at boot and apply network, routing, NAT, and service configuration.
+This repo provides a hybrid shell + Python system that configures VyOS routers at boot based on
+OpenNebula context variables. Routers are stateless by default - all configuration derives from
+context on every boot.
+
+**Architecture:**
+- Shell entry point for systemd integration and VyOS `vbash` execution
+- Python package (`vyos_onecontext`) for JSON parsing, validation, and config generation
+- Pydantic models for schema validation
+- Generators output VyOS command strings; shell executes them
 
 ## Branches
 
-- **main** - VyOS sagitta (1.4.x LTS) target
-- **legacy/equuleus** - VyOS equuleus (1.3.x), maintenance only
+- **sagitta** - VyOS Sagitta (1.4.x LTS) - active development
+- **legacy/equuleus** - VyOS Equuleus (1.3.x) - maintenance only
+
+## Documentation
+
+- [Design Document](docs/design.md) - Architecture and design decisions
+- [Context Variable Reference](docs/context-reference.md) - All supported variables with examples
+- [Implementation Plan](../../../docs/docs/projects/active/vyos-router-v3/implementation-plan.md) - Phased implementation (path is relative to this repository when used as a submodule under the `deployment` repo and may not resolve when viewing this repository standalone)
 
 ## VyOS Version
 
-Target version: **sagitta 1.4.x LTS**
+Target version: **Sagitta 1.4.x LTS**
 
-Key differences from equuleus:
-- NAT interface syntax: `outbound-interface name 'eth0'` (not bare `eth0`)
+Key syntax differences from Equuleus (interface-based config preferred in Sagitta):
+- NAT interface: `outbound-interface name 'eth0'` (not bare `eth0`)
 - Static routes: `route X interface Y` (not `interface-route X next-hop-interface Y`)
 - Firewall zones: `firewall zone` (not `zone-policy zone`)
+- OSPF: `interface X area Y` (not `area Y network X`)
 - NTP uses chrony, requires explicit `allow-client` for server mode
-- Native cloud-init support via `vyos_config_commands`
 
-## Testing
+## Development
 
-Contextualization scripts should have bats-core tests. Test against actual VyOS sagitta images in OpenNebula.
+```bash
+uv sync              # Install dependencies
+uv run pytest        # Run tests
+uv run ruff check .  # Lint
+uv run mypy src/     # Type check
+just check           # Run all checks
+```
 
 ## Related Repos
 
-- **deployment** - Packer image builds, Terraform infrastructure
+- **deployment** - Packer image builds (submodule at `packer/opennebula-context/vyos-sagitta`)
 - **scoring** - Uses vrouter-relay images for scoring infrastructure
