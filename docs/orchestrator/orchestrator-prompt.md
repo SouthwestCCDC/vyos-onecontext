@@ -119,6 +119,14 @@ When changes touch both repos:
 **When to use:** Validating changes in real environment
 **Model:** sonnet
 
+### vyos-pr-reviewer
+**Purpose:** Critical PR review and review comment analysis
+**When to use:** Before merging PRs, or to triage incoming review feedback
+**Model:** sonnet
+**Modes:**
+- Review mode: Fresh, picky eyes on PR before merge
+- Response mode: Categorize review comments (fix now / tech debt / larger issue / disagree)
+
 ---
 
 ## Workflow Details
