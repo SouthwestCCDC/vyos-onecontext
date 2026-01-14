@@ -1,5 +1,7 @@
 """Routing configuration generator (static routes, default gateway)."""
 
+import re
+
 from vyos_onecontext.generators.base import BaseGenerator
 from vyos_onecontext.models import InterfaceConfig
 
@@ -54,8 +56,17 @@ class RoutingGenerator(BaseGenerator):
         Returns:
             Gateway IP address as string, or None if no valid gateway found
         """
-        # Sort interfaces by name to ensure consistent ordering (eth0 before eth1, etc.)
-        sorted_interfaces = sorted(self.interfaces, key=lambda iface: iface.name)
+
+        def natural_sort_key(iface: InterfaceConfig) -> int:
+            """Extract numeric portion of interface name for natural sorting.
+
+            Ensures eth2 sorts before eth10 (numeric order, not lexicographic).
+            """
+            match = re.match(r"eth(\d+)", iface.name)
+            return int(match.group(1)) if match else 0
+
+        # Sort interfaces by numeric portion of name (eth0 before eth1 before eth10)
+        sorted_interfaces = sorted(self.interfaces, key=natural_sort_key)
 
         for iface in sorted_interfaces:
             # Skip interfaces without a gateway
