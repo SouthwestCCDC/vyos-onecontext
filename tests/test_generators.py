@@ -335,6 +335,39 @@ class TestRoutingGenerator:
         # eth0 should win (lowest numbered with valid gateway)
         assert commands[0] == "set protocols static route 0.0.0.0/0 next-hop 10.0.0.254"
 
+    def test_generate_natural_sorting_double_digit_interfaces(self):
+        """Test that natural sorting correctly orders eth2 before eth10.
+
+        This verifies the natural_sort_key function handles double-digit
+        interface numbers correctly (numeric order, not lexicographic).
+        """
+        interfaces = [
+            InterfaceConfig(
+                name="eth10",
+                ip=IPv4Address("10.10.0.1"),
+                mask="255.255.255.0",
+                gateway=IPv4Address("10.10.0.254"),
+            ),
+            InterfaceConfig(
+                name="eth2",
+                ip=IPv4Address("10.2.0.1"),
+                mask="255.255.255.0",
+                gateway=IPv4Address("10.2.0.254"),
+            ),
+            InterfaceConfig(
+                name="eth0",
+                ip=IPv4Address("10.0.0.1"),
+                mask="255.255.255.0",
+                gateway=IPv4Address("10.0.0.254"),
+            ),
+        ]
+        gen = RoutingGenerator(interfaces)
+        commands = gen.generate()
+
+        assert len(commands) == 1
+        # eth0 should win (0 < 2 < 10 in numeric order)
+        assert commands[0] == "set protocols static route 0.0.0.0/0 next-hop 10.0.0.254"
+
     def test_generate_skips_interface_without_gateway(self):
         """Test that interfaces without gateways are skipped."""
         interfaces = [
