@@ -7,6 +7,7 @@ configuration (interfaces, routing, NAT, etc.).
 
 from vyos_onecontext.generators.base import BaseGenerator
 from vyos_onecontext.generators.interface import InterfaceGenerator
+from vyos_onecontext.generators.routing import RoutingGenerator
 from vyos_onecontext.generators.system import HostnameGenerator, SshKeyGenerator
 from vyos_onecontext.models import RouterConfig
 
@@ -17,7 +18,8 @@ def generate_config(config: RouterConfig) -> list[str]:
     Generates commands in the correct order for VyOS commit:
     1. System configuration (hostname, SSH keys)
     2. Network interfaces
-    3. ... (other generators will be added in later phases)
+    3. Routing (default gateway, static routes)
+    4. ... (other generators will be added in later phases)
 
     Args:
         config: Complete router configuration
@@ -34,8 +36,10 @@ def generate_config(config: RouterConfig) -> list[str]:
     # Interfaces
     commands.extend(InterfaceGenerator(config.interfaces, config.aliases).generate())
 
+    # Routing (default gateway selection)
+    commands.extend(RoutingGenerator(config.interfaces).generate())
+
     # Future generators will be added here in later phases:
-    # - Routing (static routes, OSPF)
     # - Services (DHCP, DNS)
     # - NAT (source, destination, binat)
     # - Firewall (zones, policies, rules)
@@ -48,6 +52,7 @@ __all__ = [
     "BaseGenerator",
     "HostnameGenerator",
     "InterfaceGenerator",
+    "RoutingGenerator",
     "SshKeyGenerator",
     "generate_config",
 ]

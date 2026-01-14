@@ -5,6 +5,7 @@ from ipaddress import IPv4Address
 from vyos_onecontext.generators import (
     HostnameGenerator,
     InterfaceGenerator,
+    RoutingGenerator,
     SshKeyGenerator,
     generate_config,
 )
@@ -252,6 +253,260 @@ class TestInterfaceGenerator:
         assert len(commands) == 0
 
 
+class TestRoutingGenerator:
+    """Tests for routing configuration generator."""
+
+    def test_generate_default_gateway_simple(self):
+        """Test default gateway generation with single valid gateway."""
+        interfaces = [
+            InterfaceConfig(
+                name="eth0",
+                ip=IPv4Address("10.0.0.1"),
+                mask="255.255.255.0",
+                gateway=IPv4Address("10.0.0.254"),
+            )
+        ]
+        gen = RoutingGenerator(interfaces)
+        commands = gen.generate()
+
+        assert len(commands) == 1
+        assert commands[0] == "set protocols static route 0.0.0.0/0 next-hop 10.0.0.254"
+
+    def test_generate_gateway_equals_interface_ip_ignored(self):
+        """Test that gateway is ignored when it equals the interface's own IP.
+
+        This handles the case where the router IS the gateway for a network.
+        """
+        interfaces = [
+            InterfaceConfig(
+                name="eth0",
+                ip=IPv4Address("192.168.1.1"),
+                mask="255.255.255.0",
+                gateway=IPv4Address("192.168.1.1"),  # Gateway == interface IP
+            )
+        ]
+        gen = RoutingGenerator(interfaces)
+        commands = gen.generate()
+
+        assert len(commands) == 0  # No default route generated
+
+    def test_generate_management_vrf_interface_excluded(self):
+        """Test that management VRF interfaces are excluded from default gateway selection."""
+        interfaces = [
+            InterfaceConfig(
+                name="eth0",
+                ip=IPv4Address("10.0.0.1"),
+                mask="255.255.255.0",
+                gateway=IPv4Address("10.0.0.254"),
+                management=True,  # Management VRF
+            )
+        ]
+        gen = RoutingGenerator(interfaces)
+        commands = gen.generate()
+
+        assert len(commands) == 0  # No default route generated
+
+    def test_generate_lowest_numbered_interface_wins(self):
+        """Test that the lowest-numbered interface with valid gateway wins."""
+        interfaces = [
+            InterfaceConfig(
+                name="eth2",
+                ip=IPv4Address("172.16.0.1"),
+                mask="255.255.255.0",
+                gateway=IPv4Address("172.16.0.254"),
+            ),
+            InterfaceConfig(
+                name="eth0",
+                ip=IPv4Address("10.0.0.1"),
+                mask="255.255.255.0",
+                gateway=IPv4Address("10.0.0.254"),
+            ),
+            InterfaceConfig(
+                name="eth1",
+                ip=IPv4Address("192.168.1.1"),
+                mask="255.255.255.0",
+                gateway=IPv4Address("192.168.1.254"),
+            ),
+        ]
+        gen = RoutingGenerator(interfaces)
+        commands = gen.generate()
+
+        assert len(commands) == 1
+        # eth0 should win (lowest numbered with valid gateway)
+        assert commands[0] == "set protocols static route 0.0.0.0/0 next-hop 10.0.0.254"
+
+    def test_generate_natural_sorting_double_digit_interfaces(self):
+        """Test that natural sorting correctly orders eth2 before eth10.
+
+        This verifies the natural_sort_key function handles double-digit
+        interface numbers correctly (numeric order, not lexicographic).
+        """
+        interfaces = [
+            InterfaceConfig(
+                name="eth10",
+                ip=IPv4Address("10.10.0.1"),
+                mask="255.255.255.0",
+                gateway=IPv4Address("10.10.0.254"),
+            ),
+            InterfaceConfig(
+                name="eth2",
+                ip=IPv4Address("10.2.0.1"),
+                mask="255.255.255.0",
+                gateway=IPv4Address("10.2.0.254"),
+            ),
+            InterfaceConfig(
+                name="eth0",
+                ip=IPv4Address("10.0.0.1"),
+                mask="255.255.255.0",
+                gateway=IPv4Address("10.0.0.254"),
+            ),
+        ]
+        gen = RoutingGenerator(interfaces)
+        commands = gen.generate()
+
+        assert len(commands) == 1
+        # eth0 should win (0 < 2 < 10 in numeric order)
+        assert commands[0] == "set protocols static route 0.0.0.0/0 next-hop 10.0.0.254"
+
+    def test_generate_skips_interface_without_gateway(self):
+        """Test that interfaces without gateways are skipped."""
+        interfaces = [
+            InterfaceConfig(
+                name="eth0",
+                ip=IPv4Address("10.0.0.1"),
+                mask="255.255.255.0",
+                # No gateway
+            ),
+            InterfaceConfig(
+                name="eth1",
+                ip=IPv4Address("192.168.1.1"),
+                mask="255.255.255.0",
+                gateway=IPv4Address("192.168.1.254"),
+            ),
+        ]
+        gen = RoutingGenerator(interfaces)
+        commands = gen.generate()
+
+        assert len(commands) == 1
+        # eth1 should win (eth0 has no gateway)
+        assert commands[0] == "set protocols static route 0.0.0.0/0 next-hop 192.168.1.254"
+
+    def test_generate_complex_scenario(self):
+        """Test complex scenario with multiple exclusion conditions.
+
+        eth0: 10.0.0.1/24, gateway 10.0.0.254 -> wins (gateway != interface IP)
+        eth1: 192.168.1.1/24, gateway 192.168.1.1 -> ignored (router IS the gateway)
+        eth2: 172.16.0.1/24, no gateway -> ignored
+        eth3: 10.1.0.1/24, gateway 10.1.0.254, management=True -> ignored (management VRF)
+        """
+        interfaces = [
+            InterfaceConfig(
+                name="eth0",
+                ip=IPv4Address("10.0.0.1"),
+                mask="255.255.255.0",
+                gateway=IPv4Address("10.0.0.254"),
+            ),
+            InterfaceConfig(
+                name="eth1",
+                ip=IPv4Address("192.168.1.1"),
+                mask="255.255.255.0",
+                gateway=IPv4Address("192.168.1.1"),  # Router IS gateway
+            ),
+            InterfaceConfig(
+                name="eth2",
+                ip=IPv4Address("172.16.0.1"),
+                mask="255.255.255.0",
+                # No gateway
+            ),
+            InterfaceConfig(
+                name="eth3",
+                ip=IPv4Address("10.1.0.1"),
+                mask="255.255.255.0",
+                gateway=IPv4Address("10.1.0.254"),
+                management=True,  # Management VRF
+            ),
+        ]
+        gen = RoutingGenerator(interfaces)
+        commands = gen.generate()
+
+        assert len(commands) == 1
+        assert commands[0] == "set protocols static route 0.0.0.0/0 next-hop 10.0.0.254"
+
+    def test_generate_no_valid_gateway(self):
+        """Test scenario where no interface has a valid gateway."""
+        interfaces = [
+            InterfaceConfig(
+                name="eth0",
+                ip=IPv4Address("10.0.0.1"),
+                mask="255.255.255.0",
+                # No gateway
+            ),
+            InterfaceConfig(
+                name="eth1",
+                ip=IPv4Address("192.168.1.1"),
+                mask="255.255.255.0",
+                gateway=IPv4Address("192.168.1.1"),  # Router IS gateway
+            ),
+        ]
+        gen = RoutingGenerator(interfaces)
+        commands = gen.generate()
+
+        assert len(commands) == 0
+
+    def test_generate_empty_interfaces(self):
+        """Test routing generation with no interfaces."""
+        gen = RoutingGenerator([])
+        commands = gen.generate()
+
+        assert len(commands) == 0
+
+    def test_generate_fallback_to_later_interface(self):
+        """Test that later interface is used when earlier interfaces are invalid."""
+        interfaces = [
+            InterfaceConfig(
+                name="eth0",
+                ip=IPv4Address("10.0.0.1"),
+                mask="255.255.255.0",
+                gateway=IPv4Address("10.0.0.1"),  # Gateway == interface (invalid)
+            ),
+            InterfaceConfig(
+                name="eth1",
+                ip=IPv4Address("192.168.1.1"),
+                mask="255.255.255.0",
+                gateway=IPv4Address("192.168.1.254"),  # Valid gateway
+            ),
+        ]
+        gen = RoutingGenerator(interfaces)
+        commands = gen.generate()
+
+        assert len(commands) == 1
+        # eth1 should win (eth0's gateway equals its own IP)
+        assert commands[0] == "set protocols static route 0.0.0.0/0 next-hop 192.168.1.254"
+
+    def test_generate_all_interfaces_management_vrf(self):
+        """Test that no default gateway is generated when all interfaces are management VRF."""
+        interfaces = [
+            InterfaceConfig(
+                name="eth0",
+                ip=IPv4Address("10.0.0.1"),
+                mask="255.255.255.0",
+                gateway=IPv4Address("10.0.0.254"),
+                management=True,
+            ),
+            InterfaceConfig(
+                name="eth1",
+                ip=IPv4Address("192.168.1.1"),
+                mask="255.255.255.0",
+                gateway=IPv4Address("192.168.1.254"),
+                management=True,
+            ),
+        ]
+        gen = RoutingGenerator(interfaces)
+        commands = gen.generate()
+
+        assert len(commands) == 0
+
+
 class TestGenerateConfig:
     """Tests for top-level generate_config function."""
 
@@ -352,3 +607,69 @@ class TestGenerateConfig:
         # System commands should come before interface commands
         assert hostname_idx < interface_idx
         assert ssh_key_idx < interface_idx
+
+    def test_generate_config_with_default_gateway(self):
+        """Test config generation includes default gateway when interface has valid gateway."""
+        config = RouterConfig(
+            hostname="router-01",
+            interfaces=[
+                InterfaceConfig(
+                    name="eth0",
+                    ip=IPv4Address("10.0.1.1"),
+                    mask="255.255.255.0",
+                    gateway=IPv4Address("10.0.1.254"),
+                )
+            ],
+        )
+        commands = generate_config(config)
+
+        # Should have hostname + interface + default route
+        assert len(commands) == 3
+        assert "set system host-name 'router-01'" in commands
+        assert "set interfaces ethernet eth0 address '10.0.1.1/24'" in commands
+        assert "set protocols static route 0.0.0.0/0 next-hop 10.0.1.254" in commands
+
+    def test_generate_config_gateway_equals_interface_ip_no_route(self):
+        """Test config generation skips default gateway when gateway equals interface IP."""
+        config = RouterConfig(
+            hostname="router-01",
+            interfaces=[
+                InterfaceConfig(
+                    name="eth0",
+                    ip=IPv4Address("10.0.1.1"),
+                    mask="255.255.255.0",
+                    gateway=IPv4Address("10.0.1.1"),  # Gateway == interface IP
+                )
+            ],
+        )
+        commands = generate_config(config)
+
+        # Should only have hostname + interface (no default route)
+        assert len(commands) == 2
+        assert "set system host-name 'router-01'" in commands
+        assert "set interfaces ethernet eth0 address '10.0.1.1/24'" in commands
+        assert not any("0.0.0.0/0" in cmd for cmd in commands)
+
+    def test_generate_config_command_order_with_routing(self):
+        """Test that routing commands come after interface commands."""
+        config = RouterConfig(
+            hostname="router-01",
+            interfaces=[
+                InterfaceConfig(
+                    name="eth0",
+                    ip=IPv4Address("10.0.1.1"),
+                    mask="255.255.255.0",
+                    gateway=IPv4Address("10.0.1.254"),
+                )
+            ],
+        )
+        commands = generate_config(config)
+
+        # Find indices of different command types
+        hostname_idx = next(i for i, cmd in enumerate(commands) if "host-name" in cmd)
+        interface_idx = next(i for i, cmd in enumerate(commands) if "interfaces ethernet" in cmd)
+        routing_idx = next(i for i, cmd in enumerate(commands) if "protocols static" in cmd)
+
+        # System -> Interfaces -> Routing
+        assert hostname_idx < interface_idx
+        assert interface_idx < routing_idx
