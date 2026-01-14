@@ -208,6 +208,7 @@ START_SCRIPT="#!/bin/bash\necho 'Custom setup'"
 | Interface configuration | `ETHx_IP`, `ETHx_MASK`, etc. | **Implemented** |
 | NIC aliases (secondary IPs) | `ETHx_ALIASy_IP`, etc. | **Implemented** |
 | MTU configuration | `ETHx_MTU` | **Implemented** |
+| Default gateway | `ETHx_GATEWAY` | **Implemented** |
 | Hostname | `HOSTNAME` | **Implemented** |
 | SSH keys | `SSH_PUBLIC_KEY` | **Implemented** |
 | Cross-reference validation | (automatic) | **Implemented** |
@@ -267,6 +268,33 @@ mgmt_interfaces = [
     if context.get(f"{iface.upper()}_VROUTER_MANAGEMENT") == "YES"
 ]
 ```
+
+## Default Gateway Selection
+
+The default route (0.0.0.0/0) is automatically generated based on interface gateway settings.
+
+**Selection algorithm:**
+
+1. Sort interfaces by name (natural sort: eth0, eth1, eth2, ..., eth10)
+2. Find the first interface where:
+   - Interface has `ETHx_GATEWAY` configured
+   - Gateway IP differs from interface's own IP (router is not the gateway)
+   - Interface is NOT in management VRF
+3. Generate `set protocols static route 0.0.0.0/0 next-hop <gateway>`
+
+**Example with 3 interfaces:**
+
+- `eth0`: 10.0.0.1/24, gateway 10.0.0.254 -> **wins** (gateway != interface IP)
+- `eth1`: 192.168.1.1/24, gateway 192.168.1.1 -> ignored (router IS the gateway)
+- `eth2`: 172.16.0.1/24, no gateway -> ignored
+
+If `eth0` were in management VRF, the main VRF would have no default gateway.
+
+**Why gateway == interface IP is ignored:**
+
+When the router itself is the gateway for a network (common for internal interfaces),
+specifying the interface's own IP as the gateway is meaningless. This pattern is detected
+and skipped, allowing the true upstream gateway to be selected automatically.
 
 ## Validation
 
