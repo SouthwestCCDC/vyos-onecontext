@@ -71,16 +71,21 @@ Boot Sequence:
 ┌──────────────────────────────────────────────────────────────────────┐
 │ VyOS Boot                                                            │
 │   └─> /config/scripts/vyos-postconfig-bootup.script (shell)          │
-│         ├─> Mount context CD (/dev/sr0 -> /mnt)                      │
+│         ├─> Mount context CD, source variables                       │
 │         ├─> Call: /opt/vyos-onecontext/venv/bin/python               │
-│         │         -m vyos_onecontext /mnt/context.sh                 │
-│         │     ├─> Parse /mnt/context.sh                              │
+│         │         -m vyos_onecontext /var/run/one-context/one_env    │
+│         │     ├─> Parse context file (shell variable format)         │
 │         │     ├─> Validate context (Pydantic models)                 │
+│         │     ├─> Cross-reference validation                         │
 │         │     ├─> Generate VyOS commands                             │
 │         │     └─> Execute via vyatta-cfg-cmd-wrapper                 │
-│         └─> Unmount context CD                                       │
+│         └─> Handle post-commit (save/freeze if configured)           │
 └──────────────────────────────────────────────────────────────────────┘
 ```
+
+**Note:** The default context file path is `/var/run/one-context/one_env`, which is where
+OpenNebula's standard contextualization scripts store parsed variables. The path can be
+overridden via command-line argument for testing.
 
 **Why hybrid?**
 
@@ -200,19 +205,22 @@ START_SCRIPT="#!/bin/bash\necho 'Custom setup'"
 
 | Feature | Context Source | Status |
 |---------|----------------|--------|
-| Interface configuration | `ETHx_IP`, `ETHx_MASK`, etc. | Designed |
-| Management VRF | `ETHx_VROUTER_MANAGEMENT` | Designed |
-| Hostname | `HOSTNAME` | Designed |
-| SSH keys | `SSH_PUBLIC_KEY` | Designed |
-| Static routes | `ROUTES_JSON` | Designed |
-| OSPF | `OSPF_JSON` | Designed |
-| DHCP server | `DHCP_JSON` | Designed |
-| Source NAT (masquerade) | `NAT_JSON` | Designed |
-| Destination NAT (port forwards) | `NAT_JSON` | Designed |
-| 1:1 NAT (bidirectional) | `NAT_JSON` + `ETHx_ALIASy_IP` | Designed |
-| Custom commands | `START_CONFIG` | Designed |
-| Custom scripts | `START_SCRIPT` | Designed |
-| Zone-based firewall | `FIREWALL_JSON` | Designed |
+| Interface configuration | `ETHx_IP`, `ETHx_MASK`, etc. | **Implemented** |
+| NIC aliases (secondary IPs) | `ETHx_ALIASy_IP`, etc. | **Implemented** |
+| MTU configuration | `ETHx_MTU` | **Implemented** |
+| Hostname | `HOSTNAME` | **Implemented** |
+| SSH keys | `SSH_PUBLIC_KEY` | **Implemented** |
+| Cross-reference validation | (automatic) | **Implemented** |
+| Custom scripts | `START_SCRIPT` | **Implemented** |
+| Management VRF | `ETHx_VROUTER_MANAGEMENT` | Model ready, generator pending |
+| Static routes | `ROUTES_JSON` | Model ready, generator pending |
+| OSPF | `OSPF_JSON` | Model ready, generator pending |
+| DHCP server | `DHCP_JSON` | Model ready, generator pending |
+| Source NAT (masquerade) | `NAT_JSON` | Model ready, generator pending |
+| Destination NAT (port forwards) | `NAT_JSON` | Model ready, generator pending |
+| 1:1 NAT (bidirectional) | `NAT_JSON` + `ETHx_ALIASy_IP` | Model ready, generator pending |
+| Custom commands | `START_CONFIG` | Parsed, execution pending |
+| Zone-based firewall | `FIREWALL_JSON` | Model ready, generator pending |
 
 ### Out of Scope (for vrouter-infra)
 
@@ -309,6 +317,38 @@ ERROR: Validation failed for ROUTES_JSON:
   static.0.destination: '10.0.0.0/33' is not a valid CIDR network
   static.1.gateway: 'not-an-ip' is not a valid IPv4 address
 ```
+
+### Cross-Reference Validation
+
+Beyond basic field validation, the `RouterConfig` model performs cross-reference validation
+to ensure configuration consistency. These validators run after all individual models are
+parsed and catch errors that involve multiple configuration sections.
+
+**Implemented validators:**
+
+| Validator | Purpose |
+|-----------|---------|
+| `validate_nat_interface_references` | NAT rules reference existing interfaces |
+| `validate_binat_external_addresses` | Binat external_address exists as IP/alias on interface |
+| `validate_dhcp_pool_interfaces` | DHCP pools reference existing interfaces |
+| `validate_firewall_zone_interfaces` | Firewall zones reference existing interfaces |
+| `validate_ospf_interfaces` | OSPF interface config references existing interfaces |
+| `validate_static_route_interfaces` | Static routes reference existing interfaces |
+| `validate_alias_parent_interfaces` | Alias parent interfaces exist |
+
+These validators use Pydantic's `@model_validator(mode="after")` to run after all
+fields are populated, allowing them to check relationships across the entire config.
+
+**Example error:**
+
+```
+ERROR: Validation failed:
+  Source NAT rule references non-existent outbound_interface: 'eth5'
+  Binat rule external_address '10.0.1.99' is not configured on interface 'eth0'
+```
+
+This approach catches configuration mistakes early with clear error messages, rather
+than failing cryptically at VyOS commit time or creating broken configurations.
 
 ## VyOS Command Execution
 
@@ -418,28 +458,35 @@ vyos-onecontext/
 │   └── vyos_onecontext/
 │       ├── __init__.py
 │       ├── __main__.py           # Entry point (python -m vyos_onecontext)
-│       ├── context.py            # Context parsing
-│       ├── models.py             # Pydantic models for config objects
+│       ├── parser.py             # Context file parsing
+│       ├── models/               # Pydantic models (subpackage)
+│       │   ├── __init__.py       # Re-exports all models
+│       │   ├── config.py         # RouterConfig, OnecontextMode
+│       │   ├── interface.py      # InterfaceConfig, AliasConfig
+│       │   ├── routing.py        # StaticRoute, OspfConfig
+│       │   ├── dhcp.py           # DhcpPool, DhcpReservation
+│       │   ├── nat.py            # SourceNatRule, DestNatRule, BinatRule
+│       │   └── firewall.py       # FirewallZone, FirewallPolicy, etc.
 │       ├── generators/
-│       │   ├── __init__.py
-│       │   ├── interfaces.py     # Interface config generation
-│       │   ├── routing.py        # Static routes + OSPF
-│       │   ├── services.py       # DHCP, SSH
-│       │   └── nat.py            # NAT rules
-│       └── wrapper.py            # VyOS CLI wrapper
+│       │   ├── __init__.py       # generate_config() entry point
+│       │   ├── base.py           # BaseGenerator abstract class
+│       │   ├── system.py         # HostnameGenerator, SshKeyGenerator
+│       │   └── interface.py      # InterfaceGenerator
+│       └── wrapper.py            # VyOS CLI wrapper (VyOSConfigSession)
 ├── tests/
-│   ├── conftest.py               # Shared pytest fixtures
-│   ├── unit/
-│   │   ├── test_context.py
-│   │   ├── test_validators.py
-│   │   └── test_generators/
-│   │       ├── test_interfaces.py
-│   │       ├── test_routing.py
-│   │       └── ...
-│   └── integration/              # Tests requiring VyOS (future)
-│       └── conftest.py
+│   ├── __init__.py
+│   ├── fixtures/                 # Sample context files for testing
+│   │   ├── simple_router.env
+│   │   ├── nat_gateway.env
+│   │   └── full_featured.env
+│   ├── test_models.py            # Model validation tests
+│   ├── test_parser.py            # Context parsing tests
+│   ├── test_generators.py        # Command generation tests
+│   ├── test_wrapper.py           # VyOS CLI wrapper tests
+│   ├── test_main.py              # CLI entry point tests
+│   └── test_smoke.py             # End-to-end smoke tests
 ├── scripts/
-│   └── vyos-postconfig-bootup.script  # Shell boot hook (installed to VyOS)
+│   └── ...                       # Boot hook scripts for VyOS image
 └── .github/
     └── ...                       # CI workflows
 ```
@@ -722,3 +769,7 @@ These items are not in v1 scope but are documented for future consideration:
 - [VyOS 1.4 Documentation](https://docs.vyos.io/en/sagitta/)
 - [OpenNebula Contextualization](https://docs.opennebula.io/6.8/management_and_operations/references/template.html#context-section)
 - [VyOS Cloud-Init](https://docs.vyos.io/en/sagitta/automation/cloud-init.html)
+
+---
+
+*This document was updated with assistance from Claude Code (Opus 4.5).*
