@@ -21,7 +21,7 @@ class TestHostnameGenerator:
         commands = gen.generate()
 
         assert len(commands) == 1
-        assert commands[0] == "set system host-name 'router-01'"
+        assert commands[0] == "set system host-name router-01"
 
     def test_generate_without_hostname(self):
         """Test hostname generation with None hostname."""
@@ -43,7 +43,7 @@ class TestSshKeyGenerator:
         assert len(commands) == 2
         assert (
             "set system login user vyos authentication public-keys "
-            "user@host key 'AAAAB3NzaC1yc2EAAAADAQABAAABAQC...'"
+            "user@host key AAAAB3NzaC1yc2EAAAADAQABAAABAQC..."
         ) in commands[0]
         assert (
             "set system login user vyos authentication public-keys "
@@ -59,7 +59,7 @@ class TestSshKeyGenerator:
         assert len(commands) == 2
         assert (
             "set system login user vyos authentication public-keys "
-            "admin@example.com key 'AAAAC3NzaC1lZDI1NTE5AAAAI...'"
+            "admin@example.com key AAAAC3NzaC1lZDI1NTE5AAAAI..."
         ) in commands[0]
         assert (
             "set system login user vyos authentication public-keys "
@@ -75,7 +75,7 @@ class TestSshKeyGenerator:
         assert len(commands) == 2
         assert (
             "set system login user vyos authentication public-keys "
-            "key1 key 'AAAAB3NzaC1yc2EAAAADAQABAAABAQC...'"
+            "key1 key AAAAB3NzaC1yc2EAAAADAQABAAABAQC..."
         ) in commands[0]
         assert (
             "set system login user vyos authentication public-keys key1 type ssh-rsa"
@@ -121,7 +121,7 @@ class TestInterfaceGenerator:
         commands = gen.generate()
 
         assert len(commands) == 1
-        assert "set interfaces ethernet eth0 address '10.0.1.1/24'" in commands
+        assert "set interfaces ethernet eth0 address 10.0.1.1/24" in commands
 
     def test_generate_multiple_interfaces(self):
         """Test interface generation with multiple interfaces."""
@@ -141,8 +141,8 @@ class TestInterfaceGenerator:
         commands = gen.generate()
 
         assert len(commands) == 2
-        assert "set interfaces ethernet eth0 address '10.0.1.1/24'" in commands
-        assert "set interfaces ethernet eth1 address '192.168.1.1/24'" in commands
+        assert "set interfaces ethernet eth0 address 10.0.1.1/24" in commands
+        assert "set interfaces ethernet eth1 address 192.168.1.1/24" in commands
 
     def test_generate_with_mtu(self):
         """Test interface generation with MTU specified."""
@@ -156,7 +156,7 @@ class TestInterfaceGenerator:
         commands = gen.generate()
 
         assert len(commands) == 2
-        assert "set interfaces ethernet eth0 address '10.0.1.1/24'" in commands
+        assert "set interfaces ethernet eth0 address 10.0.1.1/24" in commands
         assert "set interfaces ethernet eth0 mtu 9000" in commands
 
     def test_generate_with_alias(self):
@@ -175,8 +175,8 @@ class TestInterfaceGenerator:
         commands = gen.generate()
 
         assert len(commands) == 2
-        assert "set interfaces ethernet eth0 address '10.0.1.1/24'" in commands
-        assert "set interfaces ethernet eth0 address '10.0.1.2/24'" in commands
+        assert "set interfaces ethernet eth0 address 10.0.1.1/24" in commands
+        assert "set interfaces ethernet eth0 address 10.0.1.2/24" in commands
 
     def test_generate_with_alias_no_mask(self):
         """Test interface generation with alias missing mask (uses parent mask)."""
@@ -194,8 +194,8 @@ class TestInterfaceGenerator:
         commands = gen.generate()
 
         assert len(commands) == 2
-        assert "set interfaces ethernet eth0 address '129.244.246.64/24'" in commands
-        assert "set interfaces ethernet eth0 address '129.244.246.66/24'" in commands
+        assert "set interfaces ethernet eth0 address 129.244.246.64/24" in commands
+        assert "set interfaces ethernet eth0 address 129.244.246.66/24" in commands
 
     def test_generate_with_multiple_aliases(self):
         """Test interface generation with multiple aliases on same interface."""
@@ -220,9 +220,9 @@ class TestInterfaceGenerator:
         commands = gen.generate()
 
         assert len(commands) == 3
-        assert "set interfaces ethernet eth0 address '10.0.1.1/24'" in commands
-        assert "set interfaces ethernet eth0 address '10.0.1.2/24'" in commands
-        assert "set interfaces ethernet eth0 address '10.0.1.3/24'" in commands
+        assert "set interfaces ethernet eth0 address 10.0.1.1/24" in commands
+        assert "set interfaces ethernet eth0 address 10.0.1.2/24" in commands
+        assert "set interfaces ethernet eth0 address 10.0.1.3/24" in commands
 
     def test_generate_different_subnet_masks(self):
         """Test interface generation with different subnet masks."""
@@ -242,8 +242,8 @@ class TestInterfaceGenerator:
         commands = gen.generate()
 
         assert len(commands) == 2
-        assert "set interfaces ethernet eth0 address '10.0.1.1/24'" in commands
-        assert "set interfaces ethernet eth1 address '192.168.1.1/16'" in commands
+        assert "set interfaces ethernet eth0 address 10.0.1.1/24" in commands
+        assert "set interfaces ethernet eth1 address 192.168.1.1/16" in commands
 
     def test_generate_empty_config(self):
         """Test interface generation with no interfaces."""
@@ -526,8 +526,8 @@ class TestGenerateConfig:
 
         # Should have hostname + interface
         assert len(commands) == 2
-        assert "set system host-name 'router-01'" in commands
-        assert "set interfaces ethernet eth0 address '10.0.1.1/24'" in commands
+        assert "set system host-name router-01" in commands
+        assert "set interfaces ethernet eth0 address 10.0.1.1/24" in commands
 
     def test_generate_full_system_config(self):
         """Test config generation with all system features."""
@@ -560,12 +560,12 @@ class TestGenerateConfig:
         # Should have: hostname + 2 SSH key commands
         # + 3 interface commands (2 primary + 1 MTU) + 1 alias
         assert len(commands) == 7
-        assert "set system host-name 'router-01'" in commands
+        assert "set system host-name router-01" in commands
         assert any("public-keys" in cmd for cmd in commands)
-        assert "set interfaces ethernet eth0 address '10.0.1.1/24'" in commands
+        assert "set interfaces ethernet eth0 address 10.0.1.1/24" in commands
         assert "set interfaces ethernet eth0 mtu 9000" in commands
-        assert "set interfaces ethernet eth1 address '192.168.1.1/24'" in commands
-        assert "set interfaces ethernet eth0 address '10.0.1.2/24'" in commands
+        assert "set interfaces ethernet eth1 address 192.168.1.1/24" in commands
+        assert "set interfaces ethernet eth0 address 10.0.1.2/24" in commands
 
     def test_generate_no_optional_config(self):
         """Test config generation with no optional features."""
@@ -582,7 +582,7 @@ class TestGenerateConfig:
 
         # Should only have interface command
         assert len(commands) == 1
-        assert "set interfaces ethernet eth0 address '10.0.1.1/24'" in commands
+        assert "set interfaces ethernet eth0 address 10.0.1.1/24" in commands
 
     def test_command_order(self):
         """Test that commands are generated in correct order (system, then interfaces)."""
@@ -625,8 +625,8 @@ class TestGenerateConfig:
 
         # Should have hostname + interface + default route
         assert len(commands) == 3
-        assert "set system host-name 'router-01'" in commands
-        assert "set interfaces ethernet eth0 address '10.0.1.1/24'" in commands
+        assert "set system host-name router-01" in commands
+        assert "set interfaces ethernet eth0 address 10.0.1.1/24" in commands
         assert "set protocols static route 0.0.0.0/0 next-hop 10.0.1.254" in commands
 
     def test_generate_config_gateway_equals_interface_ip_no_route(self):
@@ -646,8 +646,8 @@ class TestGenerateConfig:
 
         # Should only have hostname + interface (no default route)
         assert len(commands) == 2
-        assert "set system host-name 'router-01'" in commands
-        assert "set interfaces ethernet eth0 address '10.0.1.1/24'" in commands
+        assert "set system host-name router-01" in commands
+        assert "set interfaces ethernet eth0 address 10.0.1.1/24" in commands
         assert not any("0.0.0.0/0" in cmd for cmd in commands)
 
     def test_generate_config_command_order_with_routing(self):

@@ -23,7 +23,7 @@ class HostnameGenerator(BaseGenerator):
         if self.hostname is None:
             return []
 
-        return [f"set system host-name '{self.hostname}'"]
+        return [f"set system host-name {self.hostname}"]
 
 
 class SshKeyGenerator(BaseGenerator):
@@ -66,6 +66,6 @@ class SshKeyGenerator(BaseGenerator):
         key_id = key_id.replace(" ", "_")
 
         return [
-            f"set system login user vyos authentication public-keys {key_id} key '{key_data}'",
+            f"set system login user vyos authentication public-keys {key_id} key {key_data}",
             f"set system login user vyos authentication public-keys {key_id} type {key_type}",
         ]
