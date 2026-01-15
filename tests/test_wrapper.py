@@ -271,6 +271,51 @@ class TestVyOSConfigSession:
         assert calls[0] == ["/test/wrapper", "set", "system", "host-name", "router01"]
         assert calls[1] == ["/test/wrapper", "set", "system", "option", "performance", "throughput"]
 
+    @patch("subprocess.run")
+    def test_run_commands_with_quoted_strings(self, mock_run: MagicMock) -> None:
+        """Test run_commands properly handles quoted strings with spaces."""
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        session = VyOSConfigSession(wrapper_path="/test/wrapper")
+        session._in_session = True
+
+        commands = [
+            "set system host-name 'test router'",
+            'set system domain-name "example.com"',
+            "set system login banner 'Welcome to VyOS'",
+        ]
+        session.run_commands(commands)
+
+        assert mock_run.call_count == 3
+        calls = [call[0][0] for call in mock_run.call_args_list]
+        # shlex.split removes quotes and treats content as single argument
+        assert calls[0] == ["/test/wrapper", "set", "system", "host-name", "test router"]
+        assert calls[1] == ["/test/wrapper", "set", "system", "domain-name", "example.com"]
+        assert calls[2] == ["/test/wrapper", "set", "system", "login", "banner", "Welcome to VyOS"]
+
+    @patch("subprocess.run")
+    def test_run_commands_with_special_chars(self, mock_run: MagicMock) -> None:
+        """Test run_commands handles special characters in quoted strings."""
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        session = VyOSConfigSession(wrapper_path="/test/wrapper")
+        session._in_session = True
+
+        commands = [
+            "set system description 'Router-01 (Production)'",
+            "set system note 'Key: value=123'",
+        ]
+        session.run_commands(commands)
+
+        assert mock_run.call_count == 2
+        calls = [call[0][0] for call in mock_run.call_args_list]
+        assert calls[0] == [
+            "/test/wrapper",
+            "set",
+            "system",
+            "description",
+            "Router-01 (Production)",
+        ]
+        assert calls[1] == ["/test/wrapper", "set", "system", "note", "Key: value=123"]
+
 
 class TestVyOSConfigSessionVerifyGroup:
     """Tests for group verification."""

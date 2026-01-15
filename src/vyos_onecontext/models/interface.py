@@ -1,5 +1,6 @@
 """Interface configuration models."""
 
+import re
 from ipaddress import IPv4Address
 from typing import Annotated
 
@@ -22,6 +23,28 @@ class InterfaceConfig(BaseModel):
     management: Annotated[
         bool, Field(False, description="Place interface in management VRF")
     ]
+
+    @field_validator("name")
+    @classmethod
+    def validate_interface_name(cls, v: str) -> str:
+        """Validate interface name follows expected pattern.
+
+        Args:
+            v: Interface name to validate
+
+        Returns:
+            The validated interface name
+
+        Raises:
+            ValueError: If interface name is invalid
+        """
+        # Support common interface types: eth, bond, br, wg, tun, etc.
+        # For now, focus on eth interfaces which are most common in OpenNebula
+        if not re.match(r"^eth\d+$", v):
+            raise ValueError(
+                f"Invalid interface name '{v}'. Expected format: eth<number> (e.g., eth0, eth1)"
+            )
+        return v
 
     @field_validator("mask")
     @classmethod
@@ -69,6 +92,26 @@ class AliasConfig(BaseModel):
     mask: Annotated[
         str | None, Field(None, description="Dotted-decimal netmask (may be empty due to ONE bug)")
     ]
+
+    @field_validator("interface")
+    @classmethod
+    def validate_interface_name(cls, v: str) -> str:
+        """Validate parent interface name follows expected pattern.
+
+        Args:
+            v: Interface name to validate
+
+        Returns:
+            The validated interface name
+
+        Raises:
+            ValueError: If interface name is invalid
+        """
+        if not re.match(r"^eth\d+$", v):
+            raise ValueError(
+                f"Invalid interface name '{v}'. Expected format: eth<number> (e.g., eth0, eth1)"
+            )
+        return v
 
     @field_validator("mask")
     @classmethod

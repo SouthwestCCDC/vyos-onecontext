@@ -454,7 +454,7 @@ class TestRouterConfig:
         """Test complete router configuration."""
         router = RouterConfig(
             hostname="router-01",
-            ssh_public_key="ssh-rsa AAAA...",
+            ssh_public_key="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQ user@host",
             onecontext_mode=OnecontextMode.FREEZE,
             interfaces=[
                 InterfaceConfig(name="eth0", ip="10.0.1.1", mask="255.255.255.0"),
@@ -966,3 +966,126 @@ class TestValidationEnhancements:
             interfaces=[InterfaceConfig(name="eth0", ip="10.0.1.1", mask="255.255.255.0")],
             aliases=[AliasConfig(interface="eth0", ip="10.0.1.2", mask="255.255.255.0")],
         )
+
+
+class TestInputValidation:
+    """Tests for PR #30 input validation enhancements."""
+
+    def test_hostname_valid_simple(self) -> None:
+        """Test valid simple hostname."""
+        router = RouterConfig(hostname="router01")
+        assert router.hostname == "router01"
+
+    def test_hostname_valid_fqdn(self) -> None:
+        """Test valid FQDN hostname."""
+        router = RouterConfig(hostname="router01.example.com")
+        assert router.hostname == "router01.example.com"
+
+    def test_hostname_valid_with_hyphens(self) -> None:
+        """Test valid hostname with hyphens."""
+        router = RouterConfig(hostname="my-router-01")
+        assert router.hostname == "my-router-01"
+
+    def test_hostname_invalid_too_long(self) -> None:
+        """Test that hostname longer than 253 chars is rejected."""
+        long_hostname = "a" * 254
+        with pytest.raises(ValidationError, match="too long"):
+            RouterConfig(hostname=long_hostname)
+
+    def test_hostname_invalid_starts_with_hyphen(self) -> None:
+        """Test that hostname starting with hyphen is rejected."""
+        with pytest.raises(ValidationError, match="Invalid hostname format"):
+            RouterConfig(hostname="-router")
+
+    def test_hostname_invalid_ends_with_hyphen(self) -> None:
+        """Test that hostname ending with hyphen is rejected."""
+        with pytest.raises(ValidationError, match="Invalid hostname format"):
+            RouterConfig(hostname="router-")
+
+    def test_hostname_invalid_special_chars(self) -> None:
+        """Test that hostname with special chars is rejected."""
+        with pytest.raises(ValidationError, match="Invalid hostname format"):
+            RouterConfig(hostname="router_01")
+
+    def test_hostname_invalid_spaces(self) -> None:
+        """Test that hostname with spaces is rejected."""
+        with pytest.raises(ValidationError, match="Invalid hostname format"):
+            RouterConfig(hostname="test router")
+
+    def test_hostname_none_allowed(self) -> None:
+        """Test that None hostname is allowed."""
+        router = RouterConfig(hostname=None)
+        assert router.hostname is None
+
+    def test_ssh_key_valid_rsa(self) -> None:
+        """Test valid RSA SSH key."""
+        key = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQ user@host"
+        router = RouterConfig(ssh_public_key=key)
+        assert router.ssh_public_key == key
+
+    def test_ssh_key_valid_ed25519(self) -> None:
+        """Test valid Ed25519 SSH key."""
+        key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJQC user@host"
+        router = RouterConfig(ssh_public_key=key)
+        assert router.ssh_public_key == key
+
+    def test_ssh_key_valid_without_comment(self) -> None:
+        """Test valid SSH key without comment."""
+        key = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQ"
+        router = RouterConfig(ssh_public_key=key)
+        assert router.ssh_public_key == key
+
+    def test_ssh_key_invalid_type(self) -> None:
+        """Test that SSH key with invalid type is rejected."""
+        with pytest.raises(ValidationError, match="Invalid SSH key type"):
+            RouterConfig(ssh_public_key="invalid-type AAAAB3NzaC1yc2E")
+
+    def test_ssh_key_invalid_format_no_key_data(self) -> None:
+        """Test that SSH key without key data is rejected."""
+        with pytest.raises(ValidationError, match="must have at least type and key data"):
+            RouterConfig(ssh_public_key="ssh-rsa")
+
+    def test_ssh_key_invalid_base64(self) -> None:
+        """Test that SSH key with invalid base64 is rejected."""
+        with pytest.raises(ValidationError, match="must be valid base64"):
+            RouterConfig(ssh_public_key="ssh-rsa invalid!@#$%")
+
+    def test_ssh_key_none_allowed(self) -> None:
+        """Test that None SSH key is allowed."""
+        router = RouterConfig(ssh_public_key=None)
+        assert router.ssh_public_key is None
+
+    def test_interface_name_valid_eth0(self) -> None:
+        """Test valid eth0 interface name."""
+        iface = InterfaceConfig(name="eth0", ip="10.0.1.1", mask="255.255.255.0")
+        assert iface.name == "eth0"
+
+    def test_interface_name_valid_eth99(self) -> None:
+        """Test valid double-digit interface name."""
+        iface = InterfaceConfig(name="eth99", ip="10.0.1.1", mask="255.255.255.0")
+        assert iface.name == "eth99"
+
+    def test_interface_name_invalid_bond(self) -> None:
+        """Test that non-eth interface names are rejected for now."""
+        with pytest.raises(ValidationError, match="Invalid interface name"):
+            InterfaceConfig(name="bond0", ip="10.0.1.1", mask="255.255.255.0")
+
+    def test_interface_name_invalid_no_number(self) -> None:
+        """Test that interface name without number is rejected."""
+        with pytest.raises(ValidationError, match="Invalid interface name"):
+            InterfaceConfig(name="eth", ip="10.0.1.1", mask="255.255.255.0")
+
+    def test_interface_name_invalid_special_chars(self) -> None:
+        """Test that interface name with special chars is rejected."""
+        with pytest.raises(ValidationError, match="Invalid interface name"):
+            InterfaceConfig(name="eth_0", ip="10.0.1.1", mask="255.255.255.0")
+
+    def test_alias_interface_name_valid(self) -> None:
+        """Test valid alias interface name."""
+        alias = AliasConfig(interface="eth0", ip="10.0.1.2", mask="255.255.255.0")
+        assert alias.interface == "eth0"
+
+    def test_alias_interface_name_invalid(self) -> None:
+        """Test that invalid alias interface name is rejected."""
+        with pytest.raises(ValidationError, match="Invalid interface name"):
+            AliasConfig(interface="invalid", ip="10.0.1.2", mask="255.255.255.0")
