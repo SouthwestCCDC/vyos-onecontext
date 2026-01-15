@@ -76,10 +76,10 @@ jobs:
 
 The test script checks:
 
-- ✓ Contextualization script executed
-- ✓ No errors in contextualization output
-- ✓ No Python exceptions in logs
-- ✓ Successful completion message in logs
+- Contextualization script executed
+- No errors in contextualization output
+- No Python exceptions in logs
+- Successful completion message in logs
 
 ## Debugging Failed Tests
 

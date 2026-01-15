@@ -39,18 +39,18 @@ echo ""
 
 for scenario in "${TEST_SCENARIOS[@]}"; do
     IFS=':' read -r name description <<< "$scenario"
-    
+
     echo "========================================"
     echo "Test: $description"
     echo "========================================"
-    
+
     CONTEXT_FILE="$SCRIPT_DIR/contexts/${name}.env"
     if [ ! -f "$CONTEXT_FILE" ]; then
         echo "ERROR: Context file not found: $CONTEXT_FILE"
         ((FAILED++))
         continue
     fi
-    
+
     # Create test ISO
     ISO_PATH="$TEMP_DIR/${name}.iso"
     echo "Creating context ISO..."
@@ -59,17 +59,17 @@ for scenario in "${TEST_SCENARIOS[@]}"; do
         ((FAILED++))
         continue
     fi
-    
+
     # Run test
     echo ""
     if "$SCRIPT_DIR/run-qemu-test.sh" "$VYOS_IMAGE" "$ISO_PATH"; then
-        echo "✓ PASSED: $description"
+        echo "[PASS] PASSED: $description"
         ((PASSED++))
     else
-        echo "✗ FAILED: $description"
+        echo "[FAIL] FAILED: $description"
         ((FAILED++))
     fi
-    
+
     echo ""
 done
 
@@ -82,9 +82,9 @@ echo "Failed: $FAILED"
 echo ""
 
 if [ $FAILED -eq 0 ]; then
-    echo "✓ All tests passed!"
+    echo "[PASS] All tests passed!"
     exit 0
 else
-    echo "✗ Some tests failed"
+    echo "[FAIL] Some tests failed"
     exit 1
 fi

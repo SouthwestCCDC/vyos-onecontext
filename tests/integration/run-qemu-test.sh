@@ -33,11 +33,31 @@ fi
 
 # Create temporary directory for test artifacts
 TEST_DIR=$(mktemp -d)
-trap 'rm -rf "$TEST_DIR"' EXIT
 
 SERIAL_LOG="$TEST_DIR/serial.log"
 MONITOR_SOCKET="$TEST_DIR/monitor.sock"
 SSH_PORT=10022
+QEMU_PID=""
+
+# Function to cleanup QEMU
+cleanup_qemu() {
+    if [ -n "$QEMU_PID" ] && kill -0 "$QEMU_PID" 2>/dev/null; then
+        echo "Terminating QEMU (PID: $QEMU_PID)..."
+        kill "$QEMU_PID" 2>/dev/null || true
+        sleep 2
+        if kill -0 "$QEMU_PID" 2>/dev/null; then
+            echo "Force killing QEMU..."
+            kill -9 "$QEMU_PID" 2>/dev/null || true
+        fi
+    fi
+}
+
+# Combined cleanup function to handle both QEMU and temp directory
+cleanup_all() {
+    cleanup_qemu
+    rm -rf "$TEST_DIR"
+}
+trap cleanup_all EXIT
 
 echo "Starting VyOS VM for integration testing..."
 echo "  Image: $VYOS_IMAGE"
@@ -63,27 +83,14 @@ qemu-system-x86_64 \
 QEMU_PID=$!
 echo "QEMU started with PID: $QEMU_PID"
 
-# Function to cleanup QEMU
-cleanup_qemu() {
-    if kill -0 "$QEMU_PID" 2>/dev/null; then
-        echo "Terminating QEMU (PID: $QEMU_PID)..."
-        kill "$QEMU_PID" 2>/dev/null || true
-        sleep 2
-        if kill -0 "$QEMU_PID" 2>/dev/null; then
-            echo "Force killing QEMU..."
-            kill -9 "$QEMU_PID" 2>/dev/null || true
-        fi
-    fi
-}
-trap cleanup_qemu EXIT
-
 # Wait for boot and contextualization
 echo "Waiting for VM to boot and contextualize (timeout: ${TIMEOUT}s)..."
 START_TIME=$(date +%s)
+PROGRESS_COUNTER=0
 
 while true; do
     ELAPSED=$(($(date +%s) - START_TIME))
-    
+
     # Check if we've exceeded timeout
     if [ $ELAPSED -ge $TIMEOUT ]; then
         echo "ERROR: Timeout waiting for contextualization"
@@ -91,7 +98,7 @@ while true; do
         cat "$SERIAL_LOG" || echo "No serial log available"
         exit 1
     fi
-    
+
     # Check if QEMU is still running
     if ! kill -0 "$QEMU_PID" 2>/dev/null; then
         echo "ERROR: QEMU process died unexpectedly"
@@ -99,11 +106,13 @@ while true; do
         cat "$SERIAL_LOG" || echo "No serial log available"
         exit 1
     fi
-    
+
     # Check serial log for contextualization completion
+    # The boot script logs via syslog with tag "vyos-onecontext"
+    # Messages include: "completed successfully", "failed with exit code"
     if [ -f "$SERIAL_LOG" ]; then
         if grep -q "vyos-onecontext.*completed successfully" "$SERIAL_LOG" 2>/dev/null; then
-            echo "✓ Contextualization completed successfully"
+            echo "[PASS] Contextualization completed successfully"
             break
         elif grep -q "vyos-onecontext.*failed" "$SERIAL_LOG" 2>/dev/null; then
             echo "ERROR: Contextualization failed"
@@ -112,12 +121,13 @@ while true; do
             exit 1
         fi
     fi
-    
-    # Show progress every 10 seconds
-    if [ $((ELAPSED % 10)) -eq 0 ]; then
+
+    # Show progress every 10 seconds (5 iterations * 2s sleep)
+    ((PROGRESS_COUNTER++)) || true
+    if [ $((PROGRESS_COUNTER % 5)) -eq 0 ]; then
         echo "  ... still waiting (${ELAPSED}s elapsed)"
     fi
-    
+
     sleep 2
 done
 
@@ -134,36 +144,37 @@ echo "Checking for expected configuration markers in serial log..."
 
 # Check that contextualization ran
 if grep -q "vyos-onecontext" "$SERIAL_LOG"; then
-    echo "✓ Contextualization script executed"
+    echo "[PASS] Contextualization script executed"
 else
-    echo "✗ Contextualization script did not execute"
+    echo "[FAIL] Contextualization script did not execute"
     VALIDATION_FAILED=1
 fi
 
 # Check for errors in contextualization
 if grep -q "vyos-onecontext.*error\|vyos-onecontext.*ERROR" "$SERIAL_LOG"; then
-    echo "✗ Contextualization errors detected"
+    echo "[FAIL] Contextualization errors detected"
     VALIDATION_FAILED=1
 else
-    echo "✓ No contextualization errors detected"
+    echo "[PASS] No contextualization errors detected"
 fi
 
-# Check for Python exceptions
-if grep -q "Traceback\|Exception" "$SERIAL_LOG"; then
-    echo "✗ Python exceptions detected in log"
+# Check for Python exceptions (specific patterns to avoid false positives)
+# Matches: "Traceback (most recent", "SomeError:", "SomeException:"
+if grep -qE "(Traceback \(most recent|^[A-Za-z]+Error:|^[A-Za-z]+Exception:)" "$SERIAL_LOG"; then
+    echo "[FAIL] Python exceptions detected in log"
     VALIDATION_FAILED=1
 else
-    echo "✓ No Python exceptions detected"
+    echo "[PASS] No Python exceptions detected"
 fi
 
 echo ""
 if [ $VALIDATION_FAILED -eq 0 ]; then
-    echo "=== ✓ All validation checks passed ==="
+    echo "=== [PASS] All validation checks passed ==="
     echo ""
     echo "Test completed successfully!"
     exit 0
 else
-    echo "=== ✗ Validation failed ==="
+    echo "=== [FAIL] Validation failed ==="
     echo ""
     echo "=== Full serial log ==="
     cat "$SERIAL_LOG"
