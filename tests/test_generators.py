@@ -533,7 +533,7 @@ class TestGenerateConfig:
         """Test config generation with all system features."""
         config = RouterConfig(
             hostname="router-01",
-            ssh_public_key="ssh-rsa AAAAB3NzaC1yc2E... user@host",
+            ssh_public_key="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC+test user@host",
             interfaces=[
                 InterfaceConfig(
                     name="eth0",
@@ -588,7 +588,7 @@ class TestGenerateConfig:
         """Test that commands are generated in correct order (system, then interfaces)."""
         config = RouterConfig(
             hostname="router-01",
-            ssh_public_key="ssh-rsa AAAAB3NzaC1yc2E... user@host",
+            ssh_public_key="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC+test user@host",
             interfaces=[
                 InterfaceConfig(
                     name="eth0",

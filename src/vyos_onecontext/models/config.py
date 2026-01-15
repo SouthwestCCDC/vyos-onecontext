@@ -116,10 +116,9 @@ class RouterConfig(BaseModel):
         if key_type not in valid_types:
             raise ValueError(f"Invalid SSH key type '{key_type}'")
 
-        # Validate key data looks like base64 (alphanumeric + / + = + . for test placeholders)
+        # Validate key data looks like base64
         # Base64 uses A-Z, a-z, 0-9, +, /, and = for padding
-        # Allow . for test fixtures that use "..." as placeholder
-        if not re.match(r"^[A-Za-z0-9+/.]+=*$", key_data):
+        if not re.match(r"^[A-Za-z0-9+/]+=*$", key_data):
             raise ValueError("SSH key data must be valid base64")
 
         # Basic length check - SSH keys are typically at least 20 chars

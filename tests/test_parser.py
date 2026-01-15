@@ -35,7 +35,7 @@ class TestShellVariableParsing:
     def test_multiline_variable(self, tmp_path: Path) -> None:
         """Test parsing multiline variable."""
         context_file = tmp_path / "one_env"
-        content = """SSH_PUBLIC_KEY="ssh-rsa AAAAB3NzaC1yc2EAAAA...
+        content = """SSH_PUBLIC_KEY="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABtest
 line2
 line3"
 """
@@ -330,11 +330,11 @@ class TestOperationalVariables:
     def test_ssh_public_key(self, tmp_path: Path) -> None:
         """Test SSH public key parsing."""
         context_file = tmp_path / "one_env"
-        context_file.write_text('SSH_PUBLIC_KEY="ssh-rsa AAAAB3NzaC1yc2EAAAA..."\n')
+        context_file.write_text('SSH_PUBLIC_KEY="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC+test"\n')
 
         config = parse_context(str(context_file))
 
-        assert config.ssh_public_key == "ssh-rsa AAAAB3NzaC1yc2EAAAA..."
+        assert config.ssh_public_key == "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC+test"
 
     def test_onecontext_mode_stateless(self, tmp_path: Path) -> None:
         """Test ONECONTEXT_MODE stateless."""
@@ -571,7 +571,7 @@ class TestCompleteContextFile:
         context_file = tmp_path / "one_env"
         content = """# Identity
 HOSTNAME="router-01"
-SSH_PUBLIC_KEY="ssh-rsa AAAAB3NzaC1yc2EAAAA..."
+SSH_PUBLIC_KEY="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC+test"
 
 # Operational
 ONECONTEXT_MODE="stateless"

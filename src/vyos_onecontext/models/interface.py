@@ -6,6 +6,13 @@ from typing import Annotated
 
 from pydantic import BaseModel, Field, field_validator
 
+# Pattern for valid VyOS interface names
+# Supports: eth, bond, br (bridge), wg (wireguard), vti (VPN tunnel),
+# tun, tap, dum (dummy), peth (physical eth), and lo (loopback)
+VALID_INTERFACE_PATTERN = re.compile(
+    r"^(eth|bond|br|wg|vti|tun|tap|dum|peth)\d+$|^lo$"
+)
+
 
 class InterfaceConfig(BaseModel):
     """Configuration for a network interface.
@@ -38,11 +45,10 @@ class InterfaceConfig(BaseModel):
         Raises:
             ValueError: If interface name is invalid
         """
-        # Support common interface types: eth, bond, br, wg, tun, etc.
-        # For now, focus on eth interfaces which are most common in OpenNebula
-        if not re.match(r"^eth\d+$", v):
+        if not VALID_INTERFACE_PATTERN.match(v):
             raise ValueError(
-                f"Invalid interface name '{v}'. Expected format: eth<number> (e.g., eth0, eth1)"
+                f"Invalid interface name '{v}'. Supported types: "
+                "eth, bond, br, wg, vti, tun, tap, dum, peth (with number), or lo"
             )
         return v
 
@@ -107,9 +113,10 @@ class AliasConfig(BaseModel):
         Raises:
             ValueError: If interface name is invalid
         """
-        if not re.match(r"^eth\d+$", v):
+        if not VALID_INTERFACE_PATTERN.match(v):
             raise ValueError(
-                f"Invalid interface name '{v}'. Expected format: eth<number> (e.g., eth0, eth1)"
+                f"Invalid interface name '{v}'. Supported types: "
+                "eth, bond, br, wg, vti, tun, tap, dum, peth (with number), or lo"
             )
         return v
 
