@@ -37,7 +37,7 @@ class InterfaceGenerator(BaseGenerator):
         for iface in self.interfaces:
             # Primary IP address in CIDR notation
             commands.append(
-                f"set interfaces ethernet {iface.name} address '{iface.to_cidr()}'"
+                f"set interfaces ethernet {iface.name} address {iface.to_cidr()}"
             )
 
             # MTU (if specified)
@@ -56,7 +56,7 @@ class InterfaceGenerator(BaseGenerator):
             # Add alias IP as additional address on the same interface
             cidr = alias.to_cidr(parent_mask)
             commands.append(
-                f"set interfaces ethernet {alias.interface} address '{cidr}'"
+                f"set interfaces ethernet {alias.interface} address {cidr}"
             )
 
         return commands
