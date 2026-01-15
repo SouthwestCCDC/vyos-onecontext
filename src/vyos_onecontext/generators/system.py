@@ -66,6 +66,9 @@ class SshKeyGenerator(BaseGenerator):
         key_id = key_id.replace(" ", "_")
 
         return [
+            # Enable SSH service (required since base config is wiped)
+            "set service ssh port 22",
+            # Configure the public key for authentication
             f"set system login user vyos authentication public-keys {key_id} key {key_data}",
             f"set system login user vyos authentication public-keys {key_id} type {key_type}",
         ]

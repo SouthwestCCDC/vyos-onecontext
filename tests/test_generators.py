@@ -40,15 +40,16 @@ class TestSshKeyGenerator:
         gen = SshKeyGenerator(key)
         commands = gen.generate()
 
-        assert len(commands) == 2
+        assert len(commands) == 3
+        assert commands[0] == "set service ssh port 22"
         assert (
             "set system login user vyos authentication public-keys "
             "user@host key AAAAB3NzaC1yc2EAAAADAQABAAABAQC..."
-        ) in commands[0]
+        ) in commands[1]
         assert (
             "set system login user vyos authentication public-keys "
             "user@host type ssh-rsa"
-        ) in commands[1]
+        ) in commands[2]
 
     def test_generate_with_ed25519_key(self):
         """Test SSH key generation with ED25519 key."""
@@ -56,15 +57,16 @@ class TestSshKeyGenerator:
         gen = SshKeyGenerator(key)
         commands = gen.generate()
 
-        assert len(commands) == 2
+        assert len(commands) == 3
+        assert commands[0] == "set service ssh port 22"
         assert (
             "set system login user vyos authentication public-keys "
             "admin@example.com key AAAAC3NzaC1lZDI1NTE5AAAAI..."
-        ) in commands[0]
+        ) in commands[1]
         assert (
             "set system login user vyos authentication public-keys "
             "admin@example.com type ssh-ed25519"
-        ) in commands[1]
+        ) in commands[2]
 
     def test_generate_without_comment(self):
         """Test SSH key generation without comment (uses 'key1' as default)."""
@@ -72,14 +74,15 @@ class TestSshKeyGenerator:
         gen = SshKeyGenerator(key)
         commands = gen.generate()
 
-        assert len(commands) == 2
+        assert len(commands) == 3
+        assert commands[0] == "set service ssh port 22"
         assert (
             "set system login user vyos authentication public-keys "
             "key1 key AAAAB3NzaC1yc2EAAAADAQABAAABAQC..."
-        ) in commands[0]
+        ) in commands[1]
         assert (
             "set system login user vyos authentication public-keys key1 type ssh-rsa"
-        ) in commands[1]
+        ) in commands[2]
 
     def test_generate_with_spaces_in_comment(self):
         """Test SSH key generation with spaces in comment (replaces with underscores)."""
@@ -87,9 +90,10 @@ class TestSshKeyGenerator:
         gen = SshKeyGenerator(key)
         commands = gen.generate()
 
-        assert len(commands) == 2
-        assert "John_Doe" in commands[0]
+        assert len(commands) == 3
+        assert commands[0] == "set service ssh port 22"
         assert "John_Doe" in commands[1]
+        assert "John_Doe" in commands[2]
 
     def test_generate_with_none(self):
         """Test SSH key generation with None."""
@@ -557,9 +561,9 @@ class TestGenerateConfig:
         )
         commands = generate_config(config)
 
-        # Should have: hostname + 2 SSH key commands
+        # Should have: hostname + 3 SSH commands (service enable + 2 key commands)
         # + 3 interface commands (2 primary + 1 MTU) + 1 alias
-        assert len(commands) == 7
+        assert len(commands) == 8
         assert "set system host-name router-01" in commands
         assert any("public-keys" in cmd for cmd in commands)
         assert "set interfaces ethernet eth0 address 10.0.1.1/24" in commands
