@@ -45,3 +45,8 @@ dmypy.json
 
 # Ruff
 .ruff_cache/
+
+# Integration test artifacts
+tests/integration/*.iso
+tests/integration/*.qcow2
+tests/integration/*.log

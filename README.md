@@ -98,6 +98,42 @@ uv run ruff format src/    # Format
 uv run mypy src/           # Type check
 ```
 
+## Testing
+
+### Unit Tests
+
+Run the unit test suite:
+
+```bash
+just test              # Using just
+uv run pytest          # Directly with uv
+```
+
+### Integration Tests
+
+Integration tests boot a VyOS image in QEMU with test context and validate
+end-to-end functionality. These tests catch issues that unit tests miss (like
+the quote bug in #40).
+
+**Requirements:**
+- VyOS Sagitta image with vyos-onecontext pre-installed
+- QEMU/KVM
+- `genisoimage` or `mkisofs`
+
+**Running integration tests:**
+
+```bash
+# Run all integration test scenarios
+./tests/integration/run-all-tests.sh /path/to/vyos-image.qcow2
+
+# Run a single test scenario
+./tests/integration/create-test-iso.sh test.iso tests/integration/contexts/simple.env
+./tests/integration/run-qemu-test.sh /path/to/vyos-image.qcow2 test.iso
+```
+
+See [tests/integration/README.md](tests/integration/README.md) for detailed
+documentation on integration testing.
+
 ## Project Structure
 
 ```
@@ -120,6 +156,12 @@ vyos-onecontext/
 │       └── interface.py     # Interface configuration
 ├── tests/
 │   ├── fixtures/            # Test context files
+│   ├── integration/         # QEMU-based integration tests
+│   │   ├── contexts/        # Test context scenarios
+│   │   ├── create-test-iso.sh
+│   │   ├── run-qemu-test.sh
+│   │   ├── run-all-tests.sh
+│   │   └── README.md
 │   ├── test_models.py       # Model validation tests
 │   ├── test_parser.py       # Context parsing tests
 │   ├── test_generators.py   # Command generation tests

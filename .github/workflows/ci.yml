@@ -27,3 +27,31 @@ jobs:
 
       - name: Run checks
         run: just check
+
+  integration:
+    # Integration tests require a VyOS image - only run when image is available
+    # For self-hosted runners with KVM, use: runs-on: [self-hosted, kvm]
+    runs-on: ubuntu-latest
+    if: false  # Disabled by default - enable when VyOS image artifact is available
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install QEMU and tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86 qemu-utils genisoimage
+
+      - name: Download VyOS image
+        # TODO: Add step to download VyOS image artifact
+        # This would typically come from a build artifact or cache
+        run: |
+          echo "Placeholder: Download VyOS image artifact"
+          echo "Image should be available at: vyos-sagitta.qcow2"
+          exit 1
+
+      - name: Run integration tests
+        run: |
+          chmod +x tests/integration/*.sh
+          ./tests/integration/run-all-tests.sh vyos-sagitta.qcow2
