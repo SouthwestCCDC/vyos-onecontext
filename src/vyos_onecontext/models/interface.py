@@ -1,9 +1,18 @@
 """Interface configuration models."""
 
+import re
 from ipaddress import IPv4Address
 from typing import Annotated
 
 from pydantic import BaseModel, Field, field_validator
+
+# Pattern for valid VyOS interface names (VyOS 1.4 Sagitta)
+# Supports: eth, bond, br (bridge), wg (wireguard), vti (VPN tunnel),
+# tun, tap, dum (dummy), peth (physical eth), and lo (loopback)
+# See: https://docs.vyos.io/en/sagitta/configuration/interfaces/index.html
+VALID_INTERFACE_PATTERN = re.compile(
+    r"^(eth|bond|br|wg|vti|tun|tap|dum|peth)\d+$|^lo$"
+)
 
 
 class InterfaceConfig(BaseModel):
@@ -22,6 +31,27 @@ class InterfaceConfig(BaseModel):
     management: Annotated[
         bool, Field(False, description="Place interface in management VRF")
     ]
+
+    @field_validator("name")
+    @classmethod
+    def validate_interface_name(cls, v: str) -> str:
+        """Validate interface name follows expected pattern.
+
+        Args:
+            v: Interface name to validate
+
+        Returns:
+            The validated interface name
+
+        Raises:
+            ValueError: If interface name is invalid
+        """
+        if not VALID_INTERFACE_PATTERN.match(v):
+            raise ValueError(
+                f"Invalid interface name '{v}'. Supported types: "
+                "eth, bond, br, wg, vti, tun, tap, dum, peth (with number), or lo"
+            )
+        return v
 
     @field_validator("mask")
     @classmethod
@@ -69,6 +99,27 @@ class AliasConfig(BaseModel):
     mask: Annotated[
         str | None, Field(None, description="Dotted-decimal netmask (may be empty due to ONE bug)")
     ]
+
+    @field_validator("interface")
+    @classmethod
+    def validate_interface_name(cls, v: str) -> str:
+        """Validate parent interface name follows expected pattern.
+
+        Args:
+            v: Interface name to validate
+
+        Returns:
+            The validated interface name
+
+        Raises:
+            ValueError: If interface name is invalid
+        """
+        if not VALID_INTERFACE_PATTERN.match(v):
+            raise ValueError(
+                f"Invalid interface name '{v}'. Supported types: "
+                "eth, bond, br, wg, vti, tun, tap, dum, peth (with number), or lo"
+            )
+        return v
 
     @field_validator("mask")
     @classmethod

@@ -1,9 +1,10 @@
 """Top-level router configuration models."""
 
+import re
 from enum import Enum
 from typing import Annotated
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from vyos_onecontext.models.dhcp import DhcpConfig
 from vyos_onecontext.models.firewall import FirewallConfig
@@ -41,6 +42,95 @@ class RouterConfig(BaseModel):
     hostname: Annotated[str | None, Field(None, description="System hostname")]
     ssh_public_key: Annotated[str | None, Field(None, description="SSH public key for vyos user")]
 
+    @field_validator("hostname")
+    @classmethod
+    def validate_hostname(cls, v: str | None) -> str | None:
+        """Validate hostname follows RFC 1123 conventions.
+
+        Args:
+            v: Hostname to validate
+
+        Returns:
+            The validated hostname
+
+        Raises:
+            ValueError: If hostname is invalid
+        """
+        if v is None:
+            return None
+
+        if len(v) > 253:
+            raise ValueError("Hostname too long (max 253 chars)")
+
+        # RFC 1123 hostname pattern:
+        # - Labels separated by dots
+        # - Each label 1-63 chars
+        # - Start/end with alphanumeric
+        # - Can contain hyphens in the middle
+        pattern = (
+            r"^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?"
+            r"(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$"
+        )
+        if not re.match(pattern, v):
+            raise ValueError("Invalid hostname format (must follow RFC 1123)")
+
+        return v
+
+    @field_validator("ssh_public_key")
+    @classmethod
+    def validate_ssh_key(cls, v: str | None) -> str | None:
+        """Validate SSH public key format.
+
+        Args:
+            v: SSH public key to validate
+
+        Returns:
+            The validated SSH key
+
+        Raises:
+            ValueError: If SSH key format is invalid
+        """
+        if v is None:
+            return None
+
+        # SSH key format: type key [comment]
+        # Valid types: ssh-rsa, ssh-dss, ssh-ed25519, ecdsa-sha2-nistp256, etc.
+        parts = v.strip().split(None, 2)  # Split on whitespace, max 3 parts
+        if len(parts) < 2:
+            raise ValueError("SSH key must have at least type and key data")
+
+        key_type = parts[0]
+        key_data = parts[1]
+
+        # Validate key type
+        valid_types = {
+            "ssh-rsa",
+            "ssh-dss",
+            "ssh-ed25519",
+            "ecdsa-sha2-nistp256",
+            "ecdsa-sha2-nistp384",
+            "ecdsa-sha2-nistp521",
+            "sk-ssh-ed25519@openssh.com",
+            "sk-ecdsa-sha2-nistp256@openssh.com",
+        }
+        if key_type not in valid_types:
+            raise ValueError(f"Invalid SSH key type '{key_type}'")
+
+        # Validate key data looks like base64
+        # Base64 uses A-Z, a-z, 0-9, +, /, and = for padding (max 2 padding chars)
+        if not re.match(r"^[A-Za-z0-9+/]+={0,2}$", key_data):
+            raise ValueError("SSH key data must be valid base64")
+
+        # Minimum length check for SSH key data
+        # The shortest valid key is ssh-ed25519 which has 68 base64 chars
+        # We use 16 as a reasonable minimum to catch obviously invalid data
+        # while still allowing for potential future shorter key types
+        MIN_SSH_KEY_DATA_LENGTH = 16
+        if len(key_data) < MIN_SSH_KEY_DATA_LENGTH:
+            raise ValueError("SSH key data is too short")
+
+        return v
+
     # Operational mode
     onecontext_mode: Annotated[
         OnecontextMode,
@@ -75,10 +165,19 @@ class RouterConfig(BaseModel):
     # Escape hatches
     start_config: Annotated[
         str | None,
-        Field(None, description="Raw VyOS commands executed within configuration transaction"),
+        Field(
+            None,
+            description="RAW VyOS commands executed within configuration transaction. "
+            "NO VALIDATION PERFORMED. Only use with trusted input from infrastructure admins.",
+        ),
     ]
     start_script: Annotated[
-        str | None, Field(None, description="Shell script executed after VyOS config commit")
+        str | None,
+        Field(
+            None,
+            description="Shell script executed after VyOS config commit. "
+            "NO VALIDATION PERFORMED. Only use with trusted input from infrastructure admins.",
+        ),
     ]
 
     @model_validator(mode="after")

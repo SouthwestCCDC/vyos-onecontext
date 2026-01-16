@@ -11,6 +11,7 @@ Running with sudo will break manual VyOS configuration sessions.
 import grp
 import logging
 import os
+import shlex
 import subprocess
 from typing import Self
 
@@ -258,6 +259,7 @@ class VyOSConfigSession:
             # Strip leading 'set ' if present, then split into path components
             if cmd.startswith("set "):
                 cmd = cmd[4:]
-            path = cmd.split()
+            # Use shlex.split() to properly handle quoted strings
+            path = shlex.split(cmd)
             if path:
                 self.set(path)
