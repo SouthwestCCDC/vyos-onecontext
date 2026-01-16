@@ -36,6 +36,9 @@ TEST_DIR=$(mktemp -d)
 
 SERIAL_LOG="$TEST_DIR/serial.log"
 MONITOR_SOCKET="$TEST_DIR/monitor.sock"
+# Port 10022 is used for SSH forwarding from the guest.
+# Note: Tests are run sequentially by run-all-tests.sh, so no port conflicts occur.
+# If parallel execution is ever needed, dynamic port allocation should be implemented.
 SSH_PORT=10022
 QEMU_PID=""
 
@@ -161,7 +164,7 @@ fi
 # Check for Python exceptions in vyos-onecontext output
 # Matches: "Traceback (most recent", "SomeError:", "SomeException:"
 # Scope to vyos-onecontext lines to avoid false positives from other system logs
-if grep "vyos-onecontext" "$SERIAL_LOG" | grep -qE "(Traceback \(most recent|[A-Za-z]+Error:|[A-Za-z]+Exception:)"; then
+if grep "vyos-onecontext" "$SERIAL_LOG" | grep -qE "(Traceback \(most recent|[A-Z][a-zA-Z]*Error:|[A-Z][a-zA-Z]*Exception:)"; then
     echo "[FAIL] Python exceptions detected in vyos-onecontext output"
     VALIDATION_FAILED=1
 else

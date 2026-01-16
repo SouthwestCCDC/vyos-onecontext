@@ -46,7 +46,7 @@ else
 fi
 
 echo "Creating context ISO: $OUTPUT_ISO"
-$ISO_CMD -o "$OUTPUT_ISO" \
+"$ISO_CMD" -o "$OUTPUT_ISO" \
     -V "CONTEXT" \
     -r \
     -J \

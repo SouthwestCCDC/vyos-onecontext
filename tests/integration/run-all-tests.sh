@@ -47,7 +47,7 @@ for scenario in "${TEST_SCENARIOS[@]}"; do
     CONTEXT_FILE="$SCRIPT_DIR/contexts/${name}.env"
     if [ ! -f "$CONTEXT_FILE" ]; then
         echo "ERROR: Context file not found: $CONTEXT_FILE"
-        ((FAILED++))
+        ((FAILED++)) || true
         continue
     fi
 
@@ -56,7 +56,7 @@ for scenario in "${TEST_SCENARIOS[@]}"; do
     echo "Creating context ISO..."
     if ! "$SCRIPT_DIR/create-test-iso.sh" "$ISO_PATH" "$CONTEXT_FILE"; then
         echo "ERROR: Failed to create ISO for $name"
-        ((FAILED++))
+        ((FAILED++)) || true
         continue
     fi
 
@@ -64,10 +64,10 @@ for scenario in "${TEST_SCENARIOS[@]}"; do
     echo ""
     if "$SCRIPT_DIR/run-qemu-test.sh" "$VYOS_IMAGE" "$ISO_PATH"; then
         echo "[PASS] PASSED: $description"
-        ((PASSED++))
+        ((PASSED++)) || true
     else
         echo "[FAIL] FAILED: $description"
-        ((FAILED++))
+        ((FAILED++)) || true
     fi
 
     echo ""
