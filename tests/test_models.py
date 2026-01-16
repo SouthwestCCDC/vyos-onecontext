@@ -452,9 +452,16 @@ class TestRouterConfig:
 
     def test_complete_router_config(self) -> None:
         """Test complete router configuration."""
+        # Use a realistic-length SSH key (RSA 2048-bit keys have ~372 base64 chars)
+        ssh_key = (
+            "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC7vbqajDRjvLjG6H6TZ"
+            "JHzBnPLYOLKzCEhN2eL3k1HGCJNqwPAWB8C1fT7YzA6JBNF0QL7xmN"
+            "P9nBhYuZlqJ8D1HVBvUKqRKe3K1sZE8T9QzLm+rN0oF7JTK5C9W8vZ"
+            "xqA3NpKLM2HvBT6FXDLQJ1K9sM4YzW7KqN8xE5A2vF3BT user@host"
+        )
         router = RouterConfig(
             hostname="router-01",
-            ssh_public_key="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQ user@host",
+            ssh_public_key=ssh_key,
             onecontext_mode=OnecontextMode.FREEZE,
             interfaces=[
                 InterfaceConfig(name="eth0", ip="10.0.1.1", mask="255.255.255.0"),
@@ -1016,6 +1023,22 @@ class TestInputValidation:
         """Test that None hostname is allowed."""
         router = RouterConfig(hostname=None)
         assert router.hostname is None
+
+    def test_hostname_valid_single_char(self) -> None:
+        """Test valid single-character hostname (RFC 1123 allows this)."""
+        for hostname in ["a", "x", "z", "1", "9"]:
+            router = RouterConfig(hostname=hostname)
+            assert router.hostname == hostname
+
+    def test_hostname_valid_single_char_labels_fqdn(self) -> None:
+        """Test valid FQDN with single-character labels."""
+        router = RouterConfig(hostname="a.b.c")
+        assert router.hostname == "a.b.c"
+
+    def test_hostname_valid_two_chars(self) -> None:
+        """Test valid two-character hostname."""
+        router = RouterConfig(hostname="ab")
+        assert router.hostname == "ab"
 
     def test_ssh_key_valid_rsa(self) -> None:
         """Test valid RSA SSH key."""
