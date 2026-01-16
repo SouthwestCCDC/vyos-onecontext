@@ -69,7 +69,7 @@ jobs:
 
 1. **create-test-iso.sh**: Creates an ISO with context.sh from a test context file
 2. **run-qemu-test.sh**: Boots VyOS in QEMU with the context ISO attached
-3. The VM boots and runs vyos-onecontext-boot.sh from systemd
+3. The VM boots and runs the vyos-onecontext boot script (triggered via udev when the context CD is mounted)
 4. The script validates contextualization by checking serial log output
 
 ## Validation

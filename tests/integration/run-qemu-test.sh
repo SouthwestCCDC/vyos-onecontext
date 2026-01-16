@@ -67,7 +67,7 @@ echo "  SSH port: $SSH_PORT"
 
 # Start QEMU in background
 qemu-system-x86_64 \
-    $KVM_FLAG \
+    ${KVM_FLAG:-} \
     -m 2048 \
     -smp 2 \
     -drive file="$VYOS_IMAGE",format=qcow2,if=virtio,snapshot=on \
@@ -158,13 +158,14 @@ else
     echo "[PASS] No contextualization errors detected"
 fi
 
-# Check for Python exceptions (specific patterns to avoid false positives)
+# Check for Python exceptions in vyos-onecontext output
 # Matches: "Traceback (most recent", "SomeError:", "SomeException:"
-if grep -qE "(Traceback \(most recent|^[A-Za-z]+Error:|^[A-Za-z]+Exception:)" "$SERIAL_LOG"; then
-    echo "[FAIL] Python exceptions detected in log"
+# Scope to vyos-onecontext lines to avoid false positives from other system logs
+if grep "vyos-onecontext" "$SERIAL_LOG" | grep -qE "(Traceback \(most recent|[A-Za-z]+Error:|[A-Za-z]+Exception:)"; then
+    echo "[FAIL] Python exceptions detected in vyos-onecontext output"
     VALIDATION_FAILED=1
 else
-    echo "[PASS] No Python exceptions detected"
+    echo "[PASS] No Python exceptions detected in vyos-onecontext output"
 fi
 
 echo ""

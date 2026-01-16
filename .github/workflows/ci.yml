@@ -41,7 +41,7 @@ jobs:
       - name: Install QEMU and tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y qemu-system-x86 qemu-utils genisoimage
+          sudo apt-get install -y qemu-system-x86 genisoimage
 
       - name: Download VyOS image
         # TODO: Add step to download VyOS image artifact
