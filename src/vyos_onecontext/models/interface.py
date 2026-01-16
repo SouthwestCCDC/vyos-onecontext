@@ -6,9 +6,10 @@ from typing import Annotated
 
 from pydantic import BaseModel, Field, field_validator
 
-# Pattern for valid VyOS interface names
+# Pattern for valid VyOS interface names (VyOS 1.4 Sagitta)
 # Supports: eth, bond, br (bridge), wg (wireguard), vti (VPN tunnel),
 # tun, tap, dum (dummy), peth (physical eth), and lo (loopback)
+# See: https://docs.vyos.io/en/sagitta/configuration/interfaces/index.html
 VALID_INTERFACE_PATTERN = re.compile(
     r"^(eth|bond|br|wg|vti|tun|tap|dum|peth)\d+$|^lo$"
 )

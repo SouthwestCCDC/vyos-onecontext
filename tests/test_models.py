@@ -969,7 +969,7 @@ class TestValidationEnhancements:
 
 
 class TestInputValidation:
-    """Tests for PR #30 input validation enhancements."""
+    """Tests for issue #41 input validation enhancements."""
 
     def test_hostname_valid_simple(self) -> None:
         """Test valid simple hostname."""

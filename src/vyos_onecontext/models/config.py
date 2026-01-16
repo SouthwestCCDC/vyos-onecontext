@@ -117,12 +117,16 @@ class RouterConfig(BaseModel):
             raise ValueError(f"Invalid SSH key type '{key_type}'")
 
         # Validate key data looks like base64
-        # Base64 uses A-Z, a-z, 0-9, +, /, and = for padding
-        if not re.match(r"^[A-Za-z0-9+/]+=*$", key_data):
+        # Base64 uses A-Z, a-z, 0-9, +, /, and = for padding (max 2 padding chars)
+        if not re.match(r"^[A-Za-z0-9+/]+={0,2}$", key_data):
             raise ValueError("SSH key data must be valid base64")
 
-        # Basic length check - SSH keys are typically at least 20 chars
-        if len(key_data) < 10:
+        # Minimum length check for SSH key data
+        # The shortest valid key is ssh-ed25519 which has 68 base64 chars
+        # We use 16 as a reasonable minimum to catch obviously invalid data
+        # while still allowing for potential future shorter key types
+        MIN_SSH_KEY_DATA_LENGTH = 16
+        if len(key_data) < MIN_SSH_KEY_DATA_LENGTH:
             raise ValueError("SSH key data is too short")
 
         return v
