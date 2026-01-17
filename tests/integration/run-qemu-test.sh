@@ -60,7 +60,8 @@ cleanup_all() {
     cleanup_qemu
     rm -rf "$TEST_DIR"
 }
-trap cleanup_all EXIT
+# Trap EXIT, INT (Ctrl+C), and TERM (kill) to ensure QEMU cleanup
+trap cleanup_all EXIT INT TERM
 
 echo "Starting VyOS VM for integration testing..."
 echo "  Image: $VYOS_IMAGE"
