@@ -316,6 +316,86 @@ class TestVyOSConfigSession:
         ]
         assert calls[1] == ["/test/wrapper", "set", "system", "note", "Key: value=123"]
 
+    @patch("subprocess.run")
+    def test_run_commands_with_newlines_in_strings(self, mock_run: MagicMock) -> None:
+        """Test run_commands handles literal newlines within quoted strings."""
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        session = VyOSConfigSession(wrapper_path="/test/wrapper")
+        session._in_session = True
+
+        # Command with literal newline inside quoted string
+        # shlex.split() should handle this and preserve the newline
+        commands = [
+            "set system login banner 'Line 1\nLine 2\nLine 3'",
+        ]
+        session.run_commands(commands)
+
+        assert mock_run.call_count == 1
+        calls = [call[0][0] for call in mock_run.call_args_list]
+        # shlex.split should preserve the newline characters
+        assert calls[0] == [
+            "/test/wrapper",
+            "set",
+            "system",
+            "login",
+            "banner",
+            "Line 1\nLine 2\nLine 3",
+        ]
+
+    @patch("subprocess.run")
+    def test_run_commands_multiple_with_newlines(self, mock_run: MagicMock) -> None:
+        """Test run_commands with multiple commands containing newlines."""
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        session = VyOSConfigSession(wrapper_path="/test/wrapper")
+        session._in_session = True
+
+        commands = [
+            "set system host-name router01",
+            "set system description 'Main router\nfor building A'",
+            "set system contact 'Admin team\nEmail: admin@example.com'",
+        ]
+        session.run_commands(commands)
+
+        assert mock_run.call_count == 3
+        calls = [call[0][0] for call in mock_run.call_args_list]
+        assert calls[0] == ["/test/wrapper", "set", "system", "host-name", "router01"]
+        assert calls[1] == [
+            "/test/wrapper",
+            "set",
+            "system",
+            "description",
+            "Main router\nfor building A",
+        ]
+        assert calls[2] == [
+            "/test/wrapper",
+            "set",
+            "system",
+            "contact",
+            "Admin team\nEmail: admin@example.com",
+        ]
+
+    @patch("subprocess.run")
+    def test_run_commands_with_tabs_and_newlines(self, mock_run: MagicMock) -> None:
+        """Test run_commands handles tabs and newlines in quoted strings."""
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        session = VyOSConfigSession(wrapper_path="/test/wrapper")
+        session._in_session = True
+
+        commands = [
+            "set system note 'Item 1:\tValue A\nItem 2:\tValue B'",
+        ]
+        session.run_commands(commands)
+
+        assert mock_run.call_count == 1
+        calls = [call[0][0] for call in mock_run.call_args_list]
+        assert calls[0] == [
+            "/test/wrapper",
+            "set",
+            "system",
+            "note",
+            "Item 1:\tValue A\nItem 2:\tValue B",
+        ]
+
 
 class TestVyOSConfigSessionVerifyGroup:
     """Tests for group verification."""
