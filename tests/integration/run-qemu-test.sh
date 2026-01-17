@@ -47,7 +47,7 @@ cleanup_qemu() {
     if [ -n "$QEMU_PID" ] && kill -0 "$QEMU_PID" 2>/dev/null; then
         echo "Terminating QEMU (PID: $QEMU_PID)..."
         kill "$QEMU_PID" 2>/dev/null || true
-        sleep 2
+        sleep 5
         if kill -0 "$QEMU_PID" 2>/dev/null; then
             echo "Force killing QEMU..."
             kill -9 "$QEMU_PID" 2>/dev/null || true
@@ -78,8 +78,8 @@ qemu-system-x86_64 \
     -serial file:"$SERIAL_LOG" \
     -monitor unix:"$MONITOR_SOCKET",server,nowait \
     -nographic \
-    -net nic,model=virtio \
-    -net user,hostfwd=tcp::${SSH_PORT}-:22 \
+    -netdev user,id=net0,hostfwd=tcp::${SSH_PORT}-:22 \
+    -device virtio-net-pci,netdev=net0 \
     -display none \
     &
 

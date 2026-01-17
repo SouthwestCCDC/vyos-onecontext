@@ -63,10 +63,10 @@ for scenario in "${TEST_SCENARIOS[@]}"; do
     # Run test
     echo ""
     if "$SCRIPT_DIR/run-qemu-test.sh" "$VYOS_IMAGE" "$ISO_PATH"; then
-        echo "[PASS] PASSED: $description"
+        echo "[PASS] $description"
         ((PASSED++)) || true
     else
-        echo "[FAIL] FAILED: $description"
+        echo "[FAIL] $description"
         ((FAILED++)) || true
     fi
 
