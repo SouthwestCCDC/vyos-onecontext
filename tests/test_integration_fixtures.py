@@ -8,6 +8,8 @@ These tests validate that the integration test context fixtures:
 This allows testing the fixtures without requiring KVM/QEMU.
 """
 
+import os
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -55,12 +57,13 @@ class TestFixturesParsing:
         config = parser.parse()
 
         assert config.hostname == "test-multi"
-        assert len(config.interfaces) >= 2
+        assert len(config.interfaces) >= 3
 
         # Verify we have distinct interfaces
         interface_names = [iface.name for iface in config.interfaces]
         assert "eth0" in interface_names
         assert "eth1" in interface_names
+        assert "eth2" in interface_names
 
     def test_all_fixtures_produce_valid_configs(self) -> None:
         """Test that all .env fixtures in the contexts directory parse successfully."""
@@ -89,8 +92,9 @@ class TestIsoCreationScript:
         return Path(__file__).parent / "integration" / "create-test-iso.sh"
 
     def test_script_exists_and_executable(self, script_path: Path) -> None:
-        """Test that the script exists."""
+        """Test that the script exists and is executable."""
         assert script_path.exists(), "create-test-iso.sh should exist"
+        assert os.access(script_path, os.X_OK), "create-test-iso.sh should be executable"
 
     def test_script_syntax_valid(self, script_path: Path) -> None:
         """Test that the script has valid bash syntax."""
@@ -107,8 +111,7 @@ class TestIsoCreationScript:
         assert "Usage:" in content, "Script should document usage in header comments"
 
     @pytest.mark.skipif(
-        subprocess.run(["which", "genisoimage"], capture_output=True).returncode != 0
-        and subprocess.run(["which", "mkisofs"], capture_output=True).returncode != 0,
+        shutil.which("genisoimage") is None and shutil.which("mkisofs") is None,
         reason="Neither genisoimage nor mkisofs available",
     )
     def test_script_creates_iso(self, script_path: Path) -> None:

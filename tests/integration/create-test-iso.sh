@@ -11,6 +11,11 @@ set -euo pipefail
 OUTPUT_ISO="${1:-test-context.iso}"
 CONTEXT_FILE="${2:-}"
 
+if [ -e "$OUTPUT_ISO" ]; then
+    echo "ERROR: Output file '$OUTPUT_ISO' already exists" >&2
+    exit 1
+fi
+
 # Create temporary directory for context files
 TEMP_DIR=$(mktemp -d)
 trap 'rm -rf "$TEMP_DIR"' EXIT
