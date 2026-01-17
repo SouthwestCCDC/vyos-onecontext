@@ -117,7 +117,7 @@ class TestIsoCreationScript:
         reason="No ISO creation tool available (genisoimage, mkisofs, or xorriso)",
     )
     def test_script_creates_iso(self, script_path: Path) -> None:
-        """Test that the script creates a valid ISO file."""
+        """Test that the script creates a valid ISO file with correct contents."""
         with tempfile.TemporaryDirectory() as tmpdir:
             iso_path = Path(tmpdir) / "test.iso"
             context_path = FIXTURES_DIR / "simple.env"
@@ -131,3 +131,33 @@ class TestIsoCreationScript:
             assert result.returncode == 0, f"ISO creation failed: {result.stderr}"
             assert iso_path.exists(), "ISO file should be created"
             assert iso_path.stat().st_size > 0, "ISO file should not be empty"
+
+            # Verify ISO contains the context file with correct content
+            extract_dir = Path(tmpdir) / "extracted"
+            extract_dir.mkdir()
+
+            if shutil.which("xorriso"):
+                # Use xorriso to extract ISO contents
+                extract_result = subprocess.run(
+                    [
+                        "xorriso",
+                        "-osirrox", "on",
+                        "-indev", str(iso_path),
+                        "-extract", "/", str(extract_dir),
+                    ],
+                    capture_output=True,
+                    text=True,
+                )
+                assert extract_result.returncode == 0, (
+                    f"ISO extraction failed: {extract_result.stderr}"
+                )
+
+                # Verify context.sh exists and contains expected content
+                context_in_iso = extract_dir / "context.sh"
+                assert context_in_iso.exists(), "ISO should contain context.sh"
+
+                expected_content = context_path.read_text()
+                actual_content = context_in_iso.read_text()
+                assert expected_content == actual_content, (
+                    "context.sh in ISO should match input fixture"
+                )

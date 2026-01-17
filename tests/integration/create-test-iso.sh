@@ -21,7 +21,11 @@ TEMP_DIR=$(mktemp -d)
 trap 'rm -rf "$TEMP_DIR"' EXIT
 
 # If context file provided, use it; otherwise create default test context
-if [ -n "$CONTEXT_FILE" ] && [ -f "$CONTEXT_FILE" ]; then
+if [ -n "$CONTEXT_FILE" ]; then
+    if [ ! -f "$CONTEXT_FILE" ]; then
+        echo "ERROR: Context file not found: $CONTEXT_FILE" >&2
+        exit 1
+    fi
     echo "Using provided context file: $CONTEXT_FILE"
     cp "$CONTEXT_FILE" "$TEMP_DIR/context.sh"
 else
