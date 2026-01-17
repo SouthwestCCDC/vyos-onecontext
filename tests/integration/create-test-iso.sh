@@ -40,18 +40,20 @@ ETH0_DNS="8.8.8.8"
 EOF
 fi
 
-# Create ISO using genisoimage (preferred) or mkisofs (fallback)
+# Create ISO using genisoimage (preferred), mkisofs, or xorriso (fallback)
 if command -v genisoimage &> /dev/null; then
-    ISO_CMD="genisoimage"
+    ISO_CMD=(genisoimage)
 elif command -v mkisofs &> /dev/null; then
-    ISO_CMD="mkisofs"
+    ISO_CMD=(mkisofs)
+elif command -v xorriso &> /dev/null; then
+    ISO_CMD=(xorriso -as mkisofs)
 else
-    echo "ERROR: Neither genisoimage nor mkisofs found. Please install one of them."
+    echo "ERROR: No ISO creation tool found. Install genisoimage, mkisofs, or xorriso."
     exit 1
 fi
 
 echo "Creating context ISO: $OUTPUT_ISO"
-"$ISO_CMD" -o "$OUTPUT_ISO" \
+"${ISO_CMD[@]}" -o "$OUTPUT_ISO" \
     -V "CONTEXT" \
     -r \
     -J \

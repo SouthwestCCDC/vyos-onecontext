@@ -111,8 +111,10 @@ class TestIsoCreationScript:
         assert "Usage:" in content, "Script should document usage in header comments"
 
     @pytest.mark.skipif(
-        shutil.which("genisoimage") is None and shutil.which("mkisofs") is None,
-        reason="Neither genisoimage nor mkisofs available",
+        shutil.which("genisoimage") is None
+        and shutil.which("mkisofs") is None
+        and shutil.which("xorriso") is None,
+        reason="No ISO creation tool available (genisoimage, mkisofs, or xorriso)",
     )
     def test_script_creates_iso(self, script_path: Path) -> None:
         """Test that the script creates a valid ISO file."""
