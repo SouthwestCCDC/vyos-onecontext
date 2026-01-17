@@ -72,7 +72,9 @@ class TestFixturesParsing:
             config = parser.parse()
 
             # Basic validation - should have at least one interface
-            assert len(config.interfaces) >= 1, f"{fixture_path.name} should define at least one interface"
+            assert len(config.interfaces) >= 1, (
+                f"{fixture_path.name} should define at least one interface"
+            )
 
             # Hostname should be set
             assert config.hostname is not None, f"{fixture_path.name} should define a hostname"
