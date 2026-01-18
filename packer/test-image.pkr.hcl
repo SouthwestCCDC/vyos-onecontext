@@ -170,25 +170,21 @@ build {
     ]
   }
 
-  # Install the preconfig bootup script (runs before config load, unlike postconfig)
-  # We use preconfig because we delete config.boot, so postconfig never runs
+  # Install the postconfig bootup script (runs after config load)
+  # We keep a minimal config.boot so postconfig runs
   provisioner "file" {
     source      = "${var.source_dir}/packer/files/vyos-postconfig-bootup.script"
-    destination = "/tmp/vyos-preconfig-bootup.script"
+    destination = "/tmp/vyos-postconfig-bootup.script"
   }
 
   provisioner "shell" {
     inline = [
-      "sudo mv /tmp/vyos-preconfig-bootup.script /config/scripts/vyos-preconfig-bootup.script",
-      "sudo chmod 755 /config/scripts/vyos-preconfig-bootup.script"
+      "sudo mv /tmp/vyos-postconfig-bootup.script /config/scripts/vyos-postconfig-bootup.script",
+      "sudo chmod 755 /config/scripts/vyos-postconfig-bootup.script"
     ]
   }
 
-  # Clean up saved config to prepare for contextualization at first boot
-  provisioner "shell" {
-    inline = [
-      "sleep 3",
-      "sudo rm -f /config/config.boot*"
-    ]
-  }
+  # NOTE: We keep the existing config.boot from the base image.
+  # This ensures VyOS boots normally and runs postconfig scripts.
+  # Contextualization will apply settings on top of the base config.
 }
