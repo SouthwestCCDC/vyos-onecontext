@@ -13,10 +13,15 @@ CONTEXT_FILE="${CONTEXT_DIR}/one_env"
 BOOT_SCRIPT="/opt/vyos-onecontext/boot.sh"
 LOG_TAG="vyos-onecontext-postconfig"
 
-# Log to both syslog and console for visibility in integration tests
+# Log to syslog and serial port for visibility in integration tests
+# Try multiple output targets: /dev/console, /dev/ttyS0, and stdout
 log_msg() {
     logger -t "$LOG_TAG" "$1"
+    # Echo to serial port (QEMU uses ttyS0)
+    echo "$LOG_TAG: $1" >/dev/ttyS0 2>/dev/null || true
+    # Also try console and stdout for good measure
     echo "$LOG_TAG: $1" >/dev/console 2>/dev/null || true
+    echo "$LOG_TAG: $1" || true
 }
 
 log_msg "Starting postconfig bootup script"

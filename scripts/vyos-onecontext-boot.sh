@@ -20,15 +20,17 @@ VENV_PATH="/opt/vyos-onecontext/venv"
 CONTEXT_PATH="/var/run/one-context/one_env"
 LOG_TAG="vyos-onecontext"
 
-# Log to syslog and serial console
-# The serial console echo ensures integration tests can see completion status
+# Log to syslog and serial port for visibility in integration tests
+# Try multiple output targets to ensure visibility
 log_info() {
     logger -t "$LOG_TAG" -p local0.info "$1"
+    echo "$LOG_TAG: $1" >/dev/ttyS0 2>/dev/null || true
     echo "$LOG_TAG: $1" >/dev/console 2>/dev/null || true
 }
 
 log_error() {
     logger -t "$LOG_TAG" -p local0.err "$1"
+    echo "$LOG_TAG: ERROR: $1" >/dev/ttyS0 2>/dev/null || true
     echo "$LOG_TAG: ERROR: $1" >/dev/console 2>/dev/null || true
 }
 
