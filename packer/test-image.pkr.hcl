@@ -110,6 +110,11 @@ build {
     destination = "/tmp/vyos-onecontext-src/uv.lock"
   }
 
+  provisioner "file" {
+    source      = "${var.source_dir}/README.md"
+    destination = "/tmp/vyos-onecontext-src/README.md"
+  }
+
   # Debug: Show network state before attempting external connections
   provisioner "shell" {
     inline = [
