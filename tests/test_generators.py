@@ -42,13 +42,14 @@ class TestSshKeyGenerator:
 
         assert len(commands) == 3
         assert commands[0] == "set service ssh port 22"
+        # Key identifier is sanitized: @ -> _at_, . -> _
         assert (
             "set system login user vyos authentication public-keys "
-            "user@host key AAAAB3NzaC1yc2EAAAADAQABAAABAQC..."
+            "user_at_host key AAAAB3NzaC1yc2EAAAADAQABAAABAQC..."
         ) in commands[1]
         assert (
             "set system login user vyos authentication public-keys "
-            "user@host type ssh-rsa"
+            "user_at_host type ssh-rsa"
         ) in commands[2]
 
     def test_generate_with_ed25519_key(self):
@@ -59,13 +60,14 @@ class TestSshKeyGenerator:
 
         assert len(commands) == 3
         assert commands[0] == "set service ssh port 22"
+        # Key identifier is sanitized: @ -> _at_, . -> _
         assert (
             "set system login user vyos authentication public-keys "
-            "admin@example.com key AAAAC3NzaC1lZDI1NTE5AAAAI..."
+            "admin_at_example_com key AAAAC3NzaC1lZDI1NTE5AAAAI..."
         ) in commands[1]
         assert (
             "set system login user vyos authentication public-keys "
-            "admin@example.com type ssh-ed25519"
+            "admin_at_example_com type ssh-ed25519"
         ) in commands[2]
 
     def test_generate_without_comment(self):
