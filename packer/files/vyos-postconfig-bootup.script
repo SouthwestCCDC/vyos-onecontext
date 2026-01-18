@@ -1,0 +1,57 @@
+#!/bin/sh
+# VyOS Sagitta Post-Config Bootup Script
+#
+# This script runs from /config/scripts/vyos-postconfig-bootup.script
+# after VyOS configuration is fully applied. It mounts the OpenNebula
+# context CD and invokes the Python-based contextualization system.
+#
+# Context file location: /var/run/one-context/one_env
+# Boot script: /opt/vyos-onecontext/boot.sh (activates venv and runs CLI)
+
+CONTEXT_DIR="/var/run/one-context"
+CONTEXT_FILE="${CONTEXT_DIR}/one_env"
+BOOT_SCRIPT="/opt/vyos-onecontext/boot.sh"
+LOG_TAG="vyos-onecontext-postconfig"
+
+# Log to syslog and serial port for visibility in integration tests
+# Try multiple output targets: /dev/console, /dev/ttyS0, and stdout
+log_msg() {
+    logger -t "$LOG_TAG" "$1"
+    # Echo to serial port (QEMU uses ttyS0)
+    echo "$LOG_TAG: $1" >/dev/ttyS0 2>/dev/null || true
+    # Also try console and stdout for good measure
+    echo "$LOG_TAG: $1" >/dev/console 2>/dev/null || true
+    echo "$LOG_TAG: $1" || true
+}
+
+log_msg "Starting postconfig bootup script"
+
+# Create context directory
+mkdir -p "$CONTEXT_DIR"
+
+# Mount context CD and copy context file
+if mount -t iso9660 /dev/sr0 /mnt 2>/dev/null; then
+    log_msg "Context CD mounted successfully"
+
+    # Copy context file from CD to expected location
+    if [ -f /mnt/context.sh ]; then
+        cp /mnt/context.sh "$CONTEXT_FILE"
+        chmod 644 "$CONTEXT_FILE"
+        log_msg "Context file copied to $CONTEXT_FILE"
+    else
+        log_msg "No context.sh found on CD"
+    fi
+    umount /mnt
+
+    # Run the Python boot script if context file exists
+    if [ -f "$CONTEXT_FILE" ] && [ -x "$BOOT_SCRIPT" ]; then
+        log_msg "Running boot script: $BOOT_SCRIPT"
+        sg vyattacfg -c "$BOOT_SCRIPT"
+    else
+        log_msg "Skipping boot script: context=$CONTEXT_FILE exists=$(test -f "$CONTEXT_FILE" && echo yes || echo no), boot=$BOOT_SCRIPT executable=$(test -x "$BOOT_SCRIPT" && echo yes || echo no)"
+    fi
+else
+    log_msg "No context CD found at /dev/sr0"
+fi
+
+log_msg "Postconfig bootup script completed"

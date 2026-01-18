@@ -48,22 +48,29 @@ class TestFixturesParsing:
         assert config.hostname == "test-quotes"
         assert config.ssh_public_key is not None
         # The key should contain the quoted comment
-        assert '"admin@test"' in config.ssh_public_key
+        assert '"test@quotes"' in config.ssh_public_key
         assert len(config.interfaces) == 1
 
     def test_multi_interface_fixture_parses(self) -> None:
-        """Test multi-interface.env fixture parses to valid RouterConfig."""
+        """Test multi-interface.env fixture parses to valid RouterConfig.
+
+        This fixture uses aliases (secondary IPs) on eth0 since the QEMU
+        test VM only has one network interface.
+        """
         parser = ContextParser(str(FIXTURES_DIR / "multi-interface.env"))
         config = parser.parse()
 
         assert config.hostname == "test-multi"
-        assert len(config.interfaces) >= 3
+        assert len(config.interfaces) >= 1
+        assert len(config.aliases) >= 2  # Has aliases for secondary IPs
 
-        # Verify we have distinct interfaces
+        # Verify we have eth0 with aliases
         interface_names = [iface.name for iface in config.interfaces]
         assert "eth0" in interface_names
-        assert "eth1" in interface_names
-        assert "eth2" in interface_names
+
+        # Check aliases are on eth0
+        alias_interfaces = {alias.interface for alias in config.aliases}
+        assert "eth0" in alias_interfaces
 
     def test_all_fixtures_produce_valid_configs(self) -> None:
         """Test that all .env fixtures in the contexts directory parse successfully."""
