@@ -21,26 +21,26 @@ sudo apt-get install qemu-system-x86 qemu-kvm genisoimage
 
 ## Running Tests Locally
 
-### 1. Build a VyOS Image
+1. **Build a VyOS Image**
 
-You need a VyOS image with vyos-onecontext pre-installed. This is typically
-built using Packer in the `deployment` repository.
+   You need a VyOS image with vyos-onecontext pre-installed. This is typically
+   built using Packer in the `deployment` repository.
 
-### 2. Run a Single Test
+2. **Run a Single Test**
 
-```bash
-# Create a context ISO
-./tests/integration/create-test-iso.sh test-context.iso tests/integration/contexts/simple.env
+   ```bash
+   # Create a context ISO
+   ./tests/integration/create-test-iso.sh test-context.iso tests/integration/contexts/simple.env
 
-# Run the test
-./tests/integration/run-qemu-test.sh /path/to/vyos-image.qcow2 test-context.iso
-```
+   # Run the test
+   ./tests/integration/run-qemu-test.sh /path/to/vyos-image.qcow2 test-context.iso
+   ```
 
-### 3. Run All Tests
+3. **Run All Tests**
 
-```bash
-./tests/integration/run-all-tests.sh /path/to/vyos-image.qcow2
-```
+   ```bash
+   ./tests/integration/run-all-tests.sh /path/to/vyos-image.qcow2
+   ```
 
 ## Test Contexts
 
@@ -92,7 +92,7 @@ When a test fails, the script prints the full serial log. You can also:
 qemu-system-x86_64 \
   -enable-kvm \
   -m 2048 \
-  -drive file=vyos.qcow2,format=qcow2,if=virtio,snapshot=on \
+  -drive file=/path/to/vyos-image.qcow2,format=qcow2,if=virtio,snapshot=on \
   -cdrom test.iso \
   -nographic
 ```

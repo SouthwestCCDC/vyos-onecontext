@@ -23,12 +23,12 @@ if [ ! -f "$CONTEXT_ISO" ]; then
     exit 1
 fi
 
-# Check for KVM support
+# Check for KVM support - use array to safely handle empty case
 if [ ! -e /dev/kvm ]; then
     echo "WARNING: /dev/kvm not found. Tests will run without KVM acceleration (slow)."
-    KVM_FLAG=""
+    KVM_ARGS=()
 else
-    KVM_FLAG="-enable-kvm"
+    KVM_ARGS=(-enable-kvm)
 fi
 
 # Create temporary directory for test artifacts
@@ -71,7 +71,7 @@ echo "  SSH port: $SSH_PORT"
 
 # Start QEMU in background
 qemu-system-x86_64 \
-    ${KVM_FLAG:-} \
+    "${KVM_ARGS[@]}" \
     -m 2048 \
     -smp 2 \
     -drive file="$VYOS_IMAGE",format=qcow2,if=virtio,snapshot=on \
@@ -114,6 +114,9 @@ while true; do
     # Check serial log for contextualization completion
     # The boot script logs via syslog with tag "vyos-onecontext"
     # Messages include: "completed successfully", "failed with exit code"
+    # Note: QEMU writes to this file concurrently. Serial output is line-buffered
+    # so grep sees complete lines in practice. The theoretical race is acceptable
+    # for test infrastructure.
     if [ -f "$SERIAL_LOG" ]; then
         if grep -q "vyos-onecontext.*completed successfully" "$SERIAL_LOG" 2>/dev/null; then
             echo "[PASS] Contextualization completed successfully"

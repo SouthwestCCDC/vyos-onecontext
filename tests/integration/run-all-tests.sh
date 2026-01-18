@@ -16,6 +16,13 @@ if [ ! -f "$VYOS_IMAGE" ]; then
     exit 1
 fi
 
+# Validate required scripts exist (create-test-iso.sh comes from PR #52)
+if [ ! -x "$SCRIPT_DIR/create-test-iso.sh" ]; then
+    echo "ERROR: create-test-iso.sh not found or not executable"
+    echo "       This script requires the integration test fixtures (PR #52)."
+    exit 1
+fi
+
 # Test scenarios
 declare -a TEST_SCENARIOS=(
     "simple:Simple router"
