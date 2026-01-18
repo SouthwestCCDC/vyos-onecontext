@@ -90,14 +90,24 @@ build {
   provisioner "shell" {
     inline = [
       "sudo mkdir -p /opt/vyos-onecontext",
-      "mkdir -p /tmp/vyos-onecontext-src"
+      "mkdir -p /tmp/vyos-onecontext-src/src"
     ]
   }
 
-  # Copy the Python package source from current checkout
+  # Copy only the necessary files for installation (not .git, .venv, etc.)
   provisioner "file" {
-    source      = "${var.source_dir}/"
-    destination = "/tmp/vyos-onecontext-src/"
+    source      = "${var.source_dir}/src/"
+    destination = "/tmp/vyos-onecontext-src/src/"
+  }
+
+  provisioner "file" {
+    source      = "${var.source_dir}/pyproject.toml"
+    destination = "/tmp/vyos-onecontext-src/pyproject.toml"
+  }
+
+  provisioner "file" {
+    source      = "${var.source_dir}/uv.lock"
+    destination = "/tmp/vyos-onecontext-src/uv.lock"
   }
 
   # Configure DNS for build-time network access
