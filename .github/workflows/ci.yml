@@ -27,3 +27,38 @@ jobs:
 
       - name: Run checks
         run: just check
+
+  integration:
+    # Integration tests require KVM - run on self-hosted runners
+    # Only run on push to sagitta or PRs from the same repo (not forks)
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, amd64, kvm]
+    needs: check  # Only run if lint/unit tests pass
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Verify KVM access
+        run: |
+          if [ ! -e /dev/kvm ]; then
+            echo "ERROR: /dev/kvm not available"
+            exit 1
+          fi
+          echo "KVM is available"
+
+      - name: Install test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86 genisoimage
+
+      - name: Download VyOS image
+        run: |
+          curl -fsSL -o vyos-sagitta.qcow2 \
+            https://artifacts.swccdc.com/iso/vyos-sagitta-base-5733700.qcow2
+          echo "Downloaded VyOS image:"
+          ls -lh vyos-sagitta.qcow2
+
+      - name: Run integration tests
+        run: ./tests/integration/run-all-tests.sh vyos-sagitta.qcow2
+        timeout-minutes: 15
