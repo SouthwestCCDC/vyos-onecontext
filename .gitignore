@@ -50,3 +50,8 @@ dmypy.json
 tests/integration/*.iso
 tests/integration/*.qcow2
 tests/integration/*.log
+
+# Packer artifacts
+packer/output/
+packer/*.qcow2
+packer/packer_cache/

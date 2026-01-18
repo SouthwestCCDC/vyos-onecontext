@@ -1,0 +1,32 @@
+#!/bin/sh
+# VyOS Sagitta Post-Config Bootup Script
+#
+# This script runs from /config/scripts/vyos-postconfig-bootup.script
+# after VyOS configuration is fully applied. It mounts the OpenNebula
+# context CD and invokes the Python-based contextualization system.
+#
+# Context file location: /var/run/one-context/one_env
+# Boot script: /opt/vyos-onecontext/boot.sh (activates venv and runs CLI)
+
+CONTEXT_DIR="/var/run/one-context"
+CONTEXT_FILE="${CONTEXT_DIR}/one_env"
+BOOT_SCRIPT="/opt/vyos-onecontext/boot.sh"
+
+# Create context directory
+mkdir -p "$CONTEXT_DIR"
+
+# Mount context CD and copy context file
+mount -t iso9660 /dev/sr0 /mnt 2>/dev/null
+if [ $? -eq 0 ]; then
+    # Copy context file from CD to expected location
+    if [ -f /mnt/context.sh ]; then
+        cp /mnt/context.sh "$CONTEXT_FILE"
+        chmod 644 "$CONTEXT_FILE"
+    fi
+    umount /mnt
+
+    # Run the Python boot script if context file exists
+    if [ -f "$CONTEXT_FILE" ] && [ -x "$BOOT_SCRIPT" ]; then
+        sg vyattacfg -c "$BOOT_SCRIPT"
+    fi
+fi

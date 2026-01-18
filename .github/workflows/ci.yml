@@ -47,18 +47,26 @@ jobs:
           fi
           echo "KVM is available"
 
-      - name: Install test dependencies
+      - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y qemu-system-x86 genisoimage
+          sudo apt-get install -y qemu-system-x86 genisoimage packer
 
-      - name: Download VyOS image
+      - name: Download base VyOS image
         run: |
-          curl -fsSL -o vyos-sagitta.qcow2 \
+          curl -fsSL -o vyos-base.qcow2 \
             https://artifacts.swccdc.com/iso/vyos-sagitta-base-5733700.qcow2
-          echo "Downloaded VyOS image:"
-          ls -lh vyos-sagitta.qcow2
+          echo "Downloaded base image:"
+          ls -lh vyos-base.qcow2
+
+      - name: Build test image with Packer
+        working-directory: packer
+        run: |
+          packer init .
+          packer build -var "base_image=${{ github.workspace }}/vyos-base.qcow2" .
+        timeout-minutes: 10
 
       - name: Run integration tests
-        run: ./tests/integration/run-all-tests.sh vyos-sagitta.qcow2
+        run: |
+          ./tests/integration/run-all-tests.sh packer/output/vyos-onecontext-test.qcow2
         timeout-minutes: 15
