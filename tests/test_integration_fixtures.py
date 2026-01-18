@@ -48,7 +48,7 @@ class TestFixturesParsing:
         assert config.hostname == "test-quotes"
         assert config.ssh_public_key is not None
         # The key should contain the quoted comment
-        assert '"admin@test"' in config.ssh_public_key
+        assert '"test@quotes"' in config.ssh_public_key
         assert len(config.interfaces) == 1
 
     def test_multi_interface_fixture_parses(self) -> None:
