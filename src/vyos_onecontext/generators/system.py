@@ -62,8 +62,9 @@ class SshKeyGenerator(BaseGenerator):
 
         # Use comment as identifier if available, otherwise use "key1"
         key_id = parts[2] if len(parts) >= 3 else "key1"
-        # Sanitize key_id for use as VyOS identifier (replace spaces with underscores)
-        key_id = key_id.replace(" ", "_")
+        # Sanitize key_id for use as VyOS identifier
+        # VyOS only accepts alphanumeric characters and underscores
+        key_id = key_id.replace("@", "_at_").replace(" ", "_").replace(".", "_")
 
         return [
             # Enable SSH service (required since base config is wiped)
