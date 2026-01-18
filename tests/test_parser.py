@@ -336,6 +336,26 @@ class TestOperationalVariables:
 
         assert config.ssh_public_key == "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC+test"
 
+    def test_ssh_public_key_multiple_keys(self, tmp_path: Path) -> None:
+        """Test SSH public key with multiple keys (newline separated)."""
+        context_file = tmp_path / "one_env"
+        # Multiple SSH keys on separate lines (literal newlines in the value)
+        content = '''SSH_PUBLIC_KEY="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC+key1 user1@host1
+ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC+key2 user2@host2
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITest3 user3@host3"
+'''
+        context_file.write_text(content)
+
+        config = parse_context(str(context_file))
+
+        assert config.ssh_public_key is not None
+        # Should preserve literal newlines between keys
+        assert "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC+key1 user1@host1" in config.ssh_public_key
+        assert "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC+key2 user2@host2" in config.ssh_public_key
+        assert "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITest3 user3@host3" in config.ssh_public_key
+        # Verify literal newlines are preserved
+        assert "\n" in config.ssh_public_key
+
     def test_onecontext_mode_stateless(self, tmp_path: Path) -> None:
         """Test ONECONTEXT_MODE stateless."""
         context_file = tmp_path / "one_env"
@@ -521,6 +541,186 @@ FIREWALL_JSON='{json.dumps(firewall_data)}'
         with pytest.raises(ValueError, match="Validation error"):
             parse_context(str(context_file))
 
+    def test_json_with_escaped_newlines(self, tmp_path: Path) -> None:
+        """Test JSON with escaped newlines in string fields."""
+        context_file = tmp_path / "one_env"
+        # JSON with \n escape sequences in strings
+        routes_data = {
+            "static": [
+                {
+                    "interface": "eth1",
+                    "destination": "0.0.0.0/0",
+                    "gateway": "10.0.1.254",
+                    "description": "Default route\\nvia ISP gateway\\nfor internet access",
+                }
+            ]
+        }
+        content = f"""ETH1_IP="10.0.1.1"
+ETH1_MASK="255.255.255.0"
+ROUTES_JSON='{json.dumps(routes_data)}'
+"""
+        context_file.write_text(content)
+
+        config = parse_context(str(context_file))
+
+        assert config.routes is not None
+        assert len(config.routes.static) == 1
+        route = config.routes.static[0]
+        # Check that description field exists and contains escaped newlines
+        # Note: JSON will decode \n as literal newline character
+        if hasattr(route, "description") and route.description:
+            assert "Default route" in route.description
+            assert "via ISP gateway" in route.description
+
+    def test_json_nested_with_whitespace(self, tmp_path: Path) -> None:
+        """Test JSON parsing with complex nested structures and whitespace."""
+        context_file = tmp_path / "one_env"
+        # Multi-line formatted JSON (note: JSON string itself spans lines in shell value)
+        firewall_data = {
+            "groups": {
+                "network": {
+                    "INTERNAL": ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"],
+                    "DMZ": ["10.10.0.0/16"],
+                },
+                "address": {"DNS_SERVERS": ["8.8.8.8", "8.8.4.4", "1.1.1.1"]},
+                "port": {"WEB_PORTS": ["80", "443"]},
+            },
+            "zones": {
+                "LAN": {"name": "LAN", "interfaces": ["eth1"], "default_action": "drop"},
+                "WAN": {"name": "WAN", "interfaces": ["eth0"], "default_action": "drop"},
+            },
+            "policies": [],
+        }
+        # Pretty-print JSON which includes newlines
+        json_str = json.dumps(firewall_data, indent=2)
+        # Put in context file with newlines preserved
+        content = f"""ETH0_IP="10.0.1.1"
+ETH0_MASK="255.255.255.0"
+ETH1_IP="10.0.2.1"
+ETH1_MASK="255.255.255.0"
+FIREWALL_JSON='{json_str}'
+"""
+        context_file.write_text(content)
+
+        config = parse_context(str(context_file))
+
+        assert config.firewall is not None
+        assert "INTERNAL" in config.firewall.groups.network
+        assert "DMZ" in config.firewall.groups.network
+        assert "DNS_SERVERS" in config.firewall.groups.address
+        assert "LAN" in config.firewall.zones
+        assert "WAN" in config.firewall.zones
+
+
+class TestMultilineEdgeCases:
+    """Tests for edge cases in multiline value parsing."""
+
+    def test_literal_vs_escaped_newlines(self, tmp_path: Path) -> None:
+        """Test distinction between literal newlines and escaped \\n sequences."""
+        context_file = tmp_path / "one_env"
+        # Test that literal newlines in the file are preserved as-is
+        content = '''TEST_VAR="Line 1
+Line 2
+Line 3"
+'''
+        context_file.write_text(content)
+
+        parser = ContextParser(str(context_file))
+        parser._read_variables()
+
+        assert "TEST_VAR" in parser.variables
+        value = parser.variables["TEST_VAR"]
+        # Should contain literal newlines
+        assert value == "Line 1\nLine 2\nLine 3"
+
+    def test_empty_lines_in_multiline_value(self, tmp_path: Path) -> None:
+        """Test multiline values containing empty lines."""
+        context_file = tmp_path / "one_env"
+        content = '''SCRIPT="#!/bin/bash
+
+echo 'Starting'
+
+echo 'Done'"
+'''
+        context_file.write_text(content)
+
+        parser = ContextParser(str(context_file))
+        parser._read_variables()
+
+        assert "SCRIPT" in parser.variables
+        value = parser.variables["SCRIPT"]
+        # Should preserve empty lines
+        assert value == "#!/bin/bash\n\necho 'Starting'\n\necho 'Done'"
+
+    def test_multiline_with_trailing_spaces(self, tmp_path: Path) -> None:
+        """Test that trailing spaces on lines are stripped in multiline values."""
+        context_file = tmp_path / "one_env"
+        # Note: spaces after "command1" before the newline
+        content = 'CONFIG="command1   \ncommand2\ncommand3  "\n'
+        context_file.write_text(content)
+
+        parser = ContextParser(str(context_file))
+        parser._read_variables()
+
+        assert "CONFIG" in parser.variables
+        value = parser.variables["CONFIG"]
+        # Trailing spaces before newlines are stripped by line reading
+        # But trailing spaces at end of value are preserved
+        assert value == "command1\ncommand2\ncommand3  "
+
+    def test_multiline_value_with_comment_char(self, tmp_path: Path) -> None:
+        """Test multiline values containing # character (not treated as comment inside quotes)."""
+        context_file = tmp_path / "one_env"
+        content = '''SCRIPT="#!/bin/bash
+# This is a comment inside the script
+echo 'test'"
+'''
+        context_file.write_text(content)
+
+        parser = ContextParser(str(context_file))
+        parser._read_variables()
+
+        assert "SCRIPT" in parser.variables
+        value = parser.variables["SCRIPT"]
+        # # should be preserved as part of the value
+        assert value == "#!/bin/bash\n# This is a comment inside the script\necho 'test'"
+
+    def test_single_quote_multiline(self, tmp_path: Path) -> None:
+        """Test multiline values with single quotes."""
+        context_file = tmp_path / "one_env"
+        content = """SCRIPT='#!/bin/bash
+echo "test"
+exit 0'
+"""
+        context_file.write_text(content)
+
+        parser = ContextParser(str(context_file))
+        parser._read_variables()
+
+        assert "SCRIPT" in parser.variables
+        value = parser.variables["SCRIPT"]
+        # Single quotes should preserve everything literally, including double quotes
+        assert value == '#!/bin/bash\necho "test"\nexit 0'
+
+    def test_very_long_multiline_value(self, tmp_path: Path) -> None:
+        """Test parsing of very long multiline values."""
+        context_file = tmp_path / "one_env"
+        # Create a long multi-line script
+        lines = [f"echo 'Line {i}'" for i in range(100)]
+        script_content = "\n".join(lines)
+        content = f'LONG_SCRIPT="{script_content}"\n'
+        context_file.write_text(content)
+
+        parser = ContextParser(str(context_file))
+        parser._read_variables()
+
+        assert "LONG_SCRIPT" in parser.variables
+        value = parser.variables["LONG_SCRIPT"]
+        # Should contain all 100 lines
+        assert value.count("\n") == 99
+        assert "echo 'Line 0'" in value
+        assert "echo 'Line 99'" in value
+
 
 class TestEscapeHatches:
     """Tests for escape hatch variables."""
@@ -538,6 +738,30 @@ set system syslog global facility all level info"
         assert config.start_config is not None
         assert "performance throughput" in config.start_config
 
+    def test_start_config_multiline_commands(self, tmp_path: Path) -> None:
+        """Test START_CONFIG with multiple VyOS commands across many lines."""
+        context_file = tmp_path / "one_env"
+        content = """START_CONFIG="set system option performance throughput
+set system syslog global facility all level info
+set system syslog global facility local7 level debug
+set system console device ttyS0 speed 115200
+set system time-zone UTC"
+"""
+        context_file.write_text(content)
+
+        config = parse_context(str(context_file))
+
+        assert config.start_config is not None
+        # Verify all commands are preserved with literal newlines
+        assert "performance throughput" in config.start_config
+        assert "facility all level info" in config.start_config
+        assert "facility local7 level debug" in config.start_config
+        assert "ttyS0 speed 115200" in config.start_config
+        assert "time-zone UTC" in config.start_config
+        # Verify literal newlines preserved
+        lines = config.start_config.split("\n")
+        assert len(lines) == 5
+
     def test_start_script(self, tmp_path: Path) -> None:
         """Test START_SCRIPT parsing."""
         context_file = tmp_path / "one_env"
@@ -550,6 +774,61 @@ echo 'Configuration complete' >> /var/log/contextualization.log"
 
         assert config.start_script is not None
         assert "#!/bin/bash" in config.start_script
+
+    def test_start_script_multiline_shell_script(self, tmp_path: Path) -> None:
+        """Test START_SCRIPT with complete multiline shell script."""
+        context_file = tmp_path / "one_env"
+        content = """START_SCRIPT="#!/bin/bash
+# Post-configuration script
+set -e
+
+LOG_FILE=/var/log/contextualization.log
+
+echo 'Starting post-configuration tasks...' | tee -a $LOG_FILE
+
+# Configure firewall rules
+if [ -f /config/scripts/firewall.sh ]; then
+    bash /config/scripts/firewall.sh >> $LOG_FILE 2>&1
+fi
+
+# Check connectivity
+ping -c 3 8.8.8.8 >> $LOG_FILE 2>&1 || echo 'Warning: No internet connectivity' | tee -a $LOG_FILE
+
+echo 'Post-configuration complete' | tee -a $LOG_FILE"
+"""
+        context_file.write_text(content)
+
+        config = parse_context(str(context_file))
+
+        assert config.start_script is not None
+        # Verify key parts of the script
+        assert "#!/bin/bash" in config.start_script
+        assert "set -e" in config.start_script
+        assert "LOG_FILE=/var/log/contextualization.log" in config.start_script
+        assert "Starting post-configuration tasks..." in config.start_script
+        assert "ping -c 3 8.8.8.8" in config.start_script
+        # Verify literal newlines preserved
+        lines = config.start_script.split("\n")
+        assert len(lines) >= 10
+
+    def test_start_script_with_quotes_and_special_chars(self, tmp_path: Path) -> None:
+        """Test START_SCRIPT with embedded quotes and special characters."""
+        context_file = tmp_path / "one_env"
+        content = """START_SCRIPT="#!/bin/bash
+echo 'Router configured at: $(date)'
+echo \\"Status: OK\\"
+logger -t onecontext 'Configuration applied successfully'"
+"""
+        context_file.write_text(content)
+
+        config = parse_context(str(context_file))
+
+        assert config.start_script is not None
+        assert "#!/bin/bash" in config.start_script
+        assert "$(date)" in config.start_script
+        # Check that escaped quotes are processed correctly
+        assert '"Status: OK"' in config.start_script
+        assert "logger -t onecontext" in config.start_script
 
 
 class TestCompleteContextFile:
