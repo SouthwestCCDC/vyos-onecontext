@@ -111,10 +111,10 @@ build {
   }
 
   # Configure DNS for build-time network access
-  # QEMU user-mode networking provides DNS at 10.0.2.3
+  # Use public DNS servers since QEMU's user-mode DNS (10.0.2.3) may not forward properly
   provisioner "shell" {
     inline = [
-      "echo 'nameserver 10.0.2.3' | sudo tee /etc/resolv.conf"
+      "echo -e 'nameserver 8.8.8.8\\nnameserver 1.1.1.1' | sudo tee /etc/resolv.conf"
     ]
   }
 
