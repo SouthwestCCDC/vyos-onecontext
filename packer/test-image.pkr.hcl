@@ -115,38 +115,12 @@ build {
     destination = "/tmp/vyos-onecontext-src/README.md"
   }
 
-  # Debug: Show network state before attempting external connections
-  provisioner "shell" {
-    inline = [
-      "echo '=== Network Diagnostics ==='",
-      "echo '--- IP addresses ---'",
-      "ip addr show",
-      "echo '--- Routes ---'",
-      "ip route show",
-      "echo '--- Current resolv.conf ---'",
-      "cat /etc/resolv.conf",
-      "echo '--- Testing gateway ping ---'",
-      "ping -c 2 10.0.2.2 || true",
-      "echo '--- Testing external IP ping ---'",
-      "ping -c 2 8.8.8.8 || true",
-      "echo '--- Testing DNS with dig ---'",
-      "dig @10.0.2.3 google.com || true",
-      "echo '--- Testing DNS with nslookup ---'",
-      "nslookup google.com 10.0.2.3 || true",
-      "echo '=== End Diagnostics ==='"
-    ]
-  }
-
   # Configure DNS for build-time network access
-  # VyOS may overwrite resolv.conf, so we also add a backup approach
+  # VyOS's resolv.conf is auto-generated and empty, so we set nameserver for SLIRP
   provisioner "shell" {
     inline = [
-      # Set up DNS persistently
       "echo 'nameserver 10.0.2.3' | sudo tee /etc/resolv.conf",
-      # Wait a moment for changes to settle
-      "sleep 2",
-      # Verify DNS works before proceeding
-      "nslookup google.com 10.0.2.3"
+      "sleep 2"
     ]
   }
 
