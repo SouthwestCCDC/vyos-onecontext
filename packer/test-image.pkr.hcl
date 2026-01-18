@@ -138,15 +138,23 @@ build {
   }
 
   # Configure DNS for build-time network access
+  # VyOS may overwrite resolv.conf, so we also add a backup approach
   provisioner "shell" {
     inline = [
-      "echo 'nameserver 10.0.2.3' | sudo tee /etc/resolv.conf"
+      # Set up DNS persistently
+      "echo 'nameserver 10.0.2.3' | sudo tee /etc/resolv.conf",
+      # Wait a moment for changes to settle
+      "sleep 2",
+      # Verify DNS works before proceeding
+      "nslookup google.com 10.0.2.3"
     ]
   }
 
   # Create venv and install the package using uv
   provisioner "shell" {
     inline = [
+      # Ensure resolv.conf is set (VyOS might have overwritten it between provisioners)
+      "echo 'nameserver 10.0.2.3' | sudo tee /etc/resolv.conf",
       # Install uv
       "curl -LsSf https://astral.sh/uv/install.sh | sudo sh",
       # Create virtual environment and install package
