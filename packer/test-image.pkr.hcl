@@ -170,16 +170,17 @@ build {
     ]
   }
 
-  # Install the postconfig bootup script
+  # Install the preconfig bootup script (runs before config load, unlike postconfig)
+  # We use preconfig because we delete config.boot, so postconfig never runs
   provisioner "file" {
     source      = "${var.source_dir}/packer/files/vyos-postconfig-bootup.script"
-    destination = "/tmp/vyos-postconfig-bootup.script"
+    destination = "/tmp/vyos-preconfig-bootup.script"
   }
 
   provisioner "shell" {
     inline = [
-      "sudo mv /tmp/vyos-postconfig-bootup.script /config/scripts/vyos-postconfig-bootup.script",
-      "sudo chmod 755 /config/scripts/vyos-postconfig-bootup.script"
+      "sudo mv /tmp/vyos-preconfig-bootup.script /config/scripts/vyos-preconfig-bootup.script",
+      "sudo chmod 755 /config/scripts/vyos-preconfig-bootup.script"
     ]
   }
 
