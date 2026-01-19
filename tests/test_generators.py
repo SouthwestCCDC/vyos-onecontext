@@ -60,8 +60,7 @@ class TestSshKeyGenerator:
             "user_at_host key AAAAB3NzaC1yc2EAAAADAQABAAABAQC..."
         ) in commands[1]
         assert (
-            "set system login user vyos authentication public-keys "
-            "user_at_host type ssh-rsa"
+            "set system login user vyos authentication public-keys user_at_host type ssh-rsa"
         ) in commands[2]
 
     def test_generate_with_ed25519_key(self):
@@ -826,8 +825,7 @@ class TestVrfGenerator:
         assert commands[0] == "set vrf name management table 100"
         assert commands[1] == "set interfaces ethernet eth0 vrf management"
         assert commands[2] == (
-            "set vrf name management protocols static route 0.0.0.0/0 "
-            "next-hop 10.0.0.254"
+            "set vrf name management protocols static route 0.0.0.0/0 next-hop 10.0.0.254"
         )
 
     def test_generate_multiple_management_interfaces(self):
@@ -857,8 +855,7 @@ class TestVrfGenerator:
         assert "set interfaces ethernet eth1 vrf management" in commands
         # eth0 should provide the gateway (lowest numbered)
         assert commands[3] == (
-            "set vrf name management protocols static route 0.0.0.0/0 "
-            "next-hop 10.0.0.254"
+            "set vrf name management protocols static route 0.0.0.0/0 next-hop 10.0.0.254"
         )
 
     def test_generate_mixed_management_and_non_management(self):
@@ -887,8 +884,7 @@ class TestVrfGenerator:
         # Only eth1 should be in management VRF
         assert commands[1] == "set interfaces ethernet eth1 vrf management"
         assert commands[2] == (
-            "set vrf name management protocols static route 0.0.0.0/0 "
-            "next-hop 192.168.1.254"
+            "set vrf name management protocols static route 0.0.0.0/0 next-hop 192.168.1.254"
         )
 
     def test_generate_management_interface_no_gateway(self):
@@ -959,8 +955,7 @@ class TestVrfGenerator:
 
         # eth0 should provide the gateway (lowest numbered)
         assert commands[-1] == (
-            "set vrf name management protocols static route 0.0.0.0/0 "
-            "next-hop 10.0.0.254"
+            "set vrf name management protocols static route 0.0.0.0/0 next-hop 10.0.0.254"
         )
 
     def test_generate_gateway_selection_natural_sorting(self):
@@ -986,8 +981,7 @@ class TestVrfGenerator:
 
         # eth2 should provide the gateway (2 < 10 numerically)
         assert commands[-1] == (
-            "set vrf name management protocols static route 0.0.0.0/0 "
-            "next-hop 10.2.0.254"
+            "set vrf name management protocols static route 0.0.0.0/0 next-hop 10.2.0.254"
         )
 
     def test_generate_gateway_fallback_to_later_interface(self):
@@ -1013,8 +1007,7 @@ class TestVrfGenerator:
 
         # eth1 should provide the gateway since eth0's is invalid
         assert commands[-1] == (
-            "set vrf name management protocols static route 0.0.0.0/0 "
-            "next-hop 192.168.1.254"
+            "set vrf name management protocols static route 0.0.0.0/0 next-hop 192.168.1.254"
         )
 
     def test_generate_empty_interfaces(self):
@@ -1060,8 +1053,7 @@ class TestGenerateConfigWithVrf:
         assert "set vrf name management table 100" in commands
         assert "set interfaces ethernet eth1 vrf management" in commands
         assert (
-            "set vrf name management protocols static route 0.0.0.0/0 "
-            "next-hop 192.168.1.254"
+            "set vrf name management protocols static route 0.0.0.0/0 next-hop 192.168.1.254"
         ) in commands
         # SSH VRF binding
         assert "set service ssh vrf management" in commands
@@ -1116,9 +1108,7 @@ class TestGenerateConfigWithVrf:
             i for i, cmd in enumerate(commands) if cmd.startswith("set protocols static")
         )
         vrf_idx = next(i for i, cmd in enumerate(commands) if "vrf name" in cmd)
-        ssh_vrf_idx = next(
-            i for i, cmd in enumerate(commands) if "service ssh vrf" in cmd
-        )
+        ssh_vrf_idx = next(i for i, cmd in enumerate(commands) if "service ssh vrf" in cmd)
 
         # Interfaces -> Routing -> VRF -> SSH VRF
         assert interface_idx < routing_idx
@@ -1364,7 +1354,8 @@ class TestGenerateConfigWithOspf:
                 InterfaceConfig(
                     name="eth1",
                     ip=IPv4Address("10.64.1.1"),
-                    mask="255.255.255.0"),
+                    mask="255.255.255.0",
+                ),
             ],
             ospf=OspfConfig(
                 enabled=True,
@@ -1414,7 +1405,8 @@ class TestGenerateConfigWithOspf:
                 InterfaceConfig(
                     name="eth1",
                     ip=IPv4Address("10.64.1.1"),
-                    mask="255.255.255.0"),
+                    mask="255.255.255.0",
+                ),
             ],
             ospf=OspfConfig(
                 enabled=True,
@@ -1431,9 +1423,7 @@ class TestGenerateConfigWithOspf:
             for i, cmd in enumerate(commands)
             if "interfaces ethernet" in cmd and " address " in cmd
         )
-        ssh_vrf_idx = next(
-            i for i, cmd in enumerate(commands) if "service ssh vrf" in cmd
-        )
+        ssh_vrf_idx = next(i for i, cmd in enumerate(commands) if "service ssh vrf" in cmd)
         ospf_idx = next(i for i, cmd in enumerate(commands) if "ospf" in cmd)
 
         # Interfaces -> ... -> SSH VRF -> OSPF
