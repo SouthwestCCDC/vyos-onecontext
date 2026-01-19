@@ -616,9 +616,10 @@ class TestStaticRoutesGenerator:
         gen = StaticRoutesGenerator(routes)
         commands = gen.generate()
 
-        assert len(commands) == 2
-        assert "set protocols static route 10.0.0.0/8 next-hop 10.63.255.1" in commands
-        assert "set protocols static route 10.0.0.0/8 next-hop 10.63.255.1 distance 10" in commands
+        assert len(commands) == 1
+        assert (
+            commands[0] == "set protocols static route 10.0.0.0/8 next-hop 10.63.255.1 distance 10"
+        )
 
     def test_generate_interface_route_with_distance(self):
         """Test interface route with custom administrative distance."""
@@ -637,9 +638,8 @@ class TestStaticRoutesGenerator:
         gen = StaticRoutesGenerator(routes)
         commands = gen.generate()
 
-        assert len(commands) == 2
-        assert "set protocols static route 192.168.0.0/16 interface eth2" in commands
-        assert "set protocols static route 192.168.0.0/16 interface eth2 distance 5" in commands
+        assert len(commands) == 1
+        assert commands[0] == "set protocols static route 192.168.0.0/16 interface eth2 distance 5"
 
     def test_generate_route_with_vrf(self):
         """Test route assigned to a VRF."""
@@ -684,14 +684,10 @@ class TestStaticRoutesGenerator:
         gen = StaticRoutesGenerator(routes)
         commands = gen.generate()
 
-        assert len(commands) == 2
+        assert len(commands) == 1
         assert (
-            "set vrf name management protocols static route 192.168.0.0/16 next-hop 10.0.1.254"
-            in commands
-        )
-        assert (
-            "set vrf name management protocols static route 192.168.0.0/16 "
-            "next-hop 10.0.1.254 distance 20" in commands
+            commands[0] == "set vrf name management protocols static route 192.168.0.0/16 "
+            "next-hop 10.0.1.254 distance 20"
         )
 
     def test_generate_multiple_routes(self):
@@ -818,14 +814,10 @@ class TestStaticRoutesGenerator:
         gen = StaticRoutesGenerator(routes)
         commands = gen.generate()
 
-        assert len(commands) == 2
+        assert len(commands) == 1
         assert (
-            "set vrf name management protocols static route 192.168.0.0/16 interface eth0"
-            in commands
-        )
-        assert (
-            "set vrf name management protocols static route 192.168.0.0/16 "
-            "interface eth0 distance 5" in commands
+            commands[0] == "set vrf name management protocols static route 192.168.0.0/16 "
+            "interface eth0 distance 5"
         )
 
 
@@ -1419,3 +1411,66 @@ class TestGenerateConfigWithVrf:
         assert interface_idx < routing_idx
         assert routing_idx < vrf_idx
         assert vrf_idx < ssh_vrf_idx
+
+    def test_generate_config_static_routes_with_management_vrf(self):
+        """Test that static routes referencing management VRF work correctly.
+
+        This verifies that:
+        1. Management VRF is created before static routes
+        2. Routes can reference the management VRF
+        3. Command ordering is: interfaces -> default routing -> VRF -> static routes -> SSH
+        """
+        from vyos_onecontext.models.routing import RoutesConfig, StaticRoute
+
+        config = RouterConfig(
+            hostname="router-01",
+            interfaces=[
+                InterfaceConfig(
+                    name="eth0",
+                    ip=IPv4Address("10.0.1.1"),
+                    mask="255.255.255.0",
+                    gateway=IPv4Address("10.0.1.254"),
+                ),
+                InterfaceConfig(
+                    name="eth1",
+                    ip=IPv4Address("192.168.1.1"),
+                    mask="255.255.255.0",
+                    gateway=IPv4Address("192.168.1.254"),
+                    management=True,
+                ),
+            ],
+            routes=RoutesConfig(
+                static=[
+                    StaticRoute(
+                        interface="eth1",
+                        destination="10.96.0.0/13",
+                        gateway="192.168.1.100",
+                        vrf="management",
+                    )
+                ]
+            ),
+        )
+        commands = generate_config(config)
+
+        # Verify VRF is created
+        assert "set vrf name management table 100" in commands
+
+        # Verify static route references the VRF
+        assert (
+            "set vrf name management protocols static route 10.96.0.0/13 next-hop 192.168.1.100"
+            in commands
+        )
+
+        # Verify command ordering: VRF creation comes BEFORE static routes
+        vrf_creation_idx = next(
+            i for i, cmd in enumerate(commands) if cmd == "set vrf name management table 100"
+        )
+        static_route_idx = next(
+            i
+            for i, cmd in enumerate(commands)
+            if cmd
+            == "set vrf name management protocols static route 10.96.0.0/13 next-hop 192.168.1.100"
+        )
+
+        # VRF must be created before routes can reference it
+        assert vrf_creation_idx < static_route_idx

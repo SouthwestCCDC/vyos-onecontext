@@ -41,11 +41,12 @@ def generate_config(config: RouterConfig) -> list[str]:
     # Routing (default gateway selection for non-management interfaces)
     commands.extend(RoutingGenerator(config.interfaces).generate())
 
-    # Static routes (ROUTES_JSON)
-    commands.extend(StaticRoutesGenerator(config.routes).generate())
-
-    # VRF configuration (management VRF)
+    # VRF configuration (management VRF) - must come BEFORE static routes
+    # since routes can reference VRFs
     commands.extend(VrfGenerator(config.interfaces).generate())
+
+    # Static routes (ROUTES_JSON) - must come AFTER VRF since routes can reference VRFs
+    commands.extend(StaticRoutesGenerator(config.routes).generate())
 
     # Services (SSH VRF binding)
     commands.extend(SshServiceGenerator(config.interfaces).generate())

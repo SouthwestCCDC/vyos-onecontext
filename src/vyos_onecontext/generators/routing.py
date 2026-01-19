@@ -125,17 +125,19 @@ class StaticRoutesGenerator(BaseGenerator):
             # Add next-hop or interface
             if route.gateway:
                 # Gateway route
-                commands.append(f"{base} next-hop {route.gateway}")
-
-                # Add distance if non-default
                 if route.distance != 1:
+                    # Non-default distance: include distance parameter
                     commands.append(f"{base} next-hop {route.gateway} distance {route.distance}")
+                else:
+                    # Default distance (1): omit distance parameter
+                    commands.append(f"{base} next-hop {route.gateway}")
             else:
                 # Interface route (no next-hop)
-                commands.append(f"{base} interface {route.interface}")
-
-                # Add distance if non-default
                 if route.distance != 1:
+                    # Non-default distance: include distance parameter
                     commands.append(f"{base} interface {route.interface} distance {route.distance}")
+                else:
+                    # Default distance (1): omit distance parameter
+                    commands.append(f"{base} interface {route.interface}")
 
         return commands
