@@ -116,10 +116,11 @@ build {
   }
 
   # Configure DNS for build-time network access
-  # VyOS's resolv.conf is auto-generated and empty, so we set nameserver for SLIRP
+  # Use Google DNS for more reliable IPv4 resolution (QEMU SLIRP supports forwarding)
   provisioner "shell" {
     inline = [
-      "echo 'nameserver 10.0.2.3' | sudo tee /etc/resolv.conf",
+      "echo 'nameserver 8.8.8.8' | sudo tee /etc/resolv.conf",
+      "echo 'nameserver 8.8.4.4' | sudo tee -a /etc/resolv.conf",
       "sleep 2"
     ]
   }
@@ -127,12 +128,14 @@ build {
   # Create venv and install the package using uv
   provisioner "shell" {
     inline = [
-      # Ensure resolv.conf is set (VyOS might have overwritten it between provisioners)
-      "echo 'nameserver 10.0.2.3' | sudo tee /etc/resolv.conf",
+      # Use Google DNS for more reliable IPv4 resolution
+      # QEMU SLIRP's DNS (10.0.2.3) sometimes only returns IPv6 addresses
+      "echo 'nameserver 8.8.8.8' | sudo tee /etc/resolv.conf",
+      "echo 'nameserver 8.8.4.4' | sudo tee -a /etc/resolv.conf",
       # Prefer IPv4 over IPv6 (QEMU SLIRP doesn't support IPv6)
       "echo 'precedence ::ffff:0:0/96 100' | sudo tee -a /etc/gai.conf",
-      # Wait for DNS to be ready using getent (respects resolv.conf, unlike nslookup)
-      "for i in $(seq 1 10); do getent hosts astral.sh && break; echo \"DNS attempt $i failed, retrying...\"; sleep 5; done",
+      # Wait for DNS to be ready - check for IPv4 address specifically
+      "for i in $(seq 1 10); do getent ahostsv4 astral.sh && break; echo \"DNS attempt $i failed, retrying...\"; sleep 5; done",
       # Install uv with retry (force IPv4 - QEMU SLIRP doesn't support IPv6)
       "curl -4 --retry 5 --retry-delay 5 --retry-connrefused -LsSf https://astral.sh/uv/install.sh | sudo UV_INSTALLER_DOWNLOAD_TIMEOUT=120 sh",
       # Create virtual environment and install package
