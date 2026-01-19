@@ -1100,7 +1100,9 @@ class TestGenerateConfigWithVrf:
 
         # Find indices of different command types
         interface_idx = next(
-            i for i, cmd in enumerate(commands) if "interfaces ethernet" in cmd
+            i
+            for i, cmd in enumerate(commands)
+            if "interfaces ethernet" in cmd and " address " in cmd
         )
         routing_idx = next(
             i for i, cmd in enumerate(commands) if cmd.startswith("set protocols static")
