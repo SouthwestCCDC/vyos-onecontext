@@ -7,6 +7,7 @@ configuration (interfaces, routing, NAT, etc.).
 
 from vyos_onecontext.generators.base import BaseGenerator
 from vyos_onecontext.generators.interface import InterfaceGenerator
+from vyos_onecontext.generators.ospf import OspfGenerator
 from vyos_onecontext.generators.routing import RoutingGenerator
 from vyos_onecontext.generators.service import SshServiceGenerator
 from vyos_onecontext.generators.system import HostnameGenerator, SshKeyGenerator
@@ -47,6 +48,9 @@ def generate_config(config: RouterConfig) -> list[str]:
     # Services (SSH VRF binding)
     commands.extend(SshServiceGenerator(config.interfaces).generate())
 
+    # OSPF dynamic routing
+    commands.extend(OspfGenerator(config.ospf).generate())
+
     # Future generators will be added here in later phases:
     # - Services (DHCP, DNS)
     # - NAT (source, destination, binat)
@@ -60,6 +64,7 @@ __all__ = [
     "BaseGenerator",
     "HostnameGenerator",
     "InterfaceGenerator",
+    "OspfGenerator",
     "RoutingGenerator",
     "SshKeyGenerator",
     "SshServiceGenerator",
