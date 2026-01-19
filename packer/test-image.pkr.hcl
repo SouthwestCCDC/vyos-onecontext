@@ -129,8 +129,12 @@ build {
     inline = [
       # Ensure resolv.conf is set (VyOS might have overwritten it between provisioners)
       "echo 'nameserver 10.0.2.3' | sudo tee /etc/resolv.conf",
-      # Install uv
-      "curl -LsSf https://astral.sh/uv/install.sh | sudo sh",
+      # Prefer IPv4 over IPv6 (QEMU SLIRP doesn't support IPv6)
+      "echo 'precedence ::ffff:0:0/96 100' | sudo tee -a /etc/gai.conf",
+      # Wait for DNS to be ready using getent (respects resolv.conf, unlike nslookup)
+      "for i in $(seq 1 10); do getent hosts astral.sh && break; echo \"DNS attempt $i failed, retrying...\"; sleep 5; done",
+      # Install uv with retry (force IPv4 - QEMU SLIRP doesn't support IPv6)
+      "curl -4 --retry 5 --retry-delay 5 --retry-connrefused -LsSf https://astral.sh/uv/install.sh | sudo UV_INSTALLER_DOWNLOAD_TIMEOUT=120 sh",
       # Create virtual environment and install package
       "sudo /root/.local/bin/uv venv /opt/vyos-onecontext/venv",
       "sudo /root/.local/bin/uv pip install --python /opt/vyos-onecontext/venv/bin/python /tmp/vyos-onecontext-src/",
