@@ -28,6 +28,7 @@ declare -a TEST_SCENARIOS=(
     "simple:Simple router"
     "quotes:Quote bug regression"
     "multi-interface:Multi-interface router"
+    "management-vrf:Management VRF"
 )
 
 TEMP_DIR=$(mktemp -d)
