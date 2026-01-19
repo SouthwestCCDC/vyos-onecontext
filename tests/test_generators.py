@@ -517,6 +517,271 @@ class TestRoutingGenerator:
         assert len(commands) == 0
 
 
+class TestStaticRoutesGenerator:
+    """Tests for static routes configuration generator."""
+
+    def test_generate_no_routes_config(self):
+        """Test generation with no routes configured (None)."""
+        from vyos_onecontext.generators.routing import StaticRoutesGenerator
+
+        gen = StaticRoutesGenerator(None)
+        commands = gen.generate()
+
+        assert len(commands) == 0
+
+    def test_generate_empty_routes_list(self):
+        """Test generation with empty routes list."""
+        from vyos_onecontext.generators.routing import StaticRoutesGenerator
+        from vyos_onecontext.models.routing import RoutesConfig
+
+        routes = RoutesConfig(static=[])
+        gen = StaticRoutesGenerator(routes)
+        commands = gen.generate()
+
+        assert len(commands) == 0
+
+    def test_generate_simple_gateway_route(self):
+        """Test simple static route with next-hop gateway."""
+        from vyos_onecontext.generators.routing import StaticRoutesGenerator
+        from vyos_onecontext.models.routing import RoutesConfig, StaticRoute
+
+        routes = RoutesConfig(
+            static=[
+                StaticRoute(
+                    interface="eth1",
+                    destination="10.96.0.0/13",
+                    gateway="10.63.255.1",
+                )
+            ]
+        )
+        gen = StaticRoutesGenerator(routes)
+        commands = gen.generate()
+
+        assert len(commands) == 1
+        assert commands[0] == "set protocols static route 10.96.0.0/13 next-hop 10.63.255.1"
+
+    def test_generate_default_route_via_gateway(self):
+        """Test default route (0.0.0.0/0) with gateway."""
+        from vyos_onecontext.generators.routing import StaticRoutesGenerator
+        from vyos_onecontext.models.routing import RoutesConfig, StaticRoute
+
+        routes = RoutesConfig(
+            static=[
+                StaticRoute(
+                    interface="eth0",
+                    destination="0.0.0.0/0",
+                    gateway="203.0.113.1",
+                )
+            ]
+        )
+        gen = StaticRoutesGenerator(routes)
+        commands = gen.generate()
+
+        assert len(commands) == 1
+        assert commands[0] == "set protocols static route 0.0.0.0/0 next-hop 203.0.113.1"
+
+    def test_generate_interface_route_no_gateway(self):
+        """Test interface route (no next-hop gateway specified)."""
+        from vyos_onecontext.generators.routing import StaticRoutesGenerator
+        from vyos_onecontext.models.routing import RoutesConfig, StaticRoute
+
+        routes = RoutesConfig(
+            static=[
+                StaticRoute(
+                    interface="eth2",
+                    destination="192.168.0.0/16",
+                )
+            ]
+        )
+        gen = StaticRoutesGenerator(routes)
+        commands = gen.generate()
+
+        assert len(commands) == 1
+        assert commands[0] == "set protocols static route 192.168.0.0/16 interface eth2"
+
+    def test_generate_route_with_custom_distance(self):
+        """Test route with custom administrative distance."""
+        from vyos_onecontext.generators.routing import StaticRoutesGenerator
+        from vyos_onecontext.models.routing import RoutesConfig, StaticRoute
+
+        routes = RoutesConfig(
+            static=[
+                StaticRoute(
+                    interface="eth1",
+                    destination="10.0.0.0/8",
+                    gateway="10.63.255.1",
+                    distance=10,
+                )
+            ]
+        )
+        gen = StaticRoutesGenerator(routes)
+        commands = gen.generate()
+
+        assert len(commands) == 2
+        assert "set protocols static route 10.0.0.0/8 next-hop 10.63.255.1" in commands
+        assert (
+            "set protocols static route 10.0.0.0/8 next-hop 10.63.255.1 distance 10"
+            in commands
+        )
+
+    def test_generate_interface_route_with_distance(self):
+        """Test interface route with custom administrative distance."""
+        from vyos_onecontext.generators.routing import StaticRoutesGenerator
+        from vyos_onecontext.models.routing import RoutesConfig, StaticRoute
+
+        routes = RoutesConfig(
+            static=[
+                StaticRoute(
+                    interface="eth2",
+                    destination="192.168.0.0/16",
+                    distance=5,
+                )
+            ]
+        )
+        gen = StaticRoutesGenerator(routes)
+        commands = gen.generate()
+
+        assert len(commands) == 2
+        assert "set protocols static route 192.168.0.0/16 interface eth2" in commands
+        assert "set protocols static route 192.168.0.0/16 interface eth2 distance 5" in commands
+
+    def test_generate_route_with_vrf(self):
+        """Test route assigned to a VRF."""
+        from vyos_onecontext.generators.routing import StaticRoutesGenerator
+        from vyos_onecontext.models.routing import RoutesConfig, StaticRoute
+
+        routes = RoutesConfig(
+            static=[
+                StaticRoute(
+                    interface="eth0",
+                    destination="192.168.0.0/16",
+                    gateway="10.0.1.254",
+                    vrf="management",
+                )
+            ]
+        )
+        gen = StaticRoutesGenerator(routes)
+        commands = gen.generate()
+
+        assert len(commands) == 1
+        assert (
+            commands[0]
+            == "set vrf name management protocols static route 192.168.0.0/16 next-hop 10.0.1.254"
+        )
+
+    def test_generate_vrf_route_with_distance(self):
+        """Test VRF route with custom distance."""
+        from vyos_onecontext.generators.routing import StaticRoutesGenerator
+        from vyos_onecontext.models.routing import RoutesConfig, StaticRoute
+
+        routes = RoutesConfig(
+            static=[
+                StaticRoute(
+                    interface="eth0",
+                    destination="192.168.0.0/16",
+                    gateway="10.0.1.254",
+                    vrf="management",
+                    distance=20,
+                )
+            ]
+        )
+        gen = StaticRoutesGenerator(routes)
+        commands = gen.generate()
+
+        assert len(commands) == 2
+        assert (
+            "set vrf name management protocols static route 192.168.0.0/16 next-hop 10.0.1.254"
+            in commands
+        )
+        assert (
+            "set vrf name management protocols static route 192.168.0.0/16 "
+            "next-hop 10.0.1.254 distance 20" in commands
+        )
+
+    def test_generate_multiple_routes(self):
+        """Test generation with multiple static routes."""
+        from vyos_onecontext.generators.routing import StaticRoutesGenerator
+        from vyos_onecontext.models.routing import RoutesConfig, StaticRoute
+
+        routes = RoutesConfig(
+            static=[
+                StaticRoute(
+                    interface="eth1",
+                    destination="0.0.0.0/0",
+                    gateway="10.63.255.1",
+                ),
+                StaticRoute(
+                    interface="eth2",
+                    destination="10.96.0.0/13",
+                    gateway="10.69.100.1",
+                ),
+                StaticRoute(
+                    interface="eth3",
+                    destination="192.168.0.0/16",
+                ),
+            ]
+        )
+        gen = StaticRoutesGenerator(routes)
+        commands = gen.generate()
+
+        assert len(commands) == 3
+        assert "set protocols static route 0.0.0.0/0 next-hop 10.63.255.1" in commands
+        assert "set protocols static route 10.96.0.0/13 next-hop 10.69.100.1" in commands
+        assert "set protocols static route 192.168.0.0/16 interface eth3" in commands
+
+    def test_generate_mixed_vrf_and_main_routes(self):
+        """Test generation with routes in both main routing table and VRF."""
+        from vyos_onecontext.generators.routing import StaticRoutesGenerator
+        from vyos_onecontext.models.routing import RoutesConfig, StaticRoute
+
+        routes = RoutesConfig(
+            static=[
+                StaticRoute(
+                    interface="eth1",
+                    destination="0.0.0.0/0",
+                    gateway="10.63.255.1",
+                ),
+                StaticRoute(
+                    interface="eth0",
+                    destination="192.168.0.0/16",
+                    gateway="10.0.1.254",
+                    vrf="management",
+                ),
+            ]
+        )
+        gen = StaticRoutesGenerator(routes)
+        commands = gen.generate()
+
+        assert len(commands) == 2
+        assert "set protocols static route 0.0.0.0/0 next-hop 10.63.255.1" in commands
+        assert (
+            "set vrf name management protocols static route 192.168.0.0/16 next-hop 10.0.1.254"
+            in commands
+        )
+
+    def test_generate_route_default_distance_not_included(self):
+        """Test that default distance (1) is not explicitly set in commands."""
+        from vyos_onecontext.generators.routing import StaticRoutesGenerator
+        from vyos_onecontext.models.routing import RoutesConfig, StaticRoute
+
+        routes = RoutesConfig(
+            static=[
+                StaticRoute(
+                    interface="eth1",
+                    destination="10.0.0.0/8",
+                    gateway="10.63.255.1",
+                    distance=1,  # Default distance
+                )
+            ]
+        )
+        gen = StaticRoutesGenerator(routes)
+        commands = gen.generate()
+
+        # Should only have the base next-hop command, not the distance command
+        assert len(commands) == 1
+        assert commands[0] == "set protocols static route 10.0.0.0/8 next-hop 10.63.255.1"
+
+
 class TestGenerateConfig:
     """Tests for top-level generate_config function."""
 
