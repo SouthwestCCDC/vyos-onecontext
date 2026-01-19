@@ -36,6 +36,19 @@ ETH0_VROUTER_MANAGEMENT="YES"
 - Multiple interfaces can have `VROUTER_MANAGEMENT="YES"` (all go in management VRF)
 - Netmask is converted to CIDR prefix automatically
 
+**VRF Behavior:**
+
+When any interface has `VROUTER_MANAGEMENT="YES"`:
+
+- A management VRF is created (`set vrf name management table 100`)
+- The interface is assigned to the VRF (`set interfaces ethernet ethX vrf management`)
+- SSH is bound to the management VRF (`set service ssh vrf management`)
+- The management VRF gets its own default gateway (first management interface with a valid gateway)
+- Management interfaces are excluded from main VRF default gateway selection
+
+This isolates management traffic from the data plane. SSH will only be accessible via management
+interface IPs. Multiple management interfaces are supported for redundancy.
+
 ### NIC Alias Variables (Secondary IPs)
 
 OpenNebula NIC aliases provide additional IP addresses on the same interface. These are
