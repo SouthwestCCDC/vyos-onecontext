@@ -30,6 +30,7 @@ declare -a TEST_SCENARIOS=(
     "multi-interface:Multi-interface router"
     "management-vrf:Management VRF"
     "static-routes:Static routing"
+    "ospf:OSPF dynamic routing"
 )
 
 TEMP_DIR=$(mktemp -d)
