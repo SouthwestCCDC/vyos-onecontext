@@ -213,7 +213,7 @@ START_SCRIPT="#!/bin/bash\necho 'Custom setup'"
 | SSH keys | `SSH_PUBLIC_KEY` | **Implemented** |
 | Cross-reference validation | (automatic) | **Implemented** |
 | Custom scripts | `START_SCRIPT` | **Implemented** |
-| Management VRF | `ETHx_VROUTER_MANAGEMENT` | Model ready, generator pending |
+| Management VRF | `ETHx_VROUTER_MANAGEMENT` | **Implemented** |
 | Static routes | `ROUTES_JSON` | Model ready, generator pending |
 | OSPF | `OSPF_JSON` | Model ready, generator pending |
 | DHCP server | `DHCP_JSON` | Model ready, generator pending |

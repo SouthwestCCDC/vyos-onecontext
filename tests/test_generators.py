@@ -3,10 +3,14 @@
 from ipaddress import IPv4Address
 
 from vyos_onecontext.generators import (
+    VRF_NAME,
+    VRF_TABLE_ID,
     HostnameGenerator,
     InterfaceGenerator,
     RoutingGenerator,
     SshKeyGenerator,
+    SshServiceGenerator,
+    VrfGenerator,
     generate_config,
 )
 from vyos_onecontext.models import AliasConfig, InterfaceConfig, RouterConfig
@@ -679,3 +683,436 @@ class TestGenerateConfig:
         # System -> Interfaces -> Routing
         assert hostname_idx < interface_idx
         assert interface_idx < routing_idx
+
+
+class TestSshServiceGenerator:
+    """Tests for SSH service configuration generator."""
+
+    def test_no_management_vrf(self):
+        """No SSH VRF binding when no management interfaces."""
+        interfaces = [
+            InterfaceConfig(
+                name="eth0",
+                ip=IPv4Address("10.0.0.1"),
+                mask="255.255.255.0",
+                gateway=IPv4Address("10.0.0.254"),
+            )
+        ]
+        gen = SshServiceGenerator(interfaces)
+        commands = gen.generate()
+
+        assert len(commands) == 0
+
+    def test_ssh_bound_to_management_vrf(self):
+        """SSH bound to management VRF when management interface exists."""
+        interfaces = [
+            InterfaceConfig(
+                name="eth0",
+                ip=IPv4Address("10.0.0.1"),
+                mask="255.255.255.0",
+                gateway=IPv4Address("10.0.0.254"),
+                management=True,
+            )
+        ]
+        gen = SshServiceGenerator(interfaces)
+        commands = gen.generate()
+
+        assert len(commands) == 1
+        assert commands[0] == "set service ssh vrf management"
+
+    def test_ssh_bound_with_multiple_management_interfaces(self):
+        """SSH bound to management VRF when multiple management interfaces exist."""
+        interfaces = [
+            InterfaceConfig(
+                name="eth0",
+                ip=IPv4Address("10.0.0.1"),
+                mask="255.255.255.0",
+                gateway=IPv4Address("10.0.0.254"),
+                management=True,
+            ),
+            InterfaceConfig(
+                name="eth1",
+                ip=IPv4Address("192.168.1.1"),
+                mask="255.255.255.0",
+                gateway=IPv4Address("192.168.1.254"),
+                management=True,
+            ),
+        ]
+        gen = SshServiceGenerator(interfaces)
+        commands = gen.generate()
+
+        # Only one SSH VRF binding command regardless of number of management interfaces
+        assert len(commands) == 1
+        assert commands[0] == "set service ssh vrf management"
+
+    def test_ssh_bound_with_mixed_interfaces(self):
+        """SSH bound to management VRF when mix of management and non-management interfaces."""
+        interfaces = [
+            InterfaceConfig(
+                name="eth0",
+                ip=IPv4Address("10.0.0.1"),
+                mask="255.255.255.0",
+                gateway=IPv4Address("10.0.0.254"),
+                management=False,
+            ),
+            InterfaceConfig(
+                name="eth1",
+                ip=IPv4Address("192.168.1.1"),
+                mask="255.255.255.0",
+                gateway=IPv4Address("192.168.1.254"),
+                management=True,
+            ),
+        ]
+        gen = SshServiceGenerator(interfaces)
+        commands = gen.generate()
+
+        assert len(commands) == 1
+        assert commands[0] == "set service ssh vrf management"
+
+    def test_empty_interfaces(self):
+        """No SSH VRF binding with empty interface list."""
+        gen = SshServiceGenerator([])
+        commands = gen.generate()
+
+        assert len(commands) == 0
+
+
+class TestVrfGenerator:
+    """Tests for VRF configuration generator."""
+
+    def test_constants_exported(self):
+        """Test that VRF constants are exported correctly."""
+        assert VRF_NAME == "management"
+        assert VRF_TABLE_ID == 100
+
+    def test_generate_no_management_interfaces(self):
+        """Test VRF generation with no management interfaces."""
+        interfaces = [
+            InterfaceConfig(
+                name="eth0",
+                ip=IPv4Address("10.0.0.1"),
+                mask="255.255.255.0",
+                gateway=IPv4Address("10.0.0.254"),
+            )
+        ]
+        gen = VrfGenerator(interfaces)
+        commands = gen.generate()
+
+        assert len(commands) == 0
+
+    def test_generate_single_management_interface(self):
+        """Test VRF generation with single management interface."""
+        interfaces = [
+            InterfaceConfig(
+                name="eth0",
+                ip=IPv4Address("10.0.0.1"),
+                mask="255.255.255.0",
+                gateway=IPv4Address("10.0.0.254"),
+                management=True,
+            )
+        ]
+        gen = VrfGenerator(interfaces)
+        commands = gen.generate()
+
+        assert len(commands) == 3
+        assert commands[0] == "set vrf name management table 100"
+        assert commands[1] == "set interfaces ethernet eth0 vrf management"
+        assert commands[2] == (
+            "set vrf name management protocols static route 0.0.0.0/0 "
+            "next-hop 10.0.0.254"
+        )
+
+    def test_generate_multiple_management_interfaces(self):
+        """Test VRF generation with multiple management interfaces."""
+        interfaces = [
+            InterfaceConfig(
+                name="eth0",
+                ip=IPv4Address("10.0.0.1"),
+                mask="255.255.255.0",
+                gateway=IPv4Address("10.0.0.254"),
+                management=True,
+            ),
+            InterfaceConfig(
+                name="eth1",
+                ip=IPv4Address("192.168.1.1"),
+                mask="255.255.255.0",
+                gateway=IPv4Address("192.168.1.254"),
+                management=True,
+            ),
+        ]
+        gen = VrfGenerator(interfaces)
+        commands = gen.generate()
+
+        assert len(commands) == 4
+        assert commands[0] == "set vrf name management table 100"
+        assert "set interfaces ethernet eth0 vrf management" in commands
+        assert "set interfaces ethernet eth1 vrf management" in commands
+        # eth0 should provide the gateway (lowest numbered)
+        assert commands[3] == (
+            "set vrf name management protocols static route 0.0.0.0/0 "
+            "next-hop 10.0.0.254"
+        )
+
+    def test_generate_mixed_management_and_non_management(self):
+        """Test VRF generation with mixed interface types."""
+        interfaces = [
+            InterfaceConfig(
+                name="eth0",
+                ip=IPv4Address("10.0.0.1"),
+                mask="255.255.255.0",
+                gateway=IPv4Address("10.0.0.254"),
+                management=False,
+            ),
+            InterfaceConfig(
+                name="eth1",
+                ip=IPv4Address("192.168.1.1"),
+                mask="255.255.255.0",
+                gateway=IPv4Address("192.168.1.254"),
+                management=True,
+            ),
+        ]
+        gen = VrfGenerator(interfaces)
+        commands = gen.generate()
+
+        assert len(commands) == 3
+        assert commands[0] == "set vrf name management table 100"
+        # Only eth1 should be in management VRF
+        assert commands[1] == "set interfaces ethernet eth1 vrf management"
+        assert commands[2] == (
+            "set vrf name management protocols static route 0.0.0.0/0 "
+            "next-hop 192.168.1.254"
+        )
+
+    def test_generate_management_interface_no_gateway(self):
+        """Test VRF generation with management interface without gateway."""
+        interfaces = [
+            InterfaceConfig(
+                name="eth0",
+                ip=IPv4Address("10.0.0.1"),
+                mask="255.255.255.0",
+                management=True,
+                # No gateway
+            )
+        ]
+        gen = VrfGenerator(interfaces)
+        commands = gen.generate()
+
+        # Should have VRF creation and interface assignment, but no route
+        assert len(commands) == 2
+        assert commands[0] == "set vrf name management table 100"
+        assert commands[1] == "set interfaces ethernet eth0 vrf management"
+
+    def test_generate_management_interface_gateway_equals_ip(self):
+        """Test VRF generation when gateway equals interface IP."""
+        interfaces = [
+            InterfaceConfig(
+                name="eth0",
+                ip=IPv4Address("10.0.0.1"),
+                mask="255.255.255.0",
+                gateway=IPv4Address("10.0.0.1"),  # Gateway == interface IP
+                management=True,
+            )
+        ]
+        gen = VrfGenerator(interfaces)
+        commands = gen.generate()
+
+        # Should have VRF creation and interface assignment, but no route
+        assert len(commands) == 2
+        assert commands[0] == "set vrf name management table 100"
+        assert commands[1] == "set interfaces ethernet eth0 vrf management"
+
+    def test_generate_gateway_selection_lowest_numbered_wins(self):
+        """Test VRF gateway selection picks lowest numbered interface."""
+        interfaces = [
+            InterfaceConfig(
+                name="eth2",
+                ip=IPv4Address("172.16.0.1"),
+                mask="255.255.255.0",
+                gateway=IPv4Address("172.16.0.254"),
+                management=True,
+            ),
+            InterfaceConfig(
+                name="eth0",
+                ip=IPv4Address("10.0.0.1"),
+                mask="255.255.255.0",
+                gateway=IPv4Address("10.0.0.254"),
+                management=True,
+            ),
+            InterfaceConfig(
+                name="eth1",
+                ip=IPv4Address("192.168.1.1"),
+                mask="255.255.255.0",
+                gateway=IPv4Address("192.168.1.254"),
+                management=True,
+            ),
+        ]
+        gen = VrfGenerator(interfaces)
+        commands = gen.generate()
+
+        # eth0 should provide the gateway (lowest numbered)
+        assert commands[-1] == (
+            "set vrf name management protocols static route 0.0.0.0/0 "
+            "next-hop 10.0.0.254"
+        )
+
+    def test_generate_gateway_selection_natural_sorting(self):
+        """Test VRF gateway selection uses natural sorting (eth2 before eth10)."""
+        interfaces = [
+            InterfaceConfig(
+                name="eth10",
+                ip=IPv4Address("10.10.0.1"),
+                mask="255.255.255.0",
+                gateway=IPv4Address("10.10.0.254"),
+                management=True,
+            ),
+            InterfaceConfig(
+                name="eth2",
+                ip=IPv4Address("10.2.0.1"),
+                mask="255.255.255.0",
+                gateway=IPv4Address("10.2.0.254"),
+                management=True,
+            ),
+        ]
+        gen = VrfGenerator(interfaces)
+        commands = gen.generate()
+
+        # eth2 should provide the gateway (2 < 10 numerically)
+        assert commands[-1] == (
+            "set vrf name management protocols static route 0.0.0.0/0 "
+            "next-hop 10.2.0.254"
+        )
+
+    def test_generate_gateway_fallback_to_later_interface(self):
+        """Test VRF gateway selection falls back when first interface is invalid."""
+        interfaces = [
+            InterfaceConfig(
+                name="eth0",
+                ip=IPv4Address("10.0.0.1"),
+                mask="255.255.255.0",
+                gateway=IPv4Address("10.0.0.1"),  # Gateway == IP (invalid)
+                management=True,
+            ),
+            InterfaceConfig(
+                name="eth1",
+                ip=IPv4Address("192.168.1.1"),
+                mask="255.255.255.0",
+                gateway=IPv4Address("192.168.1.254"),  # Valid
+                management=True,
+            ),
+        ]
+        gen = VrfGenerator(interfaces)
+        commands = gen.generate()
+
+        # eth1 should provide the gateway since eth0's is invalid
+        assert commands[-1] == (
+            "set vrf name management protocols static route 0.0.0.0/0 "
+            "next-hop 192.168.1.254"
+        )
+
+    def test_generate_empty_interfaces(self):
+        """Test VRF generation with empty interface list."""
+        gen = VrfGenerator([])
+        commands = gen.generate()
+
+        assert len(commands) == 0
+
+
+class TestGenerateConfigWithVrf:
+    """Tests for generate_config function with VRF support."""
+
+    def test_generate_config_with_management_interface(self):
+        """Test config generation includes VRF commands for management interfaces."""
+        config = RouterConfig(
+            hostname="router-01",
+            interfaces=[
+                InterfaceConfig(
+                    name="eth0",
+                    ip=IPv4Address("10.0.1.1"),
+                    mask="255.255.255.0",
+                    gateway=IPv4Address("10.0.1.254"),
+                ),
+                InterfaceConfig(
+                    name="eth1",
+                    ip=IPv4Address("192.168.1.1"),
+                    mask="255.255.255.0",
+                    gateway=IPv4Address("192.168.1.254"),
+                    management=True,
+                ),
+            ],
+        )
+        commands = generate_config(config)
+
+        # Should have: hostname + 2 interfaces + default route + VRF (3 commands) + SSH VRF
+        assert "set system host-name router-01" in commands
+        assert "set interfaces ethernet eth0 address 10.0.1.1/24" in commands
+        assert "set interfaces ethernet eth1 address 192.168.1.1/24" in commands
+        # Default route from non-management interface
+        assert "set protocols static route 0.0.0.0/0 next-hop 10.0.1.254" in commands
+        # VRF commands
+        assert "set vrf name management table 100" in commands
+        assert "set interfaces ethernet eth1 vrf management" in commands
+        assert (
+            "set vrf name management protocols static route 0.0.0.0/0 "
+            "next-hop 192.168.1.254"
+        ) in commands
+        # SSH VRF binding
+        assert "set service ssh vrf management" in commands
+
+    def test_generate_config_no_management_interface(self):
+        """Test config generation has no VRF commands without management interfaces."""
+        config = RouterConfig(
+            hostname="router-01",
+            interfaces=[
+                InterfaceConfig(
+                    name="eth0",
+                    ip=IPv4Address("10.0.1.1"),
+                    mask="255.255.255.0",
+                    gateway=IPv4Address("10.0.1.254"),
+                ),
+            ],
+        )
+        commands = generate_config(config)
+
+        # Should NOT have any VRF commands
+        assert not any("vrf" in cmd for cmd in commands)
+
+    def test_generate_config_command_order_with_vrf(self):
+        """Test that VRF commands come after routing commands, SSH VRF after VRF."""
+        config = RouterConfig(
+            hostname="router-01",
+            interfaces=[
+                InterfaceConfig(
+                    name="eth0",
+                    ip=IPv4Address("10.0.1.1"),
+                    mask="255.255.255.0",
+                    gateway=IPv4Address("10.0.1.254"),
+                ),
+                InterfaceConfig(
+                    name="eth1",
+                    ip=IPv4Address("192.168.1.1"),
+                    mask="255.255.255.0",
+                    gateway=IPv4Address("192.168.1.254"),
+                    management=True,
+                ),
+            ],
+        )
+        commands = generate_config(config)
+
+        # Find indices of different command types
+        interface_idx = next(
+            i
+            for i, cmd in enumerate(commands)
+            if "interfaces ethernet" in cmd and " address " in cmd
+        )
+        routing_idx = next(
+            i for i, cmd in enumerate(commands) if cmd.startswith("set protocols static")
+        )
+        vrf_idx = next(i for i, cmd in enumerate(commands) if "vrf name" in cmd)
+        ssh_vrf_idx = next(
+            i for i, cmd in enumerate(commands) if "service ssh vrf" in cmd
+        )
+
+        # Interfaces -> Routing -> VRF -> SSH VRF
+        assert interface_idx < routing_idx
+        assert routing_idx < vrf_idx
+        assert vrf_idx < ssh_vrf_idx
