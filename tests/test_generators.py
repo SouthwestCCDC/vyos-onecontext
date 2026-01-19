@@ -1720,7 +1720,8 @@ class TestGenerateConfigWithOspf:
                 InterfaceConfig(
                     name="eth1",
                     ip=IPv4Address("10.64.1.1"),
-                    mask="255.255.255.0"),
+                    mask="255.255.255.0",
+                ),
             ],
             ospf=OspfConfig(
                 enabled=True,
@@ -1770,7 +1771,8 @@ class TestGenerateConfigWithOspf:
                 InterfaceConfig(
                     name="eth1",
                     ip=IPv4Address("10.64.1.1"),
-                    mask="255.255.255.0"),
+                    mask="255.255.255.0",
+                ),
             ],
             ospf=OspfConfig(
                 enabled=True,
@@ -1787,9 +1789,7 @@ class TestGenerateConfigWithOspf:
             for i, cmd in enumerate(commands)
             if "interfaces ethernet" in cmd and " address " in cmd
         )
-        ssh_vrf_idx = next(
-            i for i, cmd in enumerate(commands) if "service ssh vrf" in cmd
-        )
+        ssh_vrf_idx = next(i for i, cmd in enumerate(commands) if "service ssh vrf" in cmd)
         ospf_idx = next(i for i, cmd in enumerate(commands) if "ospf" in cmd)
 
         # Interfaces -> ... -> SSH VRF -> OSPF
