@@ -541,12 +541,12 @@ FIREWALL_JSON='{json.dumps(firewall_data)}'
         with pytest.raises(ValueError, match="Validation error"):
             parse_context(str(context_file))
 
-    def test_json_with_escaped_newlines(self, tmp_path: Path) -> None:
-        """Test JSON parsing with escaped newlines in input data.
+    def test_json_routes_parsing(self, tmp_path: Path) -> None:
+        """Test JSON parsing with routes data.
 
-        This verifies the parser correctly handles JSON that contains escaped
-        newline sequences. The StaticRoute model fields are validated after
-        parsing.
+        This verifies the parser correctly handles JSON route configuration.
+        Uses json.dumps() which produces compact single-line JSON without
+        newlines (unless indent parameter is specified).
         """
         context_file = tmp_path / "one_env"
         # JSON with route data - tests that JSON parsing works correctly
@@ -666,8 +666,9 @@ echo 'Done'"
 
         assert "CONFIG" in parser.variables
         value = parser.variables["CONFIG"]
-        # Trailing spaces before newlines are stripped by line reading
-        # But trailing spaces at end of value are preserved
+        # First line is stripped via .strip() at line 118 in parser.py,
+        # so trailing spaces after "command1" are removed.
+        # Subsequent lines (command2, command3) are NOT stripped, preserving spaces.
         assert value == "command1\ncommand2\ncommand3  "
 
     def test_multiline_value_with_comment_char(self, tmp_path: Path) -> None:
