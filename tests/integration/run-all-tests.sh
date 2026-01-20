@@ -32,6 +32,9 @@ declare -a TEST_SCENARIOS=(
     "static-routes:Static routing"
     "ospf:OSPF dynamic routing"
     "dhcp:DHCP server"
+    "snat:Source NAT (masquerade)"
+    "dnat:Destination NAT (port forwarding)"
+    "nat-full:Full NAT (SNAT+DNAT+binat)"
 )
 
 TEMP_DIR=$(mktemp -d)
