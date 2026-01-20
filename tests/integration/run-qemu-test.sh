@@ -66,22 +66,6 @@ cleanup_all() {
 # Trap EXIT, INT (Ctrl+C), and TERM (kill) to ensure QEMU cleanup
 trap cleanup_all EXIT INT TERM
 
-# Helper function to assert a command was generated
-assert_command_generated() {
-    local pattern="$1"
-    local description="${2:-$pattern}"
-
-    if grep "VYOS_CMD:" "$SERIAL_LOG" | grep -qF "$pattern"; then
-        echo "[PASS] Found expected command: $description"
-        return 0
-    else
-        echo "[FAIL] Missing expected command: $description"
-        echo "       Pattern: $pattern"
-        VALIDATION_FAILED=1
-        return 1
-    fi
-}
-
 echo "Starting VyOS VM for integration testing..."
 echo "  Image: $VYOS_IMAGE"
 echo "  Context: $CONTEXT_ISO"
