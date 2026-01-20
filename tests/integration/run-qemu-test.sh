@@ -175,6 +175,72 @@ else
     echo "[PASS] No Python exceptions detected in vyos-onecontext output"
 fi
 
+# CRITICAL: Verify configuration commands were actually generated
+# This ensures the test context is properly processed, not just "didn't crash"
+echo ""
+echo "=== Command Generation Validation ==="
+
+# Helper function to check for required commands
+assert_command_generated() {
+    local pattern="$1"
+    local description="$2"
+    if grep -q "VYOS_CMD:.*$pattern" "$SERIAL_LOG"; then
+        echo "[PASS] $description"
+        return 0
+    else
+        echo "[FAIL] $description - command not generated"
+        echo "       Expected pattern: $pattern"
+        VALIDATION_FAILED=1
+        return 1
+    fi
+}
+
+# Check that ANY commands were generated (baseline requirement)
+if grep -q "VYOS_CMD:" "$SERIAL_LOG"; then
+    CMD_COUNT=$(grep -c "VYOS_CMD:" "$SERIAL_LOG")
+    echo "[PASS] Generated $CMD_COUNT configuration commands"
+    echo ""
+    echo "Commands generated:"
+    grep "VYOS_CMD:" "$SERIAL_LOG" | sed 's/.*VYOS_CMD: /  /' | head -30
+    echo ""
+else
+    echo "[CRITICAL FAIL] No configuration commands were generated!"
+    echo "This means the test context is not being processed correctly."
+    VALIDATION_FAILED=1
+fi
+
+# Context-specific command assertions
+# Extract context name from the ISO path or environment
+CONTEXT_NAME="${CONTEXT_NAME:-unknown}"
+echo ""
+echo "=== Context-Specific Assertions ($CONTEXT_NAME) ==="
+
+case "$CONTEXT_NAME" in
+    simple)
+        assert_command_generated "set system host-name" "Hostname configuration"
+        assert_command_generated "set interfaces ethernet eth0 address" "Interface eth0 IP address"
+        assert_command_generated "set system login user vyos authentication public-keys" "SSH public key"
+        ;;
+    quotes)
+        assert_command_generated "set system host-name" "Hostname configuration"
+        assert_command_generated "set system login user vyos authentication public-keys" "SSH public key (with quotes)"
+        ;;
+    multi-interface)
+        assert_command_generated "set system host-name" "Hostname configuration"
+        assert_command_generated "set interfaces ethernet eth0 address" "Interface eth0 IP address"
+        # Multi-interface test has aliases (secondary IPs) on eth0
+        ;;
+    management-vrf)
+        assert_command_generated "set system host-name" "Hostname configuration"
+        assert_command_generated "set vrf name management table 100" "VRF creation"
+        assert_command_generated "set interfaces ethernet eth0 vrf management" "Interface VRF assignment"
+        assert_command_generated "set service ssh vrf management" "SSH VRF binding"
+        ;;
+    *)
+        echo "[WARN] Unknown context '$CONTEXT_NAME' - no specific assertions"
+        ;;
+esac
+
 echo ""
 if [ $VALIDATION_FAILED -eq 0 ]; then
     echo "=== [PASS] All validation checks passed ==="
