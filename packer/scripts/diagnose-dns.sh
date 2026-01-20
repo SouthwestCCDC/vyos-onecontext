@@ -66,6 +66,7 @@ echo
 # Test 1: Using SLIRP DNS proxy (10.0.2.3)
 echo "=== TEST 1: SLIRP DNS Proxy (10.0.2.3) ==="
 echo "This is what deployment/vrouter-infra uses"
+echo "SLIRP proxy forwards to host's DNS (10.63.4.101), which can resolve internal hosts"
 echo "nameserver 10.0.2.3" | sudo tee /etc/resolv.conf > /dev/null
 cat /etc/resolv.conf
 echo
@@ -74,6 +75,10 @@ for host in $TEST_HOSTS; do
     time getent ahostsv4 "$host" 2>&1 || echo "FAILED to resolve $host via SLIRP proxy"
     echo
 done
+# Also test internal hostname via SLIRP proxy
+echo "--- Resolving artifacts.swccdc.com via SLIRP proxy (internal host) ---"
+time getent ahostsv4 artifacts.swccdc.com 2>&1 || echo "FAILED to resolve artifacts.swccdc.com via SLIRP proxy"
+echo
 
 # Test 2: Using Google DNS directly (8.8.8.8)
 echo "=== TEST 2: Google DNS Direct (8.8.8.8) ==="
