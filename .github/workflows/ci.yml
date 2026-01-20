@@ -64,11 +64,22 @@ jobs:
           echo "Downloaded base image:"
           ls -lh vyos-base.qcow2
 
+      # DEBUG: Run DNS diagnostic build to compare SLIRP proxy vs direct DNS
+      - name: Build diagnostic image with Packer
+        working-directory: packer
+        run: |
+          packer init .
+          # Run diagnostic build - this will output DNS comparison data
+          packer build -var "base_image=${{ github.workspace }}/vyos-base.qcow2" test-image-diagnostic.pkr.hcl || true
+          echo "=== Diagnostic build complete (may have failed - check output above) ==="
+        timeout-minutes: 10
+
+      # Still try the regular build after diagnostics
       - name: Build test image with Packer
         working-directory: packer
         run: |
           packer init .
-          packer build -var "base_image=${{ github.workspace }}/vyos-base.qcow2" .
+          packer build -var "base_image=${{ github.workspace }}/vyos-base.qcow2" test-image.pkr.hcl
         timeout-minutes: 10
 
       - name: Run integration tests
