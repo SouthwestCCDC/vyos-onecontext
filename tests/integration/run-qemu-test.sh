@@ -315,11 +315,11 @@ case "$CONTEXT_NAME" in
         assert_command_generated "destination port 8080" "DNAT destination port"
         assert_command_generated "translation address 10.100.0.80" "DNAT translation address"
         assert_command_generated "translation port 80" "DNAT translation port"
-        # Binat (1:1 NAT)
+        # Binat (1:1 NAT) - creates both source and destination rules at 500
         assert_command_generated "set nat source rule 500" "Binat source rule created"
         assert_command_generated "set nat destination rule 500" "Binat destination rule created"
-        assert_command_generated "source address 10.100.0.100" "Binat inside address (source)"
-        assert_command_generated "destination address 192.168.122.100" "Binat outside address (destination)"
+        assert_command_generated "source address.*10.100.0.100" "Binat internal address (source rule)"
+        assert_command_generated "destination address.*192.168.122.100" "Binat external address (destination rule)"
         ;;
     *)
         echo "[WARN] Unknown context '$CONTEXT_NAME' - no specific assertions"
