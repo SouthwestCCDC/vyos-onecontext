@@ -267,10 +267,10 @@ case "$CONTEXT_NAME" in
         ;;
     dhcp)
         assert_command_generated "set system host-name" "Hostname configuration"
-        # DHCP shared-network creation for eth1
-        assert_command_generated "set service dhcp-server shared-network-name dhcp-eth1" "DHCP shared-network creation"
+        # DHCP shared-network creation for eth0
+        assert_command_generated "set service dhcp-server shared-network-name dhcp-eth0" "DHCP shared-network creation"
         # Subnet configuration
-        assert_command_generated "set service dhcp-server shared-network-name dhcp-eth1 subnet 10.50.1.0/24" "DHCP subnet configuration"
+        assert_command_generated "set service dhcp-server shared-network-name dhcp-eth0 subnet 10.50.1.0/24" "DHCP subnet configuration"
         # DHCP range configuration
         assert_command_generated "range 0 start 10.50.1.100" "DHCP range start address"
         assert_command_generated "range 0 stop 10.50.1.200" "DHCP range end address"
