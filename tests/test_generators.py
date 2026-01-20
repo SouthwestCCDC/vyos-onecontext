@@ -1482,6 +1482,8 @@ class TestGenerateConfigWithVrf:
 
         # VRF must be created before routes can reference it
         assert vrf_creation_idx < static_route_idx
+
+
 class TestOspfGenerator:
     """Tests for OSPF configuration generator."""
 
