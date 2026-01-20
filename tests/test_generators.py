@@ -7,13 +7,21 @@ from vyos_onecontext.generators import (
     VRF_TABLE_ID,
     HostnameGenerator,
     InterfaceGenerator,
+    OspfGenerator,
     RoutingGenerator,
     SshKeyGenerator,
     SshServiceGenerator,
     VrfGenerator,
     generate_config,
 )
-from vyos_onecontext.models import AliasConfig, InterfaceConfig, RouterConfig
+from vyos_onecontext.models import (
+    AliasConfig,
+    InterfaceConfig,
+    OspfConfig,
+    OspfDefaultInformation,
+    OspfInterface,
+    RouterConfig,
+)
 
 
 class TestHostnameGenerator:
@@ -1474,3 +1482,318 @@ class TestGenerateConfigWithVrf:
 
         # VRF must be created before routes can reference it
         assert vrf_creation_idx < static_route_idx
+
+
+class TestOspfGenerator:
+    """Tests for OSPF configuration generator."""
+
+    def test_ospf_disabled(self):
+        """Test OSPF generator with None config."""
+        gen = OspfGenerator(None)
+        commands = gen.generate()
+
+        assert len(commands) == 0
+
+    def test_ospf_enabled_but_false(self):
+        """Test OSPF generator with enabled=False."""
+        ospf = OspfConfig(enabled=False)
+        gen = OspfGenerator(ospf)
+        commands = gen.generate()
+
+        assert len(commands) == 0
+
+    def test_ospf_minimal_config(self):
+        """Test minimal OSPF configuration with single interface."""
+        ospf = OspfConfig(
+            enabled=True,
+            interfaces=[
+                OspfInterface(name="eth1", area="0.0.0.0"),
+            ],
+        )
+        gen = OspfGenerator(ospf)
+        commands = gen.generate()
+
+        # Should only have interface area assignment
+        assert len(commands) == 1
+        assert "set protocols ospf interface eth1 area '0.0.0.0'" in commands
+
+    def test_ospf_with_router_id(self):
+        """Test OSPF configuration with explicit router ID."""
+        ospf = OspfConfig(
+            enabled=True,
+            router_id=IPv4Address("10.64.0.1"),
+            interfaces=[
+                OspfInterface(name="eth1", area="0.0.0.0"),
+            ],
+        )
+        gen = OspfGenerator(ospf)
+        commands = gen.generate()
+
+        assert "set protocols ospf parameters router-id '10.64.0.1'" in commands
+        assert "set protocols ospf interface eth1 area '0.0.0.0'" in commands
+
+    def test_ospf_passive_interface(self):
+        """Test OSPF passive interface configuration."""
+        ospf = OspfConfig(
+            enabled=True,
+            interfaces=[
+                OspfInterface(name="eth1", area="0.0.0.0", passive=True),
+            ],
+        )
+        gen = OspfGenerator(ospf)
+        commands = gen.generate()
+
+        assert "set protocols ospf interface eth1 area '0.0.0.0'" in commands
+        assert "set protocols ospf interface eth1 passive" in commands
+
+    def test_ospf_interface_cost(self):
+        """Test OSPF interface cost override."""
+        ospf = OspfConfig(
+            enabled=True,
+            interfaces=[
+                OspfInterface(name="eth1", area="0.0.0.0", cost=100),
+            ],
+        )
+        gen = OspfGenerator(ospf)
+        commands = gen.generate()
+
+        assert "set protocols ospf interface eth1 area '0.0.0.0'" in commands
+        assert "set protocols ospf interface eth1 cost '100'" in commands
+
+    def test_ospf_multiple_interfaces(self):
+        """Test OSPF with multiple interfaces in different areas."""
+        ospf = OspfConfig(
+            enabled=True,
+            router_id=IPv4Address("10.64.0.1"),
+            interfaces=[
+                OspfInterface(name="eth1", area="0.0.0.0"),
+                OspfInterface(name="eth2", area="0.0.0.0", cost=100),
+                OspfInterface(name="eth3", area="0.0.0.1", passive=True),
+            ],
+        )
+        gen = OspfGenerator(ospf)
+        commands = gen.generate()
+
+        # Router ID
+        assert "set protocols ospf parameters router-id '10.64.0.1'" in commands
+        # Interface 1 - basic
+        assert "set protocols ospf interface eth1 area '0.0.0.0'" in commands
+        # Interface 2 - with cost
+        assert "set protocols ospf interface eth2 area '0.0.0.0'" in commands
+        assert "set protocols ospf interface eth2 cost '100'" in commands
+        # Interface 3 - different area, passive
+        assert "set protocols ospf interface eth3 area '0.0.0.1'" in commands
+        assert "set protocols ospf interface eth3 passive" in commands
+
+    def test_ospf_redistribute_connected(self):
+        """Test OSPF redistribute connected routes."""
+        ospf = OspfConfig(
+            enabled=True,
+            interfaces=[
+                OspfInterface(name="eth1", area="0.0.0.0"),
+            ],
+            redistribute=["connected"],
+        )
+        gen = OspfGenerator(ospf)
+        commands = gen.generate()
+
+        assert "set protocols ospf redistribute connected" in commands
+
+    def test_ospf_redistribute_static(self):
+        """Test OSPF redistribute static routes."""
+        ospf = OspfConfig(
+            enabled=True,
+            interfaces=[
+                OspfInterface(name="eth1", area="0.0.0.0"),
+            ],
+            redistribute=["static"],
+        )
+        gen = OspfGenerator(ospf)
+        commands = gen.generate()
+
+        assert "set protocols ospf redistribute static" in commands
+
+    def test_ospf_redistribute_multiple(self):
+        """Test OSPF redistribute multiple protocols."""
+        ospf = OspfConfig(
+            enabled=True,
+            interfaces=[
+                OspfInterface(name="eth1", area="0.0.0.0"),
+            ],
+            redistribute=["connected", "static", "kernel"],
+        )
+        gen = OspfGenerator(ospf)
+        commands = gen.generate()
+
+        assert "set protocols ospf redistribute connected" in commands
+        assert "set protocols ospf redistribute static" in commands
+        assert "set protocols ospf redistribute kernel" in commands
+
+    def test_ospf_default_information_originate(self):
+        """Test OSPF default-information originate."""
+        ospf = OspfConfig(
+            enabled=True,
+            interfaces=[
+                OspfInterface(name="eth1", area="0.0.0.0"),
+            ],
+            default_information=OspfDefaultInformation(originate=True),
+        )
+        gen = OspfGenerator(ospf)
+        commands = gen.generate()
+
+        assert "set protocols ospf default-information originate" in commands
+        # Should NOT have "always" flag
+        assert not any("always" in cmd for cmd in commands)
+
+    def test_ospf_default_information_originate_always(self):
+        """Test OSPF default-information originate always."""
+        ospf = OspfConfig(
+            enabled=True,
+            interfaces=[
+                OspfInterface(name="eth1", area="0.0.0.0"),
+            ],
+            default_information=OspfDefaultInformation(originate=True, always=True),
+        )
+        gen = OspfGenerator(ospf)
+        commands = gen.generate()
+
+        assert "set protocols ospf default-information originate always" in commands
+
+    def test_ospf_default_information_with_metric(self):
+        """Test OSPF default-information with metric."""
+        ospf = OspfConfig(
+            enabled=True,
+            interfaces=[
+                OspfInterface(name="eth1", area="0.0.0.0"),
+            ],
+            default_information=OspfDefaultInformation(originate=True, always=True, metric=100),
+        )
+        gen = OspfGenerator(ospf)
+        commands = gen.generate()
+
+        assert "set protocols ospf default-information originate always" in commands
+        assert "set protocols ospf default-information originate metric '100'" in commands
+
+    def test_ospf_full_config(self):
+        """Test comprehensive OSPF configuration with all features."""
+        ospf = OspfConfig(
+            enabled=True,
+            router_id=IPv4Address("10.64.0.1"),
+            interfaces=[
+                OspfInterface(name="eth1", area="0.0.0.0"),
+                OspfInterface(name="eth2", area="0.0.0.0", cost=100),
+                OspfInterface(name="eth3", area="0.0.0.0", passive=True),
+            ],
+            redistribute=["connected", "static"],
+            default_information=OspfDefaultInformation(originate=True, always=True, metric=100),
+        )
+        gen = OspfGenerator(ospf)
+        commands = gen.generate()
+
+        # Router ID
+        assert "set protocols ospf parameters router-id '10.64.0.1'" in commands
+        # Interfaces
+        assert "set protocols ospf interface eth1 area '0.0.0.0'" in commands
+        assert "set protocols ospf interface eth2 area '0.0.0.0'" in commands
+        assert "set protocols ospf interface eth2 cost '100'" in commands
+        assert "set protocols ospf interface eth3 area '0.0.0.0'" in commands
+        assert "set protocols ospf interface eth3 passive" in commands
+        # Redistribution
+        assert "set protocols ospf redistribute connected" in commands
+        assert "set protocols ospf redistribute static" in commands
+        # Default information
+        assert "set protocols ospf default-information originate always" in commands
+        assert "set protocols ospf default-information originate metric '100'" in commands
+
+
+class TestGenerateConfigWithOspf:
+    """Tests for generate_config function with OSPF support."""
+
+    def test_generate_config_with_ospf(self):
+        """Test config generation includes OSPF commands."""
+        config = RouterConfig(
+            hostname="router-01",
+            interfaces=[
+                InterfaceConfig(
+                    name="eth0",
+                    ip=IPv4Address("10.0.1.1"),
+                    mask="255.255.255.0",
+                ),
+                InterfaceConfig(
+                    name="eth1",
+                    ip=IPv4Address("10.64.1.1"),
+                    mask="255.255.255.0",
+                ),
+            ],
+            ospf=OspfConfig(
+                enabled=True,
+                router_id=IPv4Address("10.64.0.1"),
+                interfaces=[
+                    OspfInterface(name="eth1", area="0.0.0.0"),
+                ],
+                redistribute=["connected"],
+            ),
+        )
+        commands = generate_config(config)
+
+        # Should have OSPF commands
+        assert "set protocols ospf parameters router-id '10.64.0.1'" in commands
+        assert "set protocols ospf interface eth1 area '0.0.0.0'" in commands
+        assert "set protocols ospf redistribute connected" in commands
+
+    def test_generate_config_without_ospf(self):
+        """Test config generation without OSPF has no OSPF commands."""
+        config = RouterConfig(
+            hostname="router-01",
+            interfaces=[
+                InterfaceConfig(
+                    name="eth0",
+                    ip=IPv4Address("10.0.1.1"),
+                    mask="255.255.255.0",
+                ),
+            ],
+        )
+        commands = generate_config(config)
+
+        # Should NOT have any OSPF commands
+        assert not any("ospf" in cmd for cmd in commands)
+
+    def test_generate_config_command_order_with_ospf(self):
+        """Test that OSPF commands come after SSH VRF configuration."""
+        config = RouterConfig(
+            hostname="router-01",
+            interfaces=[
+                InterfaceConfig(
+                    name="eth0",
+                    ip=IPv4Address("10.0.1.1"),
+                    mask="255.255.255.0",
+                    gateway=IPv4Address("10.0.1.254"),
+                    management=True,
+                ),
+                InterfaceConfig(
+                    name="eth1",
+                    ip=IPv4Address("10.64.1.1"),
+                    mask="255.255.255.0",
+                ),
+            ],
+            ospf=OspfConfig(
+                enabled=True,
+                interfaces=[
+                    OspfInterface(name="eth1", area="0.0.0.0"),
+                ],
+            ),
+        )
+        commands = generate_config(config)
+
+        # Find indices of different command types
+        interface_idx = next(
+            i
+            for i, cmd in enumerate(commands)
+            if "interfaces ethernet" in cmd and " address " in cmd
+        )
+        ssh_vrf_idx = next(i for i, cmd in enumerate(commands) if "service ssh vrf" in cmd)
+        ospf_idx = next(i for i, cmd in enumerate(commands) if "ospf" in cmd)
+
+        # Interfaces -> ... -> SSH VRF -> OSPF
+        assert interface_idx < ssh_vrf_idx
+        assert ssh_vrf_idx < ospf_idx

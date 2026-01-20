@@ -204,8 +204,7 @@ def apply_configuration(
 
     elif mode == OnecontextMode.FREEZE:
         logger.info(
-            "Configuration applied, saved, and frozen (onecontext disabled for "
-            "future boots)"
+            "Configuration applied, saved, and frozen (onecontext disabled for future boots)"
         )
         try:
             session.save()
