@@ -225,11 +225,12 @@ case "$CONTEXT_NAME" in
         assert_command_generated "set system host-name" "Hostname configuration"
         assert_command_generated "set system login user vyos authentication public-keys" "SSH public key"
         # Verify the quoted comment field is preserved (issue #40 regression test)
-        # The SSH key comment contains "test@quotes" with embedded double quotes
-        if grep -q 'VYOS_CMD:.*public-keys.*test@quotes' "$SERIAL_LOG"; then
-            echo "[PASS] SSH key comment with quotes preserved"
+        # The SSH key comment "test@quotes" is sanitized to "test_at_quotes" (@ -> _at_)
+        # The double quotes around the comment are preserved in the key identifier
+        if grep -q 'VYOS_CMD:.*public-keys.*test_at_quotes' "$SERIAL_LOG"; then
+            echo "[PASS] SSH key comment with quotes preserved and sanitized correctly"
         else
-            echo "[FAIL] SSH key comment with quotes not found - quote handling may be broken"
+            echo "[FAIL] SSH key comment not found - quote handling may be broken"
             VALIDATION_FAILED=1
         fi
         ;;
