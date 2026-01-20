@@ -158,7 +158,7 @@ def apply_configuration(
 
     logger.info("Generated %d configuration commands", len(commands))
     for cmd in commands:
-        logger.debug("  %s", cmd)
+        logger.info("VYOS_CMD: %s", cmd)
 
     # In dry-run mode, just print commands and exit
     if dry_run:
@@ -204,8 +204,7 @@ def apply_configuration(
 
     elif mode == OnecontextMode.FREEZE:
         logger.info(
-            "Configuration applied, saved, and frozen (onecontext disabled for "
-            "future boots)"
+            "Configuration applied, saved, and frozen (onecontext disabled for future boots)"
         )
         try:
             session.save()

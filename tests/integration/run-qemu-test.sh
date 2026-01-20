@@ -12,6 +12,9 @@ VYOS_IMAGE="${1:?VyOS image path required}"
 CONTEXT_ISO="${2:?Context ISO path required}"
 TIMEOUT="${3:-180}"  # Default 3 minutes for boot + context
 
+# Extract context name from ISO filename (e.g., simple.iso -> simple)
+CONTEXT_NAME=$(basename "$CONTEXT_ISO" .iso)
+
 # Validate inputs
 if [ ! -f "$VYOS_IMAGE" ]; then
     echo "ERROR: VyOS image not found: $VYOS_IMAGE"
@@ -63,9 +66,26 @@ cleanup_all() {
 # Trap EXIT, INT (Ctrl+C), and TERM (kill) to ensure QEMU cleanup
 trap cleanup_all EXIT INT TERM
 
+# Helper function to assert a command was generated
+assert_command_generated() {
+    local pattern="$1"
+    local description="${2:-$pattern}"
+
+    if grep "VYOS_CMD:" "$SERIAL_LOG" | grep -qF "$pattern"; then
+        echo "[PASS] Found expected command: $description"
+        return 0
+    else
+        echo "[FAIL] Missing expected command: $description"
+        echo "       Pattern: $pattern"
+        VALIDATION_FAILED=1
+        return 1
+    fi
+}
+
 echo "Starting VyOS VM for integration testing..."
 echo "  Image: $VYOS_IMAGE"
 echo "  Context: $CONTEXT_ISO"
+echo "  Context name: $CONTEXT_NAME"
 echo "  Serial log: $SERIAL_LOG"
 echo "  SSH port: $SSH_PORT"
 
@@ -174,6 +194,69 @@ if grep "vyos-onecontext" "$SERIAL_LOG" | grep -qE "(Traceback \(most recent|[A-
 else
     echo "[PASS] No Python exceptions detected in vyos-onecontext output"
 fi
+
+# CRITICAL: Verify commands were actually generated
+echo ""
+echo "Validating generated configuration commands..."
+if ! grep -q "VYOS_CMD:" "$SERIAL_LOG"; then
+    echo "[CRITICAL FAIL] No configuration commands were generated!"
+    echo "This means the test context is not being processed correctly."
+    VALIDATION_FAILED=1
+else
+    CMD_COUNT=$(grep -c "VYOS_CMD:" "$SERIAL_LOG")
+    echo "[PASS] Generated $CMD_COUNT configuration commands"
+
+    # Log the commands for debugging (first 30 to avoid cluttering output)
+    echo ""
+    echo "Sample of generated commands:"
+    grep "VYOS_CMD:" "$SERIAL_LOG" | head -30
+fi
+
+# Context-specific command validation
+# Each test context MUST generate specific expected commands
+echo ""
+echo "Validating context-specific commands for: $CONTEXT_NAME"
+case "$CONTEXT_NAME" in
+    simple)
+        echo "Checking simple router configuration..."
+        assert_command_generated "set system host-name" "hostname configuration"
+        assert_command_generated "set interfaces ethernet eth0 address" "eth0 IP address"
+        assert_command_generated "set system login user vyos authentication public-keys" "SSH public key"
+        ;;
+
+    management-vrf)
+        echo "Checking management VRF configuration..."
+        assert_command_generated "set vrf name management table" "VRF creation"
+        assert_command_generated "set interfaces ethernet eth0 vrf management" "interface VRF assignment"
+        assert_command_generated "set service ssh vrf management" "SSH VRF binding"
+        ;;
+
+    multi-interface)
+        echo "Checking multi-interface configuration..."
+        assert_command_generated "set interfaces ethernet eth0 address" "eth0 configuration"
+        assert_command_generated "set interfaces ethernet eth1" "eth1 configuration"
+        ;;
+
+    static-routes)
+        echo "Checking static routes configuration..."
+        assert_command_generated "set protocols static route" "static route configuration"
+        ;;
+
+    ospf)
+        echo "Checking OSPF configuration..."
+        assert_command_generated "set protocols ospf" "OSPF protocol configuration"
+        ;;
+
+    quotes)
+        echo "Checking quote handling (regression test)..."
+        assert_command_generated "set system host-name" "hostname with quotes handled"
+        ;;
+
+    *)
+        echo "[WARNING] No specific command assertions defined for context: $CONTEXT_NAME"
+        echo "         Test will only verify commands were generated, not correctness"
+        ;;
+esac
 
 echo ""
 if [ $VALIDATION_FAILED -eq 0 ]; then
