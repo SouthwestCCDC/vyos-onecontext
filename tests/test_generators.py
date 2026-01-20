@@ -1797,3 +1797,476 @@ class TestGenerateConfigWithOspf:
         # Interfaces -> ... -> SSH VRF -> OSPF
         assert interface_idx < ssh_vrf_idx
         assert ssh_vrf_idx < ospf_idx
+
+
+class TestDhcpGenerator:
+    """Tests for DHCP server configuration generator."""
+
+    def test_dhcp_not_configured(self):
+        """Test DHCP generator with None config."""
+        from vyos_onecontext.generators import DhcpGenerator
+
+        gen = DhcpGenerator(None)
+        commands = gen.generate()
+
+        assert len(commands) == 0
+
+    def test_dhcp_minimal_pool(self):
+        """Test DHCP generator with minimal pool configuration."""
+        from vyos_onecontext.generators import DhcpGenerator
+        from vyos_onecontext.models import DhcpConfig, DhcpPool
+
+        dhcp = DhcpConfig(
+            pools=[
+                DhcpPool(
+                    interface="eth1",
+                    subnet="10.1.1.0/24",
+                    range_start=IPv4Address("10.1.1.100"),
+                    range_end=IPv4Address("10.1.1.200"),
+                    gateway=IPv4Address("10.1.1.1"),
+                    dns=[IPv4Address("10.1.1.1")],
+                )
+            ]
+        )
+        gen = DhcpGenerator(dhcp)
+        commands = gen.generate()
+
+        # Should have: subnet-id, range start/stop, default-router, name-server
+        assert len(commands) == 5
+        # Use prefix variable to avoid long lines
+        prefix = "set service dhcp-server shared-network-name dhcp-eth1 subnet 10.1.1.0/24"
+        assert f"{prefix} subnet-id 1" in commands
+        assert f"{prefix} range 0 start 10.1.1.100" in commands
+        assert f"{prefix} range 0 stop 10.1.1.200" in commands
+        assert f"{prefix} option default-router 10.1.1.1" in commands
+        assert f"{prefix} option name-server 10.1.1.1" in commands
+
+    def test_dhcp_pool_with_multiple_dns(self):
+        """Test DHCP pool with multiple DNS servers."""
+        from vyos_onecontext.generators import DhcpGenerator
+        from vyos_onecontext.models import DhcpConfig, DhcpPool
+
+        dhcp = DhcpConfig(
+            pools=[
+                DhcpPool(
+                    interface="eth1",
+                    subnet="10.1.1.0/24",
+                    range_start=IPv4Address("10.1.1.100"),
+                    range_end=IPv4Address("10.1.1.200"),
+                    gateway=IPv4Address("10.1.1.1"),
+                    dns=[IPv4Address("10.1.1.1"), IPv4Address("8.8.8.8")],
+                )
+            ]
+        )
+        gen = DhcpGenerator(dhcp)
+        commands = gen.generate()
+
+        # Should have two name-server commands
+        prefix = "set service dhcp-server shared-network-name dhcp-eth1 subnet 10.1.1.0/24"
+        assert f"{prefix} option name-server 10.1.1.1" in commands
+        assert f"{prefix} option name-server 8.8.8.8" in commands
+
+    def test_dhcp_pool_with_lease_time(self):
+        """Test DHCP pool with custom lease time."""
+        from vyos_onecontext.generators import DhcpGenerator
+        from vyos_onecontext.models import DhcpConfig, DhcpPool
+
+        dhcp = DhcpConfig(
+            pools=[
+                DhcpPool(
+                    interface="eth1",
+                    subnet="10.1.1.0/24",
+                    range_start=IPv4Address("10.1.1.100"),
+                    range_end=IPv4Address("10.1.1.200"),
+                    gateway=IPv4Address("10.1.1.1"),
+                    dns=[IPv4Address("10.1.1.1")],
+                    lease_time=86400,
+                )
+            ]
+        )
+        gen = DhcpGenerator(dhcp)
+        commands = gen.generate()
+
+        prefix = "set service dhcp-server shared-network-name dhcp-eth1 subnet 10.1.1.0/24"
+        assert f"{prefix} lease 86400" in commands
+
+    def test_dhcp_pool_with_domain(self):
+        """Test DHCP pool with domain name option."""
+        from vyos_onecontext.generators import DhcpGenerator
+        from vyos_onecontext.models import DhcpConfig, DhcpPool
+
+        dhcp = DhcpConfig(
+            pools=[
+                DhcpPool(
+                    interface="eth1",
+                    subnet="10.1.1.0/24",
+                    range_start=IPv4Address("10.1.1.100"),
+                    range_end=IPv4Address("10.1.1.200"),
+                    gateway=IPv4Address("10.1.1.1"),
+                    dns=[IPv4Address("10.1.1.1")],
+                    domain="example.local",
+                )
+            ]
+        )
+        gen = DhcpGenerator(dhcp)
+        commands = gen.generate()
+
+        prefix = "set service dhcp-server shared-network-name dhcp-eth1 subnet 10.1.1.0/24"
+        assert f"{prefix} option domain-name example.local" in commands
+
+    def test_dhcp_pool_with_all_options(self):
+        """Test DHCP pool with all optional fields."""
+        from vyos_onecontext.generators import DhcpGenerator
+        from vyos_onecontext.models import DhcpConfig, DhcpPool
+
+        dhcp = DhcpConfig(
+            pools=[
+                DhcpPool(
+                    interface="eth1",
+                    subnet="10.1.1.0/24",
+                    range_start=IPv4Address("10.1.1.100"),
+                    range_end=IPv4Address("10.1.1.200"),
+                    gateway=IPv4Address("10.1.1.1"),
+                    dns=[IPv4Address("10.1.1.1"), IPv4Address("8.8.8.8")],
+                    lease_time=86400,
+                    domain="example.local",
+                )
+            ]
+        )
+        gen = DhcpGenerator(dhcp)
+        commands = gen.generate()
+
+        # Should have all commands
+        prefix = "set service dhcp-server shared-network-name dhcp-eth1 subnet 10.1.1.0/24"
+        assert f"{prefix} subnet-id 1" in commands
+        assert f"{prefix} range 0 start 10.1.1.100" in commands
+        assert f"{prefix} range 0 stop 10.1.1.200" in commands
+        assert f"{prefix} option default-router 10.1.1.1" in commands
+        assert f"{prefix} option name-server 10.1.1.1" in commands
+        assert f"{prefix} option name-server 8.8.8.8" in commands
+        assert f"{prefix} lease 86400" in commands
+        assert f"{prefix} option domain-name example.local" in commands
+
+    def test_dhcp_multiple_pools(self):
+        """Test DHCP with multiple pools on different interfaces."""
+        from vyos_onecontext.generators import DhcpGenerator
+        from vyos_onecontext.models import DhcpConfig, DhcpPool
+
+        dhcp = DhcpConfig(
+            pools=[
+                DhcpPool(
+                    interface="eth1",
+                    subnet="10.1.1.0/24",
+                    range_start=IPv4Address("10.1.1.100"),
+                    range_end=IPv4Address("10.1.1.200"),
+                    gateway=IPv4Address("10.1.1.1"),
+                    dns=[IPv4Address("10.1.1.1")],
+                ),
+                DhcpPool(
+                    interface="eth2",
+                    subnet="192.168.1.0/24",
+                    range_start=IPv4Address("192.168.1.100"),
+                    range_end=IPv4Address("192.168.1.200"),
+                    gateway=IPv4Address("192.168.1.1"),
+                    dns=[IPv4Address("192.168.1.1")],
+                ),
+            ]
+        )
+        gen = DhcpGenerator(dhcp)
+        commands = gen.generate()
+
+        # Should have commands for both pools
+        # Pool 1 (eth1) - subnet-id 1
+        prefix1 = "set service dhcp-server shared-network-name dhcp-eth1 subnet 10.1.1.0/24"
+        assert f"{prefix1} subnet-id 1" in commands
+        assert f"{prefix1} range 0 start 10.1.1.100" in commands
+        # Pool 2 (eth2) - subnet-id 2
+        prefix2 = "set service dhcp-server shared-network-name dhcp-eth2 subnet 192.168.1.0/24"
+        assert f"{prefix2} subnet-id 2" in commands
+        assert f"{prefix2} range 0 start 192.168.1.100" in commands
+
+    def test_dhcp_pool_missing_subnet_raises_error(self):
+        """Test that pool without subnet raises error."""
+        import pytest
+
+        from vyos_onecontext.generators import DhcpGenerator
+        from vyos_onecontext.models import DhcpConfig, DhcpPool
+
+        dhcp = DhcpConfig(
+            pools=[
+                DhcpPool(
+                    interface="eth1",
+                    subnet=None,  # Missing subnet
+                    range_start=IPv4Address("10.1.1.100"),
+                    range_end=IPv4Address("10.1.1.200"),
+                    gateway=IPv4Address("10.1.1.1"),
+                    dns=[IPv4Address("10.1.1.1")],
+                )
+            ]
+        )
+        gen = DhcpGenerator(dhcp)
+
+        with pytest.raises(ValueError, match="missing required 'subnet' field"):
+            gen.generate()
+
+    def test_dhcp_reservation_basic(self):
+        """Test DHCP static reservation."""
+        from vyos_onecontext.generators import DhcpGenerator
+        from vyos_onecontext.models import DhcpConfig, DhcpPool, DhcpReservation
+
+        dhcp = DhcpConfig(
+            pools=[
+                DhcpPool(
+                    interface="eth1",
+                    subnet="10.1.1.0/24",
+                    range_start=IPv4Address("10.1.1.100"),
+                    range_end=IPv4Address("10.1.1.200"),
+                    gateway=IPv4Address("10.1.1.1"),
+                    dns=[IPv4Address("10.1.1.1")],
+                )
+            ],
+            reservations=[
+                DhcpReservation(
+                    interface="eth1",
+                    mac="00:11:22:33:44:55",
+                    ip=IPv4Address("10.1.1.50"),
+                    hostname="server01",
+                )
+            ],
+        )
+        gen = DhcpGenerator(dhcp)
+        commands = gen.generate()
+
+        # Should have pool commands + reservation commands
+        prefix = "set service dhcp-server shared-network-name dhcp-eth1 subnet 10.1.1.0/24"
+        assert f"{prefix} static-mapping server01 mac 00:11:22:33:44:55" in commands
+        assert f"{prefix} static-mapping server01 ip-address 10.1.1.50" in commands
+
+    def test_dhcp_reservation_without_hostname(self):
+        """Test DHCP reservation without hostname uses MAC-based name."""
+        from vyos_onecontext.generators import DhcpGenerator
+        from vyos_onecontext.models import DhcpConfig, DhcpPool, DhcpReservation
+
+        dhcp = DhcpConfig(
+            pools=[
+                DhcpPool(
+                    interface="eth1",
+                    subnet="10.1.1.0/24",
+                    range_start=IPv4Address("10.1.1.100"),
+                    range_end=IPv4Address("10.1.1.200"),
+                    gateway=IPv4Address("10.1.1.1"),
+                    dns=[IPv4Address("10.1.1.1")],
+                )
+            ],
+            reservations=[
+                DhcpReservation(
+                    interface="eth1",
+                    mac="00:11:22:33:44:55",
+                    ip=IPv4Address("10.1.1.50"),
+                    hostname=None,
+                )
+            ],
+        )
+        gen = DhcpGenerator(dhcp)
+        commands = gen.generate()
+
+        # Should use MAC-based name
+        prefix = "set service dhcp-server shared-network-name dhcp-eth1 subnet 10.1.1.0/24"
+        mapping = "host-00-11-22-33-44-55"
+        assert f"{prefix} static-mapping {mapping} mac 00:11:22:33:44:55" in commands
+        assert f"{prefix} static-mapping {mapping} ip-address 10.1.1.50" in commands
+
+    def test_dhcp_reservation_no_matching_pool_raises_error(self):
+        """Test that reservation without matching pool raises error."""
+        import pytest
+
+        from vyos_onecontext.generators import DhcpGenerator
+        from vyos_onecontext.models import DhcpConfig, DhcpPool, DhcpReservation
+
+        dhcp = DhcpConfig(
+            pools=[
+                DhcpPool(
+                    interface="eth1",
+                    subnet="10.1.1.0/24",
+                    range_start=IPv4Address("10.1.1.100"),
+                    range_end=IPv4Address("10.1.1.200"),
+                    gateway=IPv4Address("10.1.1.1"),
+                    dns=[IPv4Address("10.1.1.1")],
+                )
+            ],
+            reservations=[
+                DhcpReservation(
+                    interface="eth2",  # No pool for eth2
+                    mac="00:11:22:33:44:55",
+                    ip=IPv4Address("10.1.1.50"),
+                    hostname="server01",
+                )
+            ],
+        )
+        gen = DhcpGenerator(dhcp)
+
+        with pytest.raises(ValueError, match="has no corresponding pool definition"):
+            gen.generate()
+
+    def test_dhcp_multiple_reservations(self):
+        """Test DHCP with multiple reservations."""
+        from vyos_onecontext.generators import DhcpGenerator
+        from vyos_onecontext.models import DhcpConfig, DhcpPool, DhcpReservation
+
+        dhcp = DhcpConfig(
+            pools=[
+                DhcpPool(
+                    interface="eth1",
+                    subnet="10.1.1.0/24",
+                    range_start=IPv4Address("10.1.1.100"),
+                    range_end=IPv4Address("10.1.1.200"),
+                    gateway=IPv4Address("10.1.1.1"),
+                    dns=[IPv4Address("10.1.1.1")],
+                )
+            ],
+            reservations=[
+                DhcpReservation(
+                    interface="eth1",
+                    mac="00:11:22:33:44:55",
+                    ip=IPv4Address("10.1.1.50"),
+                    hostname="server01",
+                ),
+                DhcpReservation(
+                    interface="eth1",
+                    mac="00:11:22:33:44:66",
+                    ip=IPv4Address("10.1.1.51"),
+                    hostname="server02",
+                ),
+            ],
+        )
+        gen = DhcpGenerator(dhcp)
+        commands = gen.generate()
+
+        # Should have both reservations
+        prefix = "set service dhcp-server shared-network-name dhcp-eth1 subnet 10.1.1.0/24"
+        assert f"{prefix} static-mapping server01 mac 00:11:22:33:44:55" in commands
+        assert f"{prefix} static-mapping server01 ip-address 10.1.1.50" in commands
+        assert f"{prefix} static-mapping server02 mac 00:11:22:33:44:66" in commands
+        assert f"{prefix} static-mapping server02 ip-address 10.1.1.51" in commands
+
+    def test_dhcp_empty_config(self):
+        """Test DHCP with empty pools and reservations."""
+        from vyos_onecontext.generators import DhcpGenerator
+        from vyos_onecontext.models import DhcpConfig
+
+        dhcp = DhcpConfig(pools=[], reservations=[])
+        gen = DhcpGenerator(dhcp)
+        commands = gen.generate()
+
+        assert len(commands) == 0
+
+
+class TestGenerateConfigWithDhcp:
+    """Tests for generate_config function with DHCP support."""
+
+    def test_generate_config_with_dhcp(self):
+        """Test config generation includes DHCP commands."""
+        from vyos_onecontext.models import DhcpConfig, DhcpPool
+
+        config = RouterConfig(
+            hostname="router-01",
+            interfaces=[
+                InterfaceConfig(
+                    name="eth0",
+                    ip=IPv4Address("10.0.1.1"),
+                    mask="255.255.255.0",
+                ),
+                InterfaceConfig(
+                    name="eth1",
+                    ip=IPv4Address("10.1.1.1"),
+                    mask="255.255.255.0",
+                ),
+            ],
+            dhcp=DhcpConfig(
+                pools=[
+                    DhcpPool(
+                        interface="eth1",
+                        subnet="10.1.1.0/24",
+                        range_start=IPv4Address("10.1.1.100"),
+                        range_end=IPv4Address("10.1.1.200"),
+                        gateway=IPv4Address("10.1.1.1"),
+                        dns=[IPv4Address("10.1.1.1")],
+                    )
+                ]
+            ),
+        )
+        commands = generate_config(config)
+
+        # Should have DHCP commands
+        prefix = "set service dhcp-server shared-network-name dhcp-eth1 subnet 10.1.1.0/24"
+        assert f"{prefix} subnet-id 1" in commands
+        assert f"{prefix} range 0 start 10.1.1.100" in commands
+
+    def test_generate_config_without_dhcp(self):
+        """Test config generation without DHCP has no DHCP commands."""
+        config = RouterConfig(
+            hostname="router-01",
+            interfaces=[
+                InterfaceConfig(
+                    name="eth0",
+                    ip=IPv4Address("10.0.1.1"),
+                    mask="255.255.255.0",
+                ),
+            ],
+        )
+        commands = generate_config(config)
+
+        # Should NOT have any DHCP commands
+        assert not any("dhcp-server" in cmd for cmd in commands)
+
+    def test_generate_config_command_order_with_dhcp(self):
+        """Test that DHCP commands come after OSPF configuration."""
+        from vyos_onecontext.models import DhcpConfig, DhcpPool
+
+        config = RouterConfig(
+            hostname="router-01",
+            interfaces=[
+                InterfaceConfig(
+                    name="eth0",
+                    ip=IPv4Address("10.0.1.1"),
+                    mask="255.255.255.0",
+                ),
+                InterfaceConfig(
+                    name="eth1",
+                    ip=IPv4Address("10.1.1.1"),
+                    mask="255.255.255.0",
+                ),
+            ],
+            ospf=OspfConfig(
+                enabled=True,
+                interfaces=[
+                    OspfInterface(name="eth1", area="0.0.0.0"),
+                ],
+            ),
+            dhcp=DhcpConfig(
+                pools=[
+                    DhcpPool(
+                        interface="eth1",
+                        subnet="10.1.1.0/24",
+                        range_start=IPv4Address("10.1.1.100"),
+                        range_end=IPv4Address("10.1.1.200"),
+                        gateway=IPv4Address("10.1.1.1"),
+                        dns=[IPv4Address("10.1.1.1")],
+                    )
+                ]
+            ),
+        )
+        commands = generate_config(config)
+
+        # Find indices of different command types
+        interface_idx = next(
+            i
+            for i, cmd in enumerate(commands)
+            if "interfaces ethernet" in cmd and " address " in cmd
+        )
+        ospf_idx = next(i for i, cmd in enumerate(commands) if "ospf" in cmd)
+        dhcp_idx = next(i for i, cmd in enumerate(commands) if "dhcp-server" in cmd)
+
+        # Interfaces -> ... -> OSPF -> DHCP
+        assert interface_idx < ospf_idx
+        assert ospf_idx < dhcp_idx

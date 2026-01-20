@@ -6,6 +6,7 @@ configuration (interfaces, routing, NAT, etc.).
 """
 
 from vyos_onecontext.generators.base import BaseGenerator
+from vyos_onecontext.generators.dhcp import DhcpGenerator
 from vyos_onecontext.generators.interface import InterfaceGenerator
 from vyos_onecontext.generators.ospf import OspfGenerator
 from vyos_onecontext.generators.routing import RoutingGenerator, StaticRoutesGenerator
@@ -55,8 +56,10 @@ def generate_config(config: RouterConfig) -> list[str]:
     # OSPF dynamic routing
     commands.extend(OspfGenerator(config.ospf).generate())
 
+    # DHCP server
+    commands.extend(DhcpGenerator(config.dhcp).generate())
+
     # Future generators will be added here in later phases:
-    # - Services (DHCP, DNS)
     # - NAT (source, destination, binat)
     # - Firewall (zones, policies, rules)
     # - Custom config (START_CONFIG)
@@ -66,6 +69,7 @@ def generate_config(config: RouterConfig) -> list[str]:
 
 __all__ = [
     "BaseGenerator",
+    "DhcpGenerator",
     "HostnameGenerator",
     "InterfaceGenerator",
     "OspfGenerator",
