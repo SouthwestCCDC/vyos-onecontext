@@ -12,6 +12,9 @@ VYOS_IMAGE="${1:?VyOS image path required}"
 CONTEXT_ISO="${2:?Context ISO path required}"
 TIMEOUT="${3:-180}"  # Default 3 minutes for boot + context
 
+# Extract context name from ISO filename (e.g., simple.iso -> simple)
+CONTEXT_NAME=$(basename "$CONTEXT_ISO" .iso)
+
 # Validate inputs
 if [ ! -f "$VYOS_IMAGE" ]; then
     echo "ERROR: VyOS image not found: $VYOS_IMAGE"
@@ -63,9 +66,26 @@ cleanup_all() {
 # Trap EXIT, INT (Ctrl+C), and TERM (kill) to ensure QEMU cleanup
 trap cleanup_all EXIT INT TERM
 
+# Helper function to assert a command was generated
+assert_command_generated() {
+    local pattern="$1"
+    local description="${2:-$pattern}"
+
+    if grep "VYOS_CMD:" "$SERIAL_LOG" | grep -qF "$pattern"; then
+        echo "[PASS] Found expected command: $description"
+        return 0
+    else
+        echo "[FAIL] Missing expected command: $description"
+        echo "       Pattern: $pattern"
+        VALIDATION_FAILED=1
+        return 1
+    fi
+}
+
 echo "Starting VyOS VM for integration testing..."
 echo "  Image: $VYOS_IMAGE"
 echo "  Context: $CONTEXT_ISO"
+echo "  Context name: $CONTEXT_NAME"
 echo "  Serial log: $SERIAL_LOG"
 echo "  SSH port: $SSH_PORT"
 
@@ -253,6 +273,13 @@ case "$CONTEXT_NAME" in
         assert_command_generated "set protocols static route 10.0.0.0/8 next-hop 192.168.122.254" "Gateway route (10.0.0.0/8)"
         # Interface route: 172.16.0.0/12 via eth0 (no gateway)
         assert_command_generated "set protocols static route 172.16.0.0/12 interface eth0" "Interface route (172.16.0.0/12)"
+        ;;
+    ospf)
+        assert_command_generated "set system host-name" "Hostname configuration"
+        # OSPF interface assignment to area
+        assert_command_generated "set protocols ospf interface eth0 area" "OSPF interface area assignment"
+        # Router ID configuration
+        assert_command_generated "set protocols ospf parameters router-id" "OSPF router ID"
         ;;
     *)
         echo "[WARN] Unknown context '$CONTEXT_NAME' - no specific assertions"
