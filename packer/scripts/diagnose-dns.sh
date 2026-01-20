@@ -101,6 +101,33 @@ for host in $TEST_HOSTS; do
     echo
 done
 
+# Test 4: Using internal DNS directly (10.63.4.101)
+# This is the DNS server configured for the game_tools network where runners live.
+# SLIRP proxy (10.0.2.3) should forward to this via the host's resolv.conf.
+echo "=== TEST 4: Internal DNS Direct (10.63.4.101) ==="
+echo "This is the upstream DNS that SLIRP should forward to"
+echo "nameserver 10.63.4.101" | sudo tee /etc/resolv.conf > /dev/null
+cat /etc/resolv.conf
+echo
+# First test: can we even reach it?
+echo "--- Testing TCP connectivity to 10.63.4.101:53 ---"
+if timeout 5 bash -c 'echo > /dev/tcp/10.63.4.101/53' 2>/dev/null; then
+    echo "TCP to 10.63.4.101:53 is OPEN"
+else
+    echo "TCP to 10.63.4.101:53 FAILED or timed out (may not be routable from SLIRP)"
+fi
+echo
+# Now test resolution
+for host in $TEST_HOSTS; do
+    echo "--- Resolving $host via 10.63.4.101 ---"
+    time getent ahostsv4 "$host" 2>&1 || echo "FAILED to resolve $host via internal DNS"
+    echo
+done
+# Also test an internal hostname if we know one
+echo "--- Resolving artifacts.swccdc.com via 10.63.4.101 ---"
+time getent ahostsv4 artifacts.swccdc.com 2>&1 || echo "FAILED to resolve artifacts.swccdc.com via internal DNS"
+echo
+
 echo "========================================"
 echo "=== END DNS COMPARISON ==="
 echo "========================================"
