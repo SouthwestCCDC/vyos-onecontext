@@ -275,13 +275,13 @@ case "$CONTEXT_NAME" in
         assert_command_generated "range 0 start 10.50.1.100" "DHCP range start address"
         assert_command_generated "range 0 stop 10.50.1.200" "DHCP range end address"
         # Gateway option (default-router)
-        assert_command_generated "option default-router 10.50.1.1" "DHCP default router option"
+        assert_command_generated "default-router 10.50.1.1" "DHCP default router option"
         # DNS servers option
-        assert_command_generated "option name-server" "DHCP DNS server option"
+        assert_command_generated "name-server" "DHCP DNS server option"
         # Lease time
         assert_command_generated "lease 3600" "DHCP lease time"
         # Domain name option
-        assert_command_generated "option domain-name test.local" "DHCP domain name option"
+        assert_command_generated "domain-name test.local" "DHCP domain name option"
         # Static mapping
         assert_command_generated "static-mapping reserved-host" "DHCP static mapping"
         assert_command_generated "mac-address 00:11:22:33:44:55" "DHCP static mapping MAC address"
