@@ -123,21 +123,144 @@ build {
   # We use QEMU SLIRP's DNS proxy (10.0.2.3) which forwards to the host resolver.
   provisioner "shell" {
     inline = [
+      # =======================================================================
+      # DNS DIAGNOSTIC INSTRUMENTATION
+      # This captures DNS state at key points to debug intermittent failures.
+      # See: https://github.com/SouthwestCCDC/vyos-onecontext/issues/TBD
+      # =======================================================================
+      <<-DIAG
+      dns_diag() {
+        local label="$1"
+        echo ""
+        echo "======== DNS DIAGNOSTICS: $label ========"
+        echo "--- Timestamp: $(date -Iseconds) ---"
+        echo ""
+        echo "--- /etc/resolv.conf ---"
+        cat /etc/resolv.conf 2>/dev/null || echo "(file not found or empty)"
+        echo ""
+        echo "--- /etc/gai.conf ---"
+        cat /etc/gai.conf 2>/dev/null || echo "(file not found or empty)"
+        echo ""
+        echo "--- vyos-hostsd-client state ---"
+        sudo /usr/bin/vyos-hostsd-client --show-name-servers 2>&1 || echo "(command failed)"
+        echo ""
+        echo "--- Network interfaces ---"
+        ip -4 addr show 2>/dev/null | grep -E "^[0-9]+:|inet " || echo "(no IPv4 addresses)"
+        echo ""
+        echo "--- Default route ---"
+        ip -4 route show default 2>/dev/null || echo "(no default route)"
+        echo ""
+        echo "--- Test DNS resolution (IPv4 only) ---"
+        echo -n "  astral.sh (getent ahostsv4): "
+        getent ahostsv4 astral.sh 2>&1 | head -1 || echo "FAILED"
+        echo -n "  github.com (getent ahostsv4): "
+        getent ahostsv4 github.com 2>&1 | head -1 || echo "FAILED"
+        echo ""
+        echo "--- Test DNS resolution (dual-stack) ---"
+        echo -n "  astral.sh (getent ahosts): "
+        getent ahosts astral.sh 2>&1 | head -1 || echo "FAILED"
+        echo -n "  github.com (getent ahosts): "
+        getent ahosts github.com 2>&1 | head -1 || echo "FAILED"
+        echo ""
+        echo "--- vyos-hostsd service status ---"
+        systemctl is-active vyos-hostsd 2>/dev/null || echo "(service check failed)"
+        echo ""
+        echo "======== END DNS DIAGNOSTICS ========"
+        echo ""
+      }
+      DIAG
+      ,
+      # Capture initial DNS state before any changes
+      "dns_diag 'BEFORE DNS CONFIGURATION'",
       # Add DNS server through vyos-hostsd with system tag (survives regeneration)
+      "echo 'Calling vyos-hostsd-client to add DNS server...'",
       "sudo /usr/bin/vyos-hostsd-client --add-name-servers 10.0.2.3 --tag system --apply",
+      "echo 'vyos-hostsd-client completed with exit code: '$?",
+      # Capture state after vyos-hostsd-client
+      "dns_diag 'AFTER vyos-hostsd-client'",
       # Prefer IPv4 over IPv6 (QEMU SLIRP doesn't support IPv6)
       "echo 'precedence ::ffff:0:0/96 100' | sudo tee -a /etc/gai.conf",
+      # Capture state after gai.conf modification
+      "dns_diag 'AFTER gai.conf modification'",
       # Verify DNS is working before proceeding
       "for i in $(seq 1 10); do getent ahostsv4 astral.sh && break; echo \"DNS attempt $i failed, retrying...\"; sleep 5; done",
-      "getent ahostsv4 astral.sh > /dev/null || { echo 'ERROR: DNS resolution failed'; exit 1; }"
+      "getent ahostsv4 astral.sh > /dev/null || { dns_diag 'DNS VERIFICATION FAILED'; exit 1; }",
+      "echo 'DNS configuration complete - verification passed'"
     ]
   }
 
   # Create venv and install the package using uv
   provisioner "shell" {
     inline = [
-      # Install uv with retry (force IPv4 - QEMU SLIRP doesn't support IPv6)
-      "curl -4 --retry 5 --retry-delay 5 --retry-connrefused -LsSf https://astral.sh/uv/install.sh | sudo UV_INSTALLER_DOWNLOAD_TIMEOUT=120 sh",
+      # =======================================================================
+      # DNS DIAGNOSTIC INSTRUMENTATION (continued)
+      # Redefine the function since each provisioner is a new shell session
+      # =======================================================================
+      <<-DIAG
+      dns_diag() {
+        local label="$1"
+        echo ""
+        echo "======== DNS DIAGNOSTICS: $label ========"
+        echo "--- Timestamp: $(date -Iseconds) ---"
+        echo ""
+        echo "--- /etc/resolv.conf ---"
+        cat /etc/resolv.conf 2>/dev/null || echo "(file not found or empty)"
+        echo ""
+        echo "--- /etc/gai.conf ---"
+        cat /etc/gai.conf 2>/dev/null || echo "(file not found or empty)"
+        echo ""
+        echo "--- vyos-hostsd-client state ---"
+        sudo /usr/bin/vyos-hostsd-client --show-name-servers 2>&1 || echo "(command failed)"
+        echo ""
+        echo "--- Network interfaces ---"
+        ip -4 addr show 2>/dev/null | grep -E "^[0-9]+:|inet " || echo "(no IPv4 addresses)"
+        echo ""
+        echo "--- Default route ---"
+        ip -4 route show default 2>/dev/null || echo "(no default route)"
+        echo ""
+        echo "--- Test DNS resolution (IPv4 only) ---"
+        echo -n "  astral.sh (getent ahostsv4): "
+        getent ahostsv4 astral.sh 2>&1 | head -1 || echo "FAILED"
+        echo -n "  github.com (getent ahostsv4): "
+        getent ahostsv4 github.com 2>&1 | head -1 || echo "FAILED"
+        echo ""
+        echo "--- Test DNS resolution (dual-stack) ---"
+        echo -n "  astral.sh (getent ahosts): "
+        getent ahosts astral.sh 2>&1 | head -1 || echo "FAILED"
+        echo -n "  github.com (getent ahosts): "
+        getent ahosts github.com 2>&1 | head -1 || echo "FAILED"
+        echo ""
+        echo "--- vyos-hostsd service status ---"
+        systemctl is-active vyos-hostsd 2>/dev/null || echo "(service check failed)"
+        echo ""
+        echo "======== END DNS DIAGNOSTICS ========"
+        echo ""
+      }
+      DIAG
+      ,
+      # Capture DNS state at start of this provisioner
+      "dns_diag 'START OF UV INSTALL PROVISIONER'",
+      # Download uv installer with diagnostics on failure
+      <<-INSTALL
+      echo "Downloading uv installer..."
+      if ! curl -4 --retry 5 --retry-delay 5 --retry-connrefused -LsSf https://astral.sh/uv/install.sh -o /tmp/uv-install.sh; then
+        echo "ERROR: Failed to download uv installer"
+        dns_diag 'CURL DOWNLOAD FAILED'
+        exit 1
+      fi
+      echo "uv installer downloaded successfully"
+
+      # Run installer with error handling
+      echo "Running uv installer..."
+      if ! sudo UV_INSTALLER_DOWNLOAD_TIMEOUT=120 sh /tmp/uv-install.sh; then
+        echo "ERROR: uv installer failed"
+        dns_diag 'UV INSTALLER FAILED'
+        exit 1
+      fi
+      echo "uv installed successfully"
+      rm -f /tmp/uv-install.sh
+      INSTALL
+      ,
       # Create virtual environment and install package
       "sudo /root/.local/bin/uv venv /opt/vyos-onecontext/venv",
       "sudo /root/.local/bin/uv pip install --python /opt/vyos-onecontext/venv/bin/python /tmp/vyos-onecontext-src/",
