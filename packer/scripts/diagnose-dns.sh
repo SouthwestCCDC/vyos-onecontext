@@ -37,19 +37,39 @@ ping -c 1 -W 2 10.0.2.2 2>&1 || echo "ICMP to gateway failed (expected in SLIRP)
 ping -c 1 -W 2 8.8.8.8 2>&1 || echo "ICMP to 8.8.8.8 failed (expected in SLIRP)"
 echo
 
-echo "=== Testing TCP connectivity ==="
+echo "=== DETAILED NETWORK STATE ==="
+echo "--- Default route ---"
+ip route show default
+echo
+echo "--- All routes ---"
+ip route show
+echo
+echo "--- ARP/neighbor cache ---"
+ip neigh show
+echo
+
+echo "=== GATEWAY CONNECTIVITY TEST ==="
+echo "SLIRP gateway should be 10.0.2.2"
+echo "--- Attempting to reach gateway via TCP (port 80, won't connect but tests routing) ---"
+timeout 2 bash -c 'echo > /dev/tcp/10.0.2.2/80' 2>&1 && echo "TCP to gateway succeeded" || echo "TCP to gateway: $?"
+echo
+
+echo "=== EXTERNAL CONNECTIVITY TESTS ==="
 echo "--- TCP to 8.8.8.8:53 ---"
-if timeout 5 bash -c 'echo > /dev/tcp/8.8.8.8/53' 2>/dev/null; then
-    echo "TCP to 8.8.8.8:53 is OPEN"
-else
-    echo "TCP to 8.8.8.8:53 FAILED or timed out"
-fi
+timeout 5 bash -c 'echo > /dev/tcp/8.8.8.8/53' 2>&1 && echo "TCP to 8.8.8.8:53 is OPEN" || echo "TCP to 8.8.8.8:53 FAILED: exit $?"
 echo "--- TCP to 8.8.8.8:443 ---"
-if timeout 5 bash -c 'echo > /dev/tcp/8.8.8.8/443' 2>/dev/null; then
-    echo "TCP to 8.8.8.8:443 is OPEN"
-else
-    echo "TCP to 8.8.8.8:443 FAILED or timed out"
-fi
+timeout 5 bash -c 'echo > /dev/tcp/8.8.8.8/443' 2>&1 && echo "TCP to 8.8.8.8:443 is OPEN" || echo "TCP to 8.8.8.8:443 FAILED: exit $?"
+echo "--- TCP to 1.1.1.1:53 ---"
+timeout 5 bash -c 'echo > /dev/tcp/1.1.1.1/53' 2>&1 && echo "TCP to 1.1.1.1:53 is OPEN" || echo "TCP to 1.1.1.1:53 FAILED: exit $?"
+echo
+
+echo "=== DNS CONSISTENCY TEST (same host, multiple attempts) ==="
+echo "Testing if DNS is consistent within this VM..."
+echo "nameserver 10.0.2.3" | sudo tee /etc/resolv.conf > /dev/null
+for i in 1 2 3 4 5; do
+    echo "--- Attempt $i: getent ahostsv4 google.com ---"
+    getent ahostsv4 google.com 2>&1 | head -1 || echo "FAILED"
+done
 echo
 
 # =============================================================================
@@ -142,17 +162,27 @@ echo
 if command -v dig &>/dev/null; then
     echo "=== Additional dig tests (UDP vs TCP) ==="
     echo "--- UDP to 8.8.8.8 ---"
-    dig +short +time=5 +tries=1 @8.8.8.8 astral.sh A || echo "dig UDP failed"
+    dig +short +time=5 +tries=1 @8.8.8.8 astral.sh A 2>&1 || echo "dig UDP failed"
     echo "--- TCP to 8.8.8.8 ---"
-    dig +short +time=5 +tries=1 +tcp @8.8.8.8 astral.sh A || echo "dig TCP failed"
+    dig +short +time=5 +tries=1 +tcp @8.8.8.8 astral.sh A 2>&1 || echo "dig TCP failed"
     echo "--- UDP to SLIRP proxy ---"
-    dig +short +time=5 +tries=1 @10.0.2.3 astral.sh A || echo "dig SLIRP failed"
+    dig +short +time=5 +tries=1 @10.0.2.3 astral.sh A 2>&1 || echo "dig SLIRP failed"
     echo
 fi
 
-echo "=== Testing HTTPS connectivity (bypasses DNS) ==="
-echo "--- curl to IP directly (no DNS needed) ---"
-curl -4 -s --connect-timeout 10 --max-time 15 -o /dev/null -w "HTTP %{http_code} to 8.8.8.8:443\n" https://8.8.8.8/ 2>&1 || echo "curl to 8.8.8.8 failed"
+echo "=== CURL CONNECTIVITY TEST (verbose, shows exact errors) ==="
+echo "--- curl to 8.8.8.8 (IP direct, no DNS) ---"
+curl -4 -v --connect-timeout 10 --max-time 15 -o /dev/null https://8.8.8.8/ 2>&1 | grep -E "Trying|Connected|Could not|error:|Failed"
+echo
+echo "--- curl to google.com (requires DNS) ---"
+curl -4 -v --connect-timeout 10 --max-time 15 -o /dev/null https://google.com/ 2>&1 | grep -E "Trying|Connected|Could not|error:|Failed|Resolving"
+echo
+
+echo "=== FINAL NETWORK STATE (check if anything changed) ==="
+echo "--- Routes at end ---"
+ip route show
+echo "--- Neighbor cache at end ---"
+ip neigh show
 echo
 
 echo "=== DNS DIAGNOSTIC END ==="
