@@ -223,12 +223,22 @@ case "$CONTEXT_NAME" in
         ;;
     quotes)
         assert_command_generated "set system host-name" "Hostname configuration"
-        assert_command_generated "set system login user vyos authentication public-keys" "SSH public key (with quotes)"
+        assert_command_generated "set system login user vyos authentication public-keys" "SSH public key"
+        # Verify the quoted comment field is preserved (issue #40 regression test)
+        # The SSH key comment contains "test@quotes" with embedded double quotes
+        if grep -q 'VYOS_CMD:.*public-keys.*test@quotes' "$SERIAL_LOG"; then
+            echo "[PASS] SSH key comment with quotes preserved"
+        else
+            echo "[FAIL] SSH key comment with quotes not found - quote handling may be broken"
+            VALIDATION_FAILED=1
+        fi
         ;;
     multi-interface)
         assert_command_generated "set system host-name" "Hostname configuration"
-        assert_command_generated "set interfaces ethernet eth0 address" "Interface eth0 IP address"
-        # Multi-interface test has aliases (secondary IPs) on eth0
+        assert_command_generated "set interfaces ethernet eth0 address.*192.168.122.30" "Primary IP (192.168.122.30)"
+        # Verify alias IPs are configured (secondary addresses on eth0)
+        assert_command_generated "set interfaces ethernet eth0 address.*10.0.0.1" "Alias IP 1 (10.0.0.1)"
+        assert_command_generated "set interfaces ethernet eth0 address.*172.16.0.1" "Alias IP 2 (172.16.0.1)"
         ;;
     management-vrf)
         assert_command_generated "set system host-name" "Hostname configuration"

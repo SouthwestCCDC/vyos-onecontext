@@ -103,7 +103,7 @@ main() {
 
     if "$VENV_PATH/bin/python" -m vyos_onecontext "$CONTEXT_PATH" >"$OUTPUT_FILE" 2>&1; then
         log_info "Contextualization completed successfully"
-        # Log output at INFO level so VYOS_CMD lines appear in serial log for test validation
+        # Log all Python output at INFO level for serial log visibility (enables test validation)
         if [ -s "$OUTPUT_FILE" ]; then
             while IFS= read -r line; do
                 log_info "$line"
