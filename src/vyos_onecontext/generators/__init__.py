@@ -8,6 +8,7 @@ configuration (interfaces, routing, NAT, etc.).
 from vyos_onecontext.generators.base import BaseGenerator
 from vyos_onecontext.generators.dhcp import DhcpGenerator
 from vyos_onecontext.generators.interface import InterfaceGenerator
+from vyos_onecontext.generators.nat import NatGenerator
 from vyos_onecontext.generators.ospf import OspfGenerator
 from vyos_onecontext.generators.routing import RoutingGenerator, StaticRoutesGenerator
 from vyos_onecontext.generators.service import SshServiceGenerator
@@ -59,9 +60,11 @@ def generate_config(config: RouterConfig) -> list[str]:
     # DHCP server
     commands.extend(DhcpGenerator(config.dhcp).generate())
 
+    # NAT (source, destination, binat)
+    commands.extend(NatGenerator(config.nat).generate())
+
     # Future generators will be added here in later phases:
     # - DNS service (recursive resolver, forwarding)
-    # - NAT (source, destination, binat)
     # - Firewall (zones, policies, rules)
     # - Custom config (START_CONFIG)
 
@@ -73,6 +76,7 @@ __all__ = [
     "DhcpGenerator",
     "HostnameGenerator",
     "InterfaceGenerator",
+    "NatGenerator",
     "OspfGenerator",
     "RoutingGenerator",
     "SshKeyGenerator",
