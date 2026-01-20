@@ -68,9 +68,9 @@ for scenario in "${TEST_SCENARIOS[@]}"; do
         continue
     fi
 
-    # Run test
+    # Run test with context name for assertions
     echo ""
-    if "$SCRIPT_DIR/run-qemu-test.sh" "$VYOS_IMAGE" "$ISO_PATH"; then
+    if CONTEXT_NAME="$name" "$SCRIPT_DIR/run-qemu-test.sh" "$VYOS_IMAGE" "$ISO_PATH"; then
         echo "[PASS] $description"
         ((PASSED++)) || true
     else

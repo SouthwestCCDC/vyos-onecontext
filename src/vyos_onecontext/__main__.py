@@ -158,7 +158,7 @@ def apply_configuration(
 
     logger.info("Generated %d configuration commands", len(commands))
     for cmd in commands:
-        logger.debug("  %s", cmd)
+        logger.info("VYOS_CMD: %s", cmd)
 
     # In dry-run mode, just print commands and exit
     if dry_run:

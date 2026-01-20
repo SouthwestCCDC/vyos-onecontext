@@ -175,6 +175,83 @@ else
     echo "[PASS] No Python exceptions detected in vyos-onecontext output"
 fi
 
+# CRITICAL: Verify configuration commands were actually generated
+# This ensures the test context is properly processed, not just "didn't crash"
+echo ""
+echo "=== Command Generation Validation ==="
+
+# Helper function to check for required commands
+assert_command_generated() {
+    local pattern="$1"
+    local description="$2"
+    if grep -q "VYOS_CMD:.*$pattern" "$SERIAL_LOG"; then
+        echo "[PASS] $description"
+        return 0
+    else
+        echo "[FAIL] $description - command not generated"
+        echo "       Expected pattern: $pattern"
+        VALIDATION_FAILED=1
+        return 1
+    fi
+}
+
+# Check that ANY commands were generated (baseline requirement)
+if grep -q "VYOS_CMD:" "$SERIAL_LOG"; then
+    CMD_COUNT=$(grep -c "VYOS_CMD:" "$SERIAL_LOG")
+    echo "[PASS] Generated $CMD_COUNT configuration commands"
+    echo ""
+    echo "Commands generated:"
+    grep "VYOS_CMD:" "$SERIAL_LOG" | sed 's/.*VYOS_CMD: /  /' | head -30
+    echo ""
+else
+    echo "[CRITICAL FAIL] No configuration commands were generated!"
+    echo "This means the test context is not being processed correctly."
+    VALIDATION_FAILED=1
+fi
+
+# Context-specific command assertions
+# Extract context name from the ISO path or environment
+CONTEXT_NAME="${CONTEXT_NAME:-unknown}"
+echo ""
+echo "=== Context-Specific Assertions ($CONTEXT_NAME) ==="
+
+case "$CONTEXT_NAME" in
+    simple)
+        assert_command_generated "set system host-name" "Hostname configuration"
+        assert_command_generated "set interfaces ethernet eth0 address" "Interface eth0 IP address"
+        assert_command_generated "set system login user vyos authentication public-keys" "SSH public key"
+        ;;
+    quotes)
+        assert_command_generated "set system host-name" "Hostname configuration"
+        assert_command_generated "set system login user vyos authentication public-keys" "SSH public key"
+        # Verify the quoted comment field is preserved (issue #40 regression test)
+        # The SSH key comment "test@quotes" is sanitized to "test_at_quotes" (@ -> _at_)
+        # The double quotes around the comment are preserved in the key identifier
+        if grep -q 'VYOS_CMD:.*public-keys.*test_at_quotes' "$SERIAL_LOG"; then
+            echo "[PASS] SSH key comment with quotes preserved and sanitized correctly"
+        else
+            echo "[FAIL] SSH key comment not found - quote handling may be broken"
+            VALIDATION_FAILED=1
+        fi
+        ;;
+    multi-interface)
+        assert_command_generated "set system host-name" "Hostname configuration"
+        assert_command_generated "set interfaces ethernet eth0 address.*192.168.122.30" "Primary IP (192.168.122.30)"
+        # Verify alias IPs are configured (secondary addresses on eth0)
+        assert_command_generated "set interfaces ethernet eth0 address.*10.0.0.1" "Alias IP 1 (10.0.0.1)"
+        assert_command_generated "set interfaces ethernet eth0 address.*172.16.0.1" "Alias IP 2 (172.16.0.1)"
+        ;;
+    management-vrf)
+        assert_command_generated "set system host-name" "Hostname configuration"
+        assert_command_generated "set vrf name management table 100" "VRF creation"
+        assert_command_generated "set interfaces ethernet eth0 vrf management" "Interface VRF assignment"
+        assert_command_generated "set service ssh vrf management" "SSH VRF binding"
+        ;;
+    *)
+        echo "[WARN] Unknown context '$CONTEXT_NAME' - no specific assertions"
+        ;;
+esac
+
 echo ""
 if [ $VALIDATION_FAILED -eq 0 ]; then
     echo "=== [PASS] All validation checks passed ==="
