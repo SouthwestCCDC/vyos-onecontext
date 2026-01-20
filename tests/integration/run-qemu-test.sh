@@ -253,8 +253,8 @@ case "$CONTEXT_NAME" in
         ;;
     static-routes)
         assert_command_generated "set system host-name" "Hostname configuration"
-        # Gateway route: 10.0.0.0/8 via 192.168.122.254
-        assert_command_generated "set protocols static route 10.0.0.0/8 next-hop 192.168.122.254" "Gateway route (10.0.0.0/8)"
+        # Gateway route: 10.0.0.0/8 via 192.168.122.1 (must be reachable in QEMU)
+        assert_command_generated "set protocols static route 10.0.0.0/8 next-hop 192.168.122.1" "Gateway route (10.0.0.0/8)"
         # Interface route: 172.16.0.0/12 via eth0 (no gateway)
         assert_command_generated "set protocols static route 172.16.0.0/12 interface eth0" "Interface route (172.16.0.0/12)"
         ;;
