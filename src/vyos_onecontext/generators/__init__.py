@@ -7,7 +7,7 @@ configuration (interfaces, routing, NAT, etc.).
 
 from vyos_onecontext.generators.base import BaseGenerator
 from vyos_onecontext.generators.interface import InterfaceGenerator
-from vyos_onecontext.generators.routing import RoutingGenerator
+from vyos_onecontext.generators.routing import RoutingGenerator, StaticRoutesGenerator
 from vyos_onecontext.generators.service import SshServiceGenerator
 from vyos_onecontext.generators.system import HostnameGenerator, SshKeyGenerator
 from vyos_onecontext.generators.vrf import VRF_NAME, VRF_TABLE_ID, VrfGenerator
@@ -41,8 +41,12 @@ def generate_config(config: RouterConfig) -> list[str]:
     # Routing (default gateway selection for non-management interfaces)
     commands.extend(RoutingGenerator(config.interfaces).generate())
 
-    # VRF configuration (management VRF)
+    # VRF configuration (management VRF) - must come BEFORE static routes
+    # since routes can reference VRFs
     commands.extend(VrfGenerator(config.interfaces).generate())
+
+    # Static routes (ROUTES_JSON) - must come AFTER VRF since routes can reference VRFs
+    commands.extend(StaticRoutesGenerator(config.routes).generate())
 
     # Services (SSH VRF binding)
     commands.extend(SshServiceGenerator(config.interfaces).generate())
@@ -63,6 +67,7 @@ __all__ = [
     "RoutingGenerator",
     "SshKeyGenerator",
     "SshServiceGenerator",
+    "StaticRoutesGenerator",
     "VrfGenerator",
     "VRF_NAME",
     "VRF_TABLE_ID",

@@ -3,6 +3,7 @@
 from vyos_onecontext.generators.base import BaseGenerator
 from vyos_onecontext.generators.utils import natural_sort_key
 from vyos_onecontext.models import InterfaceConfig
+from vyos_onecontext.models.routing import RoutesConfig
 
 
 class RoutingGenerator(BaseGenerator):
@@ -76,3 +77,67 @@ class RoutingGenerator(BaseGenerator):
 
         # No valid gateway found
         return None
+
+
+class StaticRoutesGenerator(BaseGenerator):
+    """Generate VyOS static route configuration commands.
+
+    Handles static routes from ROUTES_JSON configuration.
+    """
+
+    def __init__(self, routes_config: RoutesConfig | None):
+        """Initialize static routes generator.
+
+        Args:
+            routes_config: Static routes configuration, or None if no routes configured
+        """
+        self.routes_config = routes_config
+
+    def generate(self) -> list[str]:
+        """Generate static route configuration commands.
+
+        Generates commands for static routes specified in ROUTES_JSON.
+        Routes can be:
+        - Gateway routes: next-hop specified
+        - Interface routes: no next-hop, route via interface
+
+        Routes can optionally be assigned to a VRF.
+
+        Returns:
+            List of VyOS 'set' commands for static routes
+        """
+        commands: list[str] = []
+
+        # If no routes configured, return empty list
+        if self.routes_config is None:
+            return commands
+
+        # Generate commands for each static route
+        for route in self.routes_config.static:
+            # Build the base command path
+            if route.vrf:
+                # VRF route: set vrf name <vrf> protocols static route ...
+                base = f"set vrf name {route.vrf} protocols static route {route.destination}"
+            else:
+                # Main routing table: set protocols static route ...
+                base = f"set protocols static route {route.destination}"
+
+            # Add next-hop or interface
+            if route.gateway:
+                # Gateway route
+                if route.distance != 1:
+                    # Non-default distance: include distance parameter
+                    commands.append(f"{base} next-hop {route.gateway} distance {route.distance}")
+                else:
+                    # Default distance (1): omit distance parameter
+                    commands.append(f"{base} next-hop {route.gateway}")
+            else:
+                # Interface route (no next-hop)
+                if route.distance != 1:
+                    # Non-default distance: include distance parameter
+                    commands.append(f"{base} interface {route.interface} distance {route.distance}")
+                else:
+                    # Default distance (1): omit distance parameter
+                    commands.append(f"{base} interface {route.interface}")
+
+        return commands
