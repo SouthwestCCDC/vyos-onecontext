@@ -24,7 +24,7 @@ def _validate_interface_name(name: str) -> str:
     Raises:
         ValueError: If interface name is invalid
     """
-    if not VALID_INTERFACE_PATTERN.match(name):
+    if not VALID_INTERFACE_PATTERN.fullmatch(name):
         raise ValueError(
             f"Invalid interface name '{name}' (expected ethN format, e.g., eth0, eth1)"
         )
