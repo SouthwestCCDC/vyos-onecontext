@@ -24,7 +24,7 @@ You are the **orchestrator** coordinating subagents that implement features, fix
 Every task gets its own worktree branched from **latest `origin/sagitta`**. This prevents merge conflicts and ensures clean PRs.
 
 Worktree location: `/home/george/swccdc/vyos-onecontext-worktrees/`
-Branch naming: `fix/vyos-{N}-{timestamp}` or `feat/vyos-{description}-{timestamp}`
+Branch naming: `fix/issue-{N}-{timestamp}` or `feat-{description}-{timestamp}`
 
 ### 2. CI Must Pass - No Exceptions
 
@@ -54,6 +54,25 @@ As the project evolves, occasionally check that the agent definitions in `.claud
 - Do they reflect the current codebase structure?
 - Are the VyOS syntax references up to date?
 - Are there new patterns that should be documented?
+
+### 7. Share GitHub Links
+
+When discussing an issue or PR with the user, always share the full GitHub URL:
+- "Working on issue #15: https://github.com/SouthwestCCDC/vyos-onecontext/issues/15"
+- "Created PR #12: https://github.com/SouthwestCCDC/vyos-onecontext/pull/12"
+
+This lets the user quickly check status and context.
+
+### 8. Explicit Permission Error Reporting
+
+When subagents hit permission errors, they must flag them with specifics:
+- Which tool/command failed
+- The exact path involved
+- Likely cause and remedy
+
+Example: "Permission denied accessing `/home/george/swccdc/deployment/` - this command may need to run via ops container or requires SSH access"
+
+Never report vague "permission denied" without context.
 
 ---
 
@@ -136,9 +155,14 @@ When changes touch both repos:
 cd /home/george/swccdc/deployment/packer/opennebula-context/vyos-sagitta
 git fetch origin
 
-WORKTREE_NAME="vyos-${TASK}-$(date +%s)"
+# Worktree naming:
+# - Issue-based: issue-{N}-{timestamp} (when working on a GitHub issue)
+# - Feature: feat-{description}-{timestamp} (for features without an issue)
+# - Fix: fix-{description}-{timestamp} (for quick fixes without an issue)
+
+WORKTREE_NAME="issue-${ISSUE_NUMBER}-$(date +%s)"
 git worktree add "/home/george/swccdc/vyos-onecontext-worktrees/${WORKTREE_NAME}" \
-  -b "feat/${WORKTREE_NAME}" origin/sagitta
+  -b "fix/${WORKTREE_NAME}" origin/sagitta
 ```
 
 ### Check Project Status
@@ -167,7 +191,7 @@ Implement Phase {N} tasks from the implementation plan.
 Create a worktree:
 cd /home/george/swccdc/deployment/packer/opennebula-context/vyos-sagitta
 git fetch origin
-WORKTREE="phase-{N}-$(date +%s)"
+WORKTREE="feat-phase-{N}-$(date +%s)"  # or issue-{N}-{timestamp} if linked to an issue
 git worktree add "/home/george/swccdc/vyos-onecontext-worktrees/${WORKTREE}" -b "feat/${WORKTREE}" origin/sagitta
 cd "/home/george/swccdc/vyos-onecontext-worktrees/${WORKTREE}"
 
