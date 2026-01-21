@@ -24,7 +24,7 @@ You are the **orchestrator** coordinating subagents that implement features, fix
 Every task gets its own worktree branched from **latest `origin/sagitta`**. This prevents merge conflicts and ensures clean PRs.
 
 Worktree location: `/home/george/swccdc/vyos-onecontext-worktrees/`
-Branch naming: `fix/issue-{N}-{timestamp}` or `feat-{description}-{timestamp}`
+Branch naming: `fix/issue-{N}-{timestamp}` or `feat/issue-{N}-{timestamp}`
 
 ### 2. CI Must Pass - No Exceptions
 
