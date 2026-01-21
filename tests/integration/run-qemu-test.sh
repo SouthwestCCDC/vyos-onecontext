@@ -321,6 +321,33 @@ case "$CONTEXT_NAME" in
         assert_command_generated "source address.*10.100.0.100" "Binat internal address (source rule)"
         assert_command_generated "destination address.*192.168.122.100" "Binat external address (destination rule)"
         ;;
+    vrf-with-routing)
+        assert_command_generated "set system host-name" "Hostname configuration"
+        # Management VRF
+        assert_command_generated "set vrf name management" "VRF creation"
+        assert_command_generated "set interfaces ethernet eth0 vrf management" "Interface VRF assignment"
+        # Static routes in VRF
+        assert_command_generated "set protocols static route 10.10.0.0/16" "Static route in VRF"
+        assert_command_generated "vrf management" "VRF routing table assignment"
+        # OSPF configuration
+        assert_command_generated "set protocols ospf" "OSPF configuration"
+        assert_command_generated "set protocols ospf parameters router-id" "OSPF router ID"
+        assert_command_generated "set protocols ospf interface eth0 area" "OSPF interface area assignment"
+        ;;
+    nat-with-firewall)
+        assert_command_generated "set system host-name" "Hostname configuration"
+        # NAT rules
+        assert_command_generated "set nat source rule" "NAT rules generated"
+        assert_command_generated "outbound-interface name eth0" "NAT outbound interface"
+        assert_command_generated "translation address masquerade" "NAT masquerade translation"
+        # Firewall zones
+        assert_command_generated "set firewall zone WAN" "WAN zone creation"
+        assert_command_generated "set firewall zone LAN" "LAN zone creation"
+        assert_command_generated "default-action drop" "Zone default action"
+        # Firewall policies (zone-pair rulesets)
+        assert_command_generated "set firewall ipv4 name" "Firewall policy creation"
+        assert_command_generated "rule.*action accept" "Firewall accept rules"
+        ;;
     *)
         echo "[WARN] Unknown context '$CONTEXT_NAME' - no specific assertions"
         ;;
