@@ -102,10 +102,18 @@ def run_start_script(script_content: str, timeout: int = 300) -> None:
             script_path = script_file.name
         cleanup_script = True
 
-    try:
-        # Ensure script is executable
-        os.chmod(script_path, 0o700)
+    # Ensure script is executable for inline (temporary) scripts only
+    if cleanup_script:
+        try:
+            os.chmod(script_path, 0o700)
+        except OSError as e:
+            logger.warning(
+                "Failed to set executable permissions on temporary START_SCRIPT %s: %s",
+                script_path,
+                e,
+            )
 
+    try:
         # Execute with timeout
         result = subprocess.run(
             ["/bin/bash", script_path],
