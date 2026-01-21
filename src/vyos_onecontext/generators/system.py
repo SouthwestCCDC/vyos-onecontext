@@ -64,6 +64,8 @@ class SshKeyGenerator(BaseGenerator):
         key_id = parts[2] if len(parts) >= 3 else "key1"
         # Sanitize key_id for use as VyOS identifier
         # VyOS only accepts alphanumeric characters and underscores
+        # Strip surrounding quotes (single or double) that may be in the comment
+        key_id = key_id.strip("\"'")
         key_id = key_id.replace("@", "_at_").replace(" ", "_").replace(".", "_")
 
         return [
