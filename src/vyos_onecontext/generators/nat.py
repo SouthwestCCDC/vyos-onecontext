@@ -100,7 +100,7 @@ class NatGenerator(BaseGenerator):
 
             # Description (optional)
             if rule.description:
-                commands.append(f"set nat source rule {rule_num} description {rule.description}")
+                commands.append(f"set nat source rule {rule_num} description '{rule.description}'")
 
         return commands
 
@@ -132,11 +132,7 @@ class NatGenerator(BaseGenerator):
 
             # Protocol (optional - if not specified, matches all protocols)
             if rule.protocol:
-                # Handle tcp_udp specially - need to set both protocols
-                if rule.protocol == "tcp_udp":
-                    commands.append(f"set nat destination rule {rule_num} protocol tcp_udp")
-                else:
-                    commands.append(f"set nat destination rule {rule_num} protocol {rule.protocol}")
+                commands.append(f"set nat destination rule {rule_num} protocol {rule.protocol}")
 
             # Destination address (optional - for 1:1 NAT scenarios)
             if rule.destination_address:
@@ -166,7 +162,7 @@ class NatGenerator(BaseGenerator):
             # Description (optional)
             if rule.description:
                 commands.append(
-                    f"set nat destination rule {rule_num} description {rule.description}"
+                    f"set nat destination rule {rule_num} description '{rule.description}'"
                 )
 
         return commands
@@ -221,8 +217,8 @@ class NatGenerator(BaseGenerator):
             # Description (applied to both rules if provided)
             if rule.description:
                 commands.append(
-                    f"set nat destination rule {rule_num} description {rule.description}"
+                    f"set nat destination rule {rule_num} description '{rule.description}'"
                 )
-                commands.append(f"set nat source rule {rule_num} description {rule.description}")
+                commands.append(f"set nat source rule {rule_num} description '{rule.description}'")
 
         return commands

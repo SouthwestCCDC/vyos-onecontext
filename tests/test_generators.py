@@ -1315,7 +1315,7 @@ class TestVrfGenerator:
         gen = VrfGenerator(interfaces)
         commands = gen.generate()
 
-        # eth1 should provide the gateway since eth0s is invalid
+        # eth1 should provide the gateway since eth0's is invalid
         assert commands[-1] == (
             "set vrf name management protocols static route 0.0.0.0/0 next-hop 192.168.1.254"
         )
@@ -2362,7 +2362,7 @@ class TestNatGenerator:
         commands = gen.generate()
 
         assert len(commands) == 4
-        assert "set nat source rule 100 description NAT for internal network" in commands
+        assert "set nat source rule 100 description 'NAT for internal network'" in commands
 
     def test_generate_multiple_source_nat_rules(self):
         """Test multiple source NAT rules with correct numbering."""
@@ -2505,7 +2505,7 @@ class TestNatGenerator:
 
         assert "set nat destination rule 100 destination port 2222" in commands
         assert "set nat destination rule 100 translation port 22" in commands
-        assert "set nat destination rule 100 description SSH to jump host" in commands
+        assert "set nat destination rule 100 description 'SSH to jump host'" in commands
 
     def test_generate_multiple_destination_nat_rules(self):
         """Test multiple destination NAT rules with correct numbering."""
@@ -2577,8 +2577,8 @@ class TestNatGenerator:
         commands = gen.generate()
 
         # Should have description on both rules
-        assert "set nat destination rule 500 description Scoring engine" in commands
-        assert "set nat source rule 500 description Scoring engine" in commands
+        assert "set nat destination rule 500 description 'Scoring engine'" in commands
+        assert "set nat source rule 500 description 'Scoring engine'" in commands
 
     def test_generate_multiple_binat_rules(self):
         """Test multiple bidirectional NAT rules with correct numbering."""
