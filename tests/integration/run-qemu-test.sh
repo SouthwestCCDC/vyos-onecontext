@@ -328,10 +328,9 @@ case "$CONTEXT_NAME" in
         assert_command_generated "set interfaces ethernet eth0 vrf management" "Interface VRF assignment"
         # Static routes in VRF (Sagitta syntax: set vrf name <vrf> protocols static route ...)
         assert_command_generated "set vrf name management protocols static route 10.10.0.0/16" "Static route in VRF"
-        # OSPF configuration (not in VRF)
+        # OSPF enabled but no interfaces (can't use eth0 - it's in management VRF)
         assert_command_generated "set protocols ospf" "OSPF configuration"
         assert_command_generated "set protocols ospf parameters router-id" "OSPF router ID"
-        assert_command_generated "set protocols ospf interface eth0 area" "OSPF interface area assignment"
         ;;
     nat-with-firewall)
         assert_command_generated "set system host-name" "Hostname configuration"
@@ -339,13 +338,11 @@ case "$CONTEXT_NAME" in
         assert_command_generated "set nat source rule" "NAT rules generated"
         assert_command_generated "outbound-interface name eth0" "NAT outbound interface"
         assert_command_generated "translation address masquerade" "NAT masquerade translation"
-        # Firewall zones
+        # Firewall zone (single zone - can't test multi-zone with single NIC)
         assert_command_generated "set firewall zone WAN" "WAN zone creation"
-        assert_command_generated "set firewall zone LAN" "LAN zone creation"
         assert_command_generated "default-action drop" "Zone default action"
-        # Firewall policies (zone-pair rulesets)
-        assert_command_generated "set firewall ipv4 name" "Firewall policy creation"
-        assert_command_generated "rule.*action accept" "Firewall accept rules"
+        # Global state policies
+        assert_command_generated "set firewall global-options state-policy" "Global state policy"
         ;;
     *)
         echo "[WARN] Unknown context '$CONTEXT_NAME' - no specific assertions"
