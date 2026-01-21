@@ -54,8 +54,7 @@ class VrfGenerator(BaseGenerator):
         vrf_gateway = self._select_vrf_default_gateway(management_interfaces)
         if vrf_gateway:
             commands.append(
-                f"set vrf name {VRF_NAME} protocols static route 0.0.0.0/0 "
-                f"next-hop {vrf_gateway}"
+                f"set vrf name {VRF_NAME} protocols static route 0.0.0.0/0 next-hop {vrf_gateway}"
             )
 
         return commands

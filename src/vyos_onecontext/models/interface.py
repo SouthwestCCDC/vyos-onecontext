@@ -10,9 +10,7 @@ from pydantic import BaseModel, Field, field_validator
 # Supports: eth, bond, br (bridge), wg (wireguard), vti (VPN tunnel),
 # tun, tap, dum (dummy), peth (physical eth), and lo (loopback)
 # See: https://docs.vyos.io/en/sagitta/configuration/interfaces/index.html
-VALID_INTERFACE_PATTERN = re.compile(
-    r"^(eth|bond|br|wg|vti|tun|tap|dum|peth)\d+$|^lo$"
-)
+VALID_INTERFACE_PATTERN = re.compile(r"^(eth|bond|br|wg|vti|tun|tap|dum|peth)\d+$|^lo$")
 
 
 class InterfaceConfig(BaseModel):
@@ -28,9 +26,7 @@ class InterfaceConfig(BaseModel):
     gateway: Annotated[IPv4Address | None, Field(None, description="Default gateway")]
     dns: Annotated[IPv4Address | None, Field(None, description="DNS server")]
     mtu: Annotated[int | None, Field(None, ge=68, le=9000, description="Interface MTU")]
-    management: Annotated[
-        bool, Field(False, description="Place interface in management VRF")
-    ]
+    management: Annotated[bool, Field(False, description="Place interface in management VRF")]
 
     @field_validator("name")
     @classmethod

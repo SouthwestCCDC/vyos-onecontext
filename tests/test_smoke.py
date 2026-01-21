@@ -80,9 +80,7 @@ class TestSimpleRouter:
         assert any("public-keys" in cmd for cmd in commands)
 
         # Verify interface command
-        assert any(
-            "eth0" in cmd and "192.168.1.1/24" in cmd for cmd in commands
-        )
+        assert any("eth0" in cmd and "192.168.1.1/24" in cmd for cmd in commands)
 
     def test_command_format(self, config) -> None:
         """Generated commands have correct VyOS format."""
@@ -273,17 +271,13 @@ class TestFullFeatured:
         assert len(config.routes.static) == 2
 
         # Route with custom distance
-        route1 = next(
-            r for r in config.routes.static if r.destination == "192.0.2.0/24"
-        )
+        route1 = next(r for r in config.routes.static if r.destination == "192.0.2.0/24")
         assert route1.interface == "eth1"
         assert str(route1.gateway) == "198.51.100.2"
         assert route1.distance == 5
 
         # Route with default distance
-        route2 = next(
-            r for r in config.routes.static if r.destination == "172.20.0.0/16"
-        )
+        route2 = next(r for r in config.routes.static if r.destination == "172.20.0.0/16")
         assert route2.interface == "eth2"
         assert route2.distance == 1
 
@@ -330,16 +324,12 @@ class TestFullFeatured:
         assert len(config.nat.destination) == 2
 
         # HTTPS port forward
-        https_dnat = next(
-            d for d in config.nat.destination if d.destination_port == 443
-        )
+        https_dnat = next(d for d in config.nat.destination if d.destination_port == 443)
         assert str(https_dnat.translation_address) == "172.16.1.10"
         assert https_dnat.description == "HTTPS to web server"
 
         # SMTP port forward
-        smtp_dnat = next(
-            d for d in config.nat.destination if d.destination_port == 25
-        )
+        smtp_dnat = next(d for d in config.nat.destination if d.destination_port == 25)
         assert str(smtp_dnat.translation_address) == "172.16.1.20"
 
     def test_binat(self, config) -> None:
@@ -347,16 +337,12 @@ class TestFullFeatured:
         assert config.nat is not None
         assert len(config.nat.binat) == 2
 
-        binat1 = next(
-            b for b in config.nat.binat if str(b.external_address) == "198.51.100.10"
-        )
+        binat1 = next(b for b in config.nat.binat if str(b.external_address) == "198.51.100.10")
         assert str(binat1.internal_address) == "172.16.2.10"
         assert binat1.interface == "eth1"
         assert binat1.description == "DB server binat"
 
-        binat2 = next(
-            b for b in config.nat.binat if str(b.external_address) == "198.51.100.11"
-        )
+        binat2 = next(b for b in config.nat.binat if str(b.external_address) == "198.51.100.11")
         assert str(binat2.internal_address) == "172.16.2.11"
 
     def test_binat_external_address_validation(self, config) -> None:
@@ -420,9 +406,7 @@ class TestFullFeatured:
 
         # LAN to WAN policy
         lan_wan = next(
-            p
-            for p in config.firewall.policies
-            if p.from_zone == "LAN" and p.to_zone == "WAN"
+            p for p in config.firewall.policies if p.from_zone == "LAN" and p.to_zone == "WAN"
         )
         assert len(lan_wan.rules) == 3
 

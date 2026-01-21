@@ -22,9 +22,7 @@ class DhcpPool(BaseModel):
     range_end: Annotated[IPv4Address, Field(description="Last IP in range")]
     gateway: Annotated[IPv4Address, Field(description="Default gateway for clients")]
     dns: list[IPv4Address] = Field(description="DNS servers for clients")
-    lease_time: Annotated[
-        int | None, Field(None, ge=60, description="Lease time in seconds")
-    ]
+    lease_time: Annotated[int | None, Field(None, ge=60, description="Lease time in seconds")]
     domain: Annotated[str | None, Field(None, description="Domain name for clients")]
 
     @field_validator("subnet")

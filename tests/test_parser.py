@@ -340,10 +340,10 @@ class TestOperationalVariables:
         """Test SSH public key with multiple keys (newline separated)."""
         context_file = tmp_path / "one_env"
         # Multiple SSH keys on separate lines (literal newlines in the value)
-        content = '''SSH_PUBLIC_KEY="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC+key1 user1@host1
+        content = """SSH_PUBLIC_KEY="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC+key1 user1@host1
 ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC+key2 user2@host2
 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITest3 user3@host3"
-'''
+"""
         context_file.write_text(content)
 
         config = parse_context(str(context_file))
@@ -506,9 +506,7 @@ NAT_JSON='{json.dumps(nat_data)}'
                 "address": {},
                 "port": {},
             },
-            "zones": {
-                "WAN": {"name": "WAN", "interfaces": ["eth0"], "default_action": "drop"}
-            },
+            "zones": {"WAN": {"name": "WAN", "interfaces": ["eth0"], "default_action": "drop"}},
             "policies": [],
         }
         # Need interface to satisfy RouterConfig validation
@@ -527,7 +525,7 @@ FIREWALL_JSON='{json.dumps(firewall_data)}'
     def test_malformed_json(self, tmp_path: Path) -> None:
         """Test that malformed JSON raises error."""
         context_file = tmp_path / "one_env"
-        context_file.write_text('ROUTES_JSON=\'{"invalid": json}\'\n')
+        context_file.write_text("ROUTES_JSON='{\"invalid\": json}'\n")
 
         with pytest.raises(ValueError, match="Invalid JSON"):
             parse_context(str(context_file))
@@ -536,7 +534,7 @@ FIREWALL_JSON='{json.dumps(firewall_data)}'
         """Test that JSON with invalid schema raises error."""
         context_file = tmp_path / "one_env"
         # Missing required fields
-        context_file.write_text('OSPF_JSON=\'{"interfaces": []}\'\n')
+        context_file.write_text("OSPF_JSON='{\"interfaces\": []}'\n")
 
         with pytest.raises(ValueError, match="Validation error"):
             parse_context(str(context_file))
@@ -621,10 +619,10 @@ class TestMultilineEdgeCases:
         """Test that literal newlines in multiline values are preserved."""
         context_file = tmp_path / "one_env"
         # Test that literal newlines in the file are preserved as-is
-        content = '''TEST_VAR="Line 1
+        content = """TEST_VAR="Line 1
 Line 2
 Line 3"
-'''
+"""
         context_file.write_text(content)
 
         parser = ContextParser(str(context_file))
@@ -638,12 +636,12 @@ Line 3"
     def test_empty_lines_in_multiline_value(self, tmp_path: Path) -> None:
         """Test multiline values containing empty lines."""
         context_file = tmp_path / "one_env"
-        content = '''SCRIPT="#!/bin/bash
+        content = """SCRIPT="#!/bin/bash
 
 echo 'Starting'
 
 echo 'Done'"
-'''
+"""
         context_file.write_text(content)
 
         parser = ContextParser(str(context_file))
@@ -674,10 +672,10 @@ echo 'Done'"
     def test_multiline_value_with_comment_char(self, tmp_path: Path) -> None:
         """Test multiline values containing # character (not treated as comment inside quotes)."""
         context_file = tmp_path / "one_env"
-        content = '''SCRIPT="#!/bin/bash
+        content = """SCRIPT="#!/bin/bash
 # This is a comment inside the script
 echo 'test'"
-'''
+"""
         context_file.write_text(content)
 
         parser = ContextParser(str(context_file))

@@ -100,9 +100,7 @@ class FirewallRule(BaseModel):
     destination_port_group: Annotated[
         str | None, Field(None, description="Destination port group name")
     ]
-    icmp_type: Annotated[
-        str | None, Field(None, description="ICMP type name (e.g., echo-request)")
-    ]
+    icmp_type: Annotated[str | None, Field(None, description="ICMP type name (e.g., echo-request)")]
     description: Annotated[str | None, Field(None, description="Rule description")]
 
     @field_validator("source_address")
@@ -232,9 +230,7 @@ class FirewallConfig(BaseModel):
         FirewallGroups, Field(default_factory=FirewallGroups, description="Firewall groups")
     ]
     zones: dict[str, FirewallZone] = Field(default_factory=dict, description="Zone definitions")
-    policies: list[FirewallPolicy] = Field(
-        default_factory=list, description="Inter-zone policies"
-    )
+    policies: list[FirewallPolicy] = Field(default_factory=list, description="Inter-zone policies")
 
     @field_validator("zones")
     @classmethod
@@ -256,9 +252,7 @@ class FirewallConfig(BaseModel):
         # Check that policy zones exist
         for policy in self.policies:
             if policy.from_zone not in self.zones:
-                raise ValueError(
-                    f"Policy references non-existent from_zone: '{policy.from_zone}'"
-                )
+                raise ValueError(f"Policy references non-existent from_zone: '{policy.from_zone}'")
             if policy.to_zone not in self.zones:
                 raise ValueError(f"Policy references non-existent to_zone: '{policy.to_zone}'")
 
