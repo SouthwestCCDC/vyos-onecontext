@@ -6,6 +6,7 @@ configuration (interfaces, routing, NAT, etc.).
 """
 
 from vyos_onecontext.generators.base import BaseGenerator
+from vyos_onecontext.generators.custom import StartConfigGenerator
 from vyos_onecontext.generators.dhcp import DhcpGenerator
 from vyos_onecontext.generators.firewall import FirewallGenerator
 from vyos_onecontext.generators.interface import InterfaceGenerator
@@ -67,9 +68,11 @@ def generate_config(config: RouterConfig) -> list[str]:
     # Firewall (groups, zones, global state policy, inter-zone policies)
     commands.extend(FirewallGenerator(config.firewall).generate())
 
+    # Custom config (START_CONFIG) - executed last, before commit
+    commands.extend(StartConfigGenerator(config.start_config).generate())
+
     # Future generators will be added here in later phases:
     # - DNS service (recursive resolver, forwarding)
-    # - Custom config (START_CONFIG)
 
     return commands
 
@@ -85,6 +88,7 @@ __all__ = [
     "RoutingGenerator",
     "SshKeyGenerator",
     "SshServiceGenerator",
+    "StartConfigGenerator",
     "StaticRoutesGenerator",
     "VrfGenerator",
     "VRF_NAME",

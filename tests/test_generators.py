@@ -13,6 +13,7 @@ from vyos_onecontext.generators import (
     RoutingGenerator,
     SshKeyGenerator,
     SshServiceGenerator,
+    StartConfigGenerator,
     VrfGenerator,
     generate_config,
 )
@@ -3361,3 +3362,96 @@ class TestFirewallGenerator:
         commands = gen.generate()
 
         assert "set firewall ipv4 name WAN-to-SCORING rule 100 action reject" in commands
+
+
+class TestStartConfigGenerator:
+    """Tests for START_CONFIG custom command generator."""
+
+    def test_generate_with_single_command(self):
+        """Test START_CONFIG generation with single command."""
+        start_config = "set system ntp server pool.ntp.org"
+        gen = StartConfigGenerator(start_config)
+        commands = gen.generate()
+
+        assert len(commands) == 1
+        assert commands[0] == "set system ntp server pool.ntp.org"
+
+    def test_generate_with_multiple_commands(self):
+        """Test START_CONFIG generation with multiple commands."""
+        start_config = """set system ntp server pool.ntp.org
+set system time-zone America/Chicago
+set service lldp interface all"""
+        gen = StartConfigGenerator(start_config)
+        commands = gen.generate()
+
+        assert len(commands) == 3
+        assert "set system ntp server pool.ntp.org" in commands
+        assert "set system time-zone America/Chicago" in commands
+        assert "set service lldp interface all" in commands
+
+    def test_generate_with_empty_lines(self):
+        """Test START_CONFIG generation with empty lines (should skip them)."""
+        start_config = """set system ntp server pool.ntp.org
+
+set system time-zone America/Chicago
+
+set service lldp interface all"""
+        gen = StartConfigGenerator(start_config)
+        commands = gen.generate()
+
+        assert len(commands) == 3
+        assert "set system ntp server pool.ntp.org" in commands
+        assert "set system time-zone America/Chicago" in commands
+        assert "set service lldp interface all" in commands
+
+    def test_generate_with_comments(self):
+        """Test START_CONFIG generation with comments (should skip them)."""
+        start_config = """# NTP configuration
+set system ntp server pool.ntp.org
+# Timezone
+set system time-zone America/Chicago"""
+        gen = StartConfigGenerator(start_config)
+        commands = gen.generate()
+
+        assert len(commands) == 2
+        assert "set system ntp server pool.ntp.org" in commands
+        assert "set system time-zone America/Chicago" in commands
+        # Comments should not be in output
+        assert not any("# NTP" in cmd for cmd in commands)
+
+    def test_generate_with_whitespace(self):
+        """Test START_CONFIG generation with leading/trailing whitespace."""
+        start_config = """  set system ntp server pool.ntp.org
+    set system time-zone America/Chicago    """
+        gen = StartConfigGenerator(start_config)
+        commands = gen.generate()
+
+        assert len(commands) == 2
+        assert commands[0] == "set system ntp server pool.ntp.org"
+        assert commands[1] == "set system time-zone America/Chicago"
+
+    def test_generate_with_none(self):
+        """Test START_CONFIG generation with None."""
+        gen = StartConfigGenerator(None)
+        commands = gen.generate()
+
+        assert len(commands) == 0
+
+    def test_generate_with_empty_string(self):
+        """Test START_CONFIG generation with empty string."""
+        gen = StartConfigGenerator("")
+        commands = gen.generate()
+
+        assert len(commands) == 0
+
+    def test_generate_with_only_comments_and_whitespace(self):
+        """Test START_CONFIG generation with only comments and whitespace."""
+        start_config = """
+# Comment only
+
+# Another comment
+  """
+        gen = StartConfigGenerator(start_config)
+        commands = gen.generate()
+
+        assert len(commands) == 0
