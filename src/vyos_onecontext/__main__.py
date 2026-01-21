@@ -105,9 +105,9 @@ def run_start_script(script_content: str, timeout: int = 300) -> None:
             suffix=".sh",
             delete=False,
         ) as script_file:
-            script_file.write(script_content)
             script_path = script_file.name
-        cleanup_script = True
+            cleanup_script = True
+            script_file.write(script_content)
 
     # Ensure script is executable for inline (temporary) scripts only
     if cleanup_script:
