@@ -498,9 +498,7 @@ class TestRouterConfig:
                 ]
             ),
             firewall=FirewallConfig(
-                zones={
-                    "WAN": FirewallZone(name="WAN", interfaces=["eth0"], default_action="drop")
-                }
+                zones={"WAN": FirewallZone(name="WAN", interfaces=["eth0"], default_action="drop")}
             ),
         )
         assert router.hostname == "router-01"
@@ -730,9 +728,7 @@ class TestValidationEnhancements:
                     FirewallPolicy(
                         from_zone="LAN",
                         to_zone="WAN",
-                        rules=[
-                            FirewallRule(action="accept", source_address_group="NONEXISTENT")
-                        ],
+                        rules=[FirewallRule(action="accept", source_address_group="NONEXISTENT")],
                     )
                 ],
             )
@@ -926,6 +922,59 @@ class TestValidationEnhancements:
             ),
         )
 
+    def test_ospf_on_management_interface_rejected(self) -> None:
+        """Test that OSPF cannot be configured on management VRF interfaces."""
+        with pytest.raises(
+            ValidationError, match="OSPF cannot be configured on management VRF interface"
+        ):
+            RouterConfig(
+                interfaces=[
+                    InterfaceConfig(
+                        name="eth0", ip="10.0.1.1", mask="255.255.255.0", management=True
+                    ),
+                    InterfaceConfig(name="eth1", ip="10.1.1.1", mask="255.255.255.0"),
+                ],
+                ospf=OspfConfig(
+                    enabled=True,
+                    router_id="10.0.0.1",
+                    interfaces=[OspfInterface(name="eth0", area="0.0.0.0")],
+                ),
+            )
+
+    def test_ospf_on_data_plane_with_management_interface_passes(self) -> None:
+        """Test that OSPF on data-plane interfaces passes even when management interface exists."""
+        # Should pass validation - OSPF on eth1 (data plane), management on eth0
+        RouterConfig(
+            interfaces=[
+                InterfaceConfig(name="eth0", ip="10.0.1.1", mask="255.255.255.0", management=True),
+                InterfaceConfig(name="eth1", ip="10.1.1.1", mask="255.255.255.0"),
+            ],
+            ospf=OspfConfig(
+                enabled=True,
+                router_id="10.0.0.1",
+                interfaces=[OspfInterface(name="eth1", area="0.0.0.0")],
+            ),
+        )
+
+    def test_ospf_disabled_with_management_interface_passes(self) -> None:
+        """Test that disabled OSPF doesn't trigger management VRF validation."""
+        # Should pass validation - OSPF is disabled
+        RouterConfig(
+            interfaces=[
+                InterfaceConfig(name="eth0", ip="10.0.1.1", mask="255.255.255.0", management=True),
+            ],
+            ospf=OspfConfig(enabled=False, interfaces=[]),
+        )
+
+    def test_no_ospf_with_management_interface_passes(self) -> None:
+        """Test that absence of OSPF config doesn't trigger validation."""
+        # Should pass validation - no OSPF config at all
+        RouterConfig(
+            interfaces=[
+                InterfaceConfig(name="eth0", ip="10.0.1.1", mask="255.255.255.0", management=True),
+            ],
+        )
+
     def test_static_route_invalid_interface(self) -> None:
         """Test that static route interfaces must exist."""
         with pytest.raises(
@@ -949,9 +998,7 @@ class TestValidationEnhancements:
             interfaces=[InterfaceConfig(name="eth1", ip="10.0.1.1", mask="255.255.255.0")],
             routes=RoutesConfig(
                 static=[
-                    StaticRoute(
-                        interface="eth1", destination="0.0.0.0/0", gateway="10.0.1.254"
-                    )
+                    StaticRoute(interface="eth1", destination="0.0.0.0/0", gateway="10.0.1.254")
                 ]
             ),
         )
