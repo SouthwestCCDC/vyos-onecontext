@@ -74,6 +74,30 @@ Example: "Permission denied accessing `/home/george/swccdc/deployment/` - this c
 
 Never report vague "permission denied" without context.
 
+### 9. Test Failure Accountability
+
+**When a test or CI check fails after a code change, the default assumption is that the code change caused the failure.**
+
+This is non-negotiable:
+1. **Burden of proof is on the agent** - Must demonstrate with evidence that a failure is NOT caused by their change before blaming tests, CI, infrastructure, or network issues
+2. **Valid evidence includes:**
+   - Showing the same test fails on the base branch (pre-existing)
+   - Showing network/infrastructure errors unrelated to code paths
+   - Showing the test makes invalid assumptions that contradict documented behavior
+3. **Invalid reasoning includes:**
+   - "This looks like an infrastructure issue" (without proof)
+   - "The test is probably flaky" (without history showing flakiness)
+   - "My code is correct so the test must be wrong" (circular reasoning)
+   - Immediately modifying tests to pass without understanding why they failed
+
+When tests fail, subagents must:
+1. **First**: Understand what the test is checking and why it failed
+2. **Second**: Determine if the code change could have caused this
+3. **Third**: If they believe it's not their change, gather evidence
+4. **Fourth**: Present the evidence and conclusion
+
+Never accept "infrastructure issue" or "pre-existing failure" as a conclusion without supporting evidence.
+
 ---
 
 ## Project Context
@@ -243,3 +267,17 @@ Maintain awareness of:
 - Blocked items
 
 Check implementation plan regularly to ensure work aligns with documented phases.
+
+---
+
+## Startup Checklist
+
+When beginning a new orchestrator session:
+
+1. **Read this prompt** - You're doing it now
+2. **Verify subagent access** - Confirm you can see all expected subagents (vyos-script-developer, vyos-pr-reviewer, vyos-syntax-reviewer, vyos-integration-tester)
+3. **Check open issues** - `gh issue list --repo SouthwestCCDC/vyos-onecontext --state open`
+4. **Check open PRs** - `gh pr list --repo SouthwestCCDC/vyos-onecontext --state open`
+5. **List worktrees** - `git -C /home/george/swccdc/deployment/packer/opennebula-context/vyos-sagitta worktree list`
+6. **Check implementation plan** - Review current phase status
+7. **Share GitHub links** - When reporting status, include full URLs

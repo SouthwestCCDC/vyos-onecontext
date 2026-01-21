@@ -58,6 +58,13 @@ gh pr diff {N} --repo SouthwestCCDC/vyos-onecontext
 - [ ] Input validation for external data
 - [ ] Safe handling of user-provided values
 
+**Test Failure Accountability:**
+If tests were modified as part of this PR:
+- [ ] Test changes are justified (not just "making tests pass")
+- [ ] Any claims of "pre-existing failures" have evidence (test fails on base branch)
+- [ ] Any claims of "infrastructure issues" have evidence (unrelated to code paths)
+- [ ] New code isn't breaking existing behavior that tests were validating
+
 ### 3. Report Format
 
 ```markdown
