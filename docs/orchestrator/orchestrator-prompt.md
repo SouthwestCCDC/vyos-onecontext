@@ -162,7 +162,7 @@ git fetch origin
 
 WORKTREE_NAME="issue-${ISSUE_NUMBER}-$(date +%s)"
 git worktree add "/home/george/swccdc/vyos-onecontext-worktrees/${WORKTREE_NAME}" \
-  -b "fix/${WORKTREE_NAME}" origin/sagitta
+  -b "issue/${WORKTREE_NAME}" origin/sagitta
 ```
 
 ### Check Project Status
