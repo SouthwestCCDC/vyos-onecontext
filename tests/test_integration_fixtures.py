@@ -148,9 +148,13 @@ class TestIsoCreationScript:
                 extract_result = subprocess.run(
                     [
                         "xorriso",
-                        "-osirrox", "on",
-                        "-indev", str(iso_path),
-                        "-extract", "/", str(extract_dir),
+                        "-osirrox",
+                        "on",
+                        "-indev",
+                        str(iso_path),
+                        "-extract",
+                        "/",
+                        str(extract_dir),
                     ],
                     capture_output=True,
                     text=True,

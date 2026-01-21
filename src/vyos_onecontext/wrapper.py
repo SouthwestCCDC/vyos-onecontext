@@ -131,8 +131,7 @@ class VyOSConfigSession:
             )
         except FileNotFoundError:
             raise VyOSConfigError(
-                f"VyOS wrapper not found at {self.wrapper_path}. "
-                "Is this running on a VyOS system?"
+                f"VyOS wrapper not found at {self.wrapper_path}. Is this running on a VyOS system?"
             ) from None
         except OSError as e:
             raise VyOSConfigError(f"Failed to execute VyOS wrapper: {e}") from e

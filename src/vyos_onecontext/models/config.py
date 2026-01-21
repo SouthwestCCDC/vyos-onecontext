@@ -59,20 +59,16 @@ class RouterConfig(BaseModel):
         if v is None:
             return None
 
-        if len(v) > 253:
-            raise ValueError("Hostname too long (max 253 chars)")
-
-        # RFC 1123 hostname pattern:
-        # - Labels separated by dots
-        # - Each label 1-63 chars
+        # RFC 1123 hostname pattern (single label only, no dots):
+        # - 1-63 chars
         # - Start/end with alphanumeric
         # - Can contain hyphens in the middle
-        pattern = (
-            r"^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?"
-            r"(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$"
-        )
+        pattern = r"^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$"
         if not re.match(pattern, v):
-            raise ValueError("Invalid hostname format (must follow RFC 1123)")
+            raise ValueError(
+                f"Invalid hostname: {v} (must be RFC 1123 compliant: "
+                f"alphanumeric and hyphens only, 1-63 chars, cannot start/end with hyphen)"
+            )
 
         return v
 

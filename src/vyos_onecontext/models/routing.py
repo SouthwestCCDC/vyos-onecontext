@@ -133,9 +133,7 @@ class OspfConfig(BaseModel):
     def validate_enabled_consistency(self) -> "OspfConfig":
         """Warn if OSPF is disabled but has configuration."""
         if not self.enabled:
-            has_config = bool(
-                self.interfaces or self.redistribute or self.default_information
-            )
+            has_config = bool(self.interfaces or self.redistribute or self.default_information)
             if has_config:
                 raise ValueError(
                     "OSPF is disabled but has configuration (interfaces, redistribute, or "

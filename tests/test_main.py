@@ -97,7 +97,7 @@ class TestApplyConfiguration:
     ) -> None:
         """Test that parse errors return EXIT_PARSE_ERROR."""
         context_path = tmp_path / "context.sh"
-        context_path.write_text('INVALID')
+        context_path.write_text("INVALID")
 
         mock_parse.side_effect = ValueError("Parse error")
 
@@ -191,9 +191,7 @@ class TestApplyConfiguration:
         with patch("vyos_onecontext.__main__.FREEZE_MARKER_PATH", str(tmp_path / "frozen")):
             result = apply_configuration(str(context_path))
             assert result == EXIT_SUCCESS
-            mock_session.run_commands.assert_called_once_with(
-                ["set system host-name test-router"]
-            )
+            mock_session.run_commands.assert_called_once_with(["set system host-name test-router"])
             mock_session.save.assert_not_called()
 
     @patch("vyos_onecontext.__main__.VyOSConfigSession")

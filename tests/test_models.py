@@ -1030,10 +1030,10 @@ class TestInputValidation:
         router = RouterConfig(hostname="router01")
         assert router.hostname == "router01"
 
-    def test_hostname_valid_fqdn(self) -> None:
-        """Test valid FQDN hostname."""
-        router = RouterConfig(hostname="router01.example.com")
-        assert router.hostname == "router01.example.com"
+    def test_hostname_invalid_fqdn(self) -> None:
+        """Test that FQDN hostname is rejected (only simple hostnames allowed)."""
+        with pytest.raises(ValidationError, match="Invalid hostname"):
+            RouterConfig(hostname="router01.example.com")
 
     def test_hostname_valid_with_hyphens(self) -> None:
         """Test valid hostname with hyphens."""
@@ -1041,29 +1041,29 @@ class TestInputValidation:
         assert router.hostname == "my-router-01"
 
     def test_hostname_invalid_too_long(self) -> None:
-        """Test that hostname longer than 253 chars is rejected."""
-        long_hostname = "a" * 254
-        with pytest.raises(ValidationError, match="too long"):
+        """Test that hostname longer than 63 chars is rejected."""
+        long_hostname = "a" * 64
+        with pytest.raises(ValidationError, match="Invalid hostname"):
             RouterConfig(hostname=long_hostname)
 
     def test_hostname_invalid_starts_with_hyphen(self) -> None:
         """Test that hostname starting with hyphen is rejected."""
-        with pytest.raises(ValidationError, match="Invalid hostname format"):
+        with pytest.raises(ValidationError, match="Invalid hostname"):
             RouterConfig(hostname="-router")
 
     def test_hostname_invalid_ends_with_hyphen(self) -> None:
         """Test that hostname ending with hyphen is rejected."""
-        with pytest.raises(ValidationError, match="Invalid hostname format"):
+        with pytest.raises(ValidationError, match="Invalid hostname"):
             RouterConfig(hostname="router-")
 
     def test_hostname_invalid_special_chars(self) -> None:
         """Test that hostname with special chars is rejected."""
-        with pytest.raises(ValidationError, match="Invalid hostname format"):
+        with pytest.raises(ValidationError, match="Invalid hostname"):
             RouterConfig(hostname="router_01")
 
     def test_hostname_invalid_spaces(self) -> None:
         """Test that hostname with spaces is rejected."""
-        with pytest.raises(ValidationError, match="Invalid hostname format"):
+        with pytest.raises(ValidationError, match="Invalid hostname"):
             RouterConfig(hostname="test router")
 
     def test_hostname_none_allowed(self) -> None:
@@ -1077,10 +1077,10 @@ class TestInputValidation:
             router = RouterConfig(hostname=hostname)
             assert router.hostname == hostname
 
-    def test_hostname_valid_single_char_labels_fqdn(self) -> None:
-        """Test valid FQDN with single-character labels."""
-        router = RouterConfig(hostname="a.b.c")
-        assert router.hostname == "a.b.c"
+    def test_hostname_invalid_dots(self) -> None:
+        """Test that hostname with dots is rejected (FQDN not allowed)."""
+        with pytest.raises(ValidationError, match="Invalid hostname"):
+            RouterConfig(hostname="a.b.c")
 
     def test_hostname_valid_two_chars(self) -> None:
         """Test valid two-character hostname."""
