@@ -5,6 +5,7 @@ from ipaddress import IPv4Address
 from vyos_onecontext.generators import (
     VRF_NAME,
     VRF_TABLE_ID,
+    FirewallGenerator,
     HostnameGenerator,
     InterfaceGenerator,
     NatGenerator,
@@ -19,6 +20,11 @@ from vyos_onecontext.models import (
     AliasConfig,
     BinatRule,
     DestinationNatRule,
+    FirewallConfig,
+    FirewallGroups,
+    FirewallPolicy,
+    FirewallRule,
+    FirewallZone,
     InterfaceConfig,
     NatConfig,
     OspfConfig,
@@ -2677,3 +2683,681 @@ class TestNatGenerator:
         # Binat should start at 500
         assert "set nat source rule 500 source address 10.63.0.101" in commands
         assert "set nat destination rule 500 destination address 129.244.246.66" in commands
+
+
+class TestFirewallGenerator:
+    """Tests for firewall configuration generator."""
+
+    def test_generate_empty_firewall_config(self):
+        """Test firewall generator with no firewall configured."""
+        gen = FirewallGenerator(None)
+        commands = gen.generate()
+        assert len(commands) == 0
+
+    def test_generate_empty_firewall_object(self):
+        """Test firewall generator with empty firewall config object."""
+        firewall = FirewallConfig()
+        gen = FirewallGenerator(firewall)
+        commands = gen.generate()
+
+        # Should only generate global state policy (3 commands)
+        assert len(commands) == 3
+        assert "set firewall global-options state-policy established action accept" in commands
+        assert "set firewall global-options state-policy related action accept" in commands
+        assert "set firewall global-options state-policy invalid action drop" in commands
+
+    # Global State Policy Tests
+
+    def test_generate_global_state_policy(self):
+        """Test global state policy generation."""
+        firewall = FirewallConfig()
+        gen = FirewallGenerator(firewall)
+        commands = gen.generate()
+
+        assert "set firewall global-options state-policy established action accept" in commands
+        assert "set firewall global-options state-policy related action accept" in commands
+        assert "set firewall global-options state-policy invalid action drop" in commands
+
+    # Groups Tests
+
+    def test_generate_network_groups(self):
+        """Test network group generation."""
+        firewall = FirewallConfig(
+            groups=FirewallGroups(
+                network={
+                    "GAME": ["10.64.0.0/10", "10.128.0.0/9"],
+                    "SCORING": ["10.62.0.0/16"],
+                }
+            )
+        )
+        gen = FirewallGenerator(firewall)
+        commands = gen.generate()
+
+        assert "set firewall group network-group GAME network '10.64.0.0/10'" in commands
+        assert "set firewall group network-group GAME network '10.128.0.0/9'" in commands
+        assert "set firewall group network-group SCORING network '10.62.0.0/16'" in commands
+
+    def test_generate_address_groups(self):
+        """Test address group generation."""
+        firewall = FirewallConfig(
+            groups=FirewallGroups(
+                address={
+                    "SCORING_ENGINE": ["10.63.0.101"],
+                    "DNS_SERVERS": ["10.63.4.101", "8.8.8.8"],
+                }
+            )
+        )
+        gen = FirewallGenerator(firewall)
+        commands = gen.generate()
+
+        assert "set firewall group address-group SCORING_ENGINE address '10.63.0.101'" in commands
+        assert "set firewall group address-group DNS_SERVERS address '10.63.4.101'" in commands
+        assert "set firewall group address-group DNS_SERVERS address '8.8.8.8'" in commands
+
+    def test_generate_port_groups(self):
+        """Test port group generation."""
+        firewall = FirewallConfig(
+            groups=FirewallGroups(
+                port={
+                    "WEB": [80, 443],
+                    "SSH": [22],
+                    "DNS": [53],
+                }
+            )
+        )
+        gen = FirewallGenerator(firewall)
+        commands = gen.generate()
+
+        assert "set firewall group port-group WEB port 80" in commands
+        assert "set firewall group port-group WEB port 443" in commands
+        assert "set firewall group port-group SSH port 22" in commands
+        assert "set firewall group port-group DNS port 53" in commands
+
+    def test_generate_all_group_types(self):
+        """Test generation of all group types together."""
+        firewall = FirewallConfig(
+            groups=FirewallGroups(
+                network={"GAME": ["10.64.0.0/10"]},
+                address={"SCORING_ENGINE": ["10.63.0.101"]},
+                port={"WEB": [80, 443]},
+            )
+        )
+        gen = FirewallGenerator(firewall)
+        commands = gen.generate()
+
+        # Should have global state policy + groups
+        assert "set firewall group network-group GAME network '10.64.0.0/10'" in commands
+        assert "set firewall group address-group SCORING_ENGINE address '10.63.0.101'" in commands
+        assert "set firewall group port-group WEB port 80" in commands
+        assert "set firewall group port-group WEB port 443" in commands
+
+    # Zones Tests
+
+    def test_generate_single_zone(self):
+        """Test single zone generation."""
+        firewall = FirewallConfig(
+            zones={
+                "WAN": FirewallZone(
+                    name="WAN",
+                    interfaces=["eth0"],
+                    default_action="drop",
+                )
+            }
+        )
+        gen = FirewallGenerator(firewall)
+        commands = gen.generate()
+
+        assert "set firewall zone WAN interface eth0" in commands
+        assert "set firewall zone WAN default-action drop" in commands
+
+    def test_generate_zone_with_multiple_interfaces(self):
+        """Test zone with multiple interfaces."""
+        firewall = FirewallConfig(
+            zones={
+                "GAME": FirewallZone(
+                    name="GAME",
+                    interfaces=["eth1", "eth2", "eth3"],
+                    default_action="drop",
+                )
+            }
+        )
+        gen = FirewallGenerator(firewall)
+        commands = gen.generate()
+
+        assert "set firewall zone GAME interface eth1" in commands
+        assert "set firewall zone GAME interface eth2" in commands
+        assert "set firewall zone GAME interface eth3" in commands
+        assert "set firewall zone GAME default-action drop" in commands
+
+    def test_generate_multiple_zones(self):
+        """Test multiple zones."""
+        firewall = FirewallConfig(
+            zones={
+                "WAN": FirewallZone(
+                    name="WAN",
+                    interfaces=["eth0"],
+                    default_action="drop",
+                ),
+                "GAME": FirewallZone(
+                    name="GAME",
+                    interfaces=["eth1"],
+                    default_action="reject",
+                ),
+                "SCORING": FirewallZone(
+                    name="SCORING",
+                    interfaces=["eth2"],
+                    default_action="drop",
+                ),
+            }
+        )
+        gen = FirewallGenerator(firewall)
+        commands = gen.generate()
+
+        assert "set firewall zone WAN interface eth0" in commands
+        assert "set firewall zone WAN default-action drop" in commands
+        assert "set firewall zone GAME interface eth1" in commands
+        assert "set firewall zone GAME default-action reject" in commands
+        assert "set firewall zone SCORING interface eth2" in commands
+        assert "set firewall zone SCORING default-action drop" in commands
+
+    # Policy Tests
+
+    def test_generate_simple_policy(self):
+        """Test simple policy with single rule."""
+        firewall = FirewallConfig(
+            zones={
+                "GAME": FirewallZone(name="GAME", interfaces=["eth1"], default_action="drop"),
+                "SCORING": FirewallZone(name="SCORING", interfaces=["eth2"], default_action="drop"),
+            },
+            policies=[
+                FirewallPolicy(
+                    from_zone="GAME",
+                    to_zone="SCORING",
+                    rules=[
+                        FirewallRule(
+                            action="accept",
+                            protocol="tcp",
+                            destination_port=443,
+                            description="Allow HTTPS",
+                        )
+                    ],
+                )
+            ],
+        )
+        gen = FirewallGenerator(firewall)
+        commands = gen.generate()
+
+        # Check ruleset creation
+        assert "set firewall ipv4 name GAME-to-SCORING default-action drop" in commands
+        assert "set firewall ipv4 name GAME-to-SCORING rule 100 action accept" in commands
+        assert "set firewall ipv4 name GAME-to-SCORING rule 100 protocol tcp" in commands
+        assert "set firewall ipv4 name GAME-to-SCORING rule 100 destination port 443" in commands
+        assert (
+            "set firewall ipv4 name GAME-to-SCORING rule 100 description 'Allow HTTPS'" in commands
+        )
+
+        # Check zone binding
+        assert "set firewall zone GAME from SCORING firewall name GAME-to-SCORING" in commands
+
+    def test_generate_policy_with_multiple_rules(self):
+        """Test policy with multiple rules and correct numbering."""
+        firewall = FirewallConfig(
+            zones={
+                "GAME": FirewallZone(name="GAME", interfaces=["eth1"], default_action="drop"),
+                "SCORING": FirewallZone(name="SCORING", interfaces=["eth2"], default_action="drop"),
+            },
+            policies=[
+                FirewallPolicy(
+                    from_zone="GAME",
+                    to_zone="SCORING",
+                    rules=[
+                        FirewallRule(action="accept", protocol="tcp", destination_port=80),
+                        FirewallRule(action="accept", protocol="tcp", destination_port=443),
+                        FirewallRule(action="accept", protocol="udp", destination_port=53),
+                    ],
+                )
+            ],
+        )
+        gen = FirewallGenerator(firewall)
+        commands = gen.generate()
+
+        # Check rules are numbered 100, 200, 300
+        assert "set firewall ipv4 name GAME-to-SCORING rule 100 action accept" in commands
+        assert "set firewall ipv4 name GAME-to-SCORING rule 100 destination port 80" in commands
+        assert "set firewall ipv4 name GAME-to-SCORING rule 200 action accept" in commands
+        assert "set firewall ipv4 name GAME-to-SCORING rule 200 destination port 443" in commands
+        assert "set firewall ipv4 name GAME-to-SCORING rule 300 action accept" in commands
+        assert "set firewall ipv4 name GAME-to-SCORING rule 300 destination port 53" in commands
+
+    def test_generate_policy_with_port_group(self):
+        """Test policy rule using port group."""
+        firewall = FirewallConfig(
+            groups=FirewallGroups(port={"WEB": [80, 443]}),
+            zones={
+                "GAME": FirewallZone(name="GAME", interfaces=["eth1"], default_action="drop"),
+                "SCORING": FirewallZone(name="SCORING", interfaces=["eth2"], default_action="drop"),
+            },
+            policies=[
+                FirewallPolicy(
+                    from_zone="GAME",
+                    to_zone="SCORING",
+                    rules=[
+                        FirewallRule(
+                            action="accept",
+                            protocol="tcp",
+                            destination_port_group="WEB",
+                            description="Allow web traffic",
+                        )
+                    ],
+                )
+            ],
+        )
+        gen = FirewallGenerator(firewall)
+        commands = gen.generate()
+
+        assert (
+            "set firewall ipv4 name GAME-to-SCORING rule 100 destination group port-group WEB"
+            in commands
+        )
+
+    def test_generate_policy_with_address_group(self):
+        """Test policy rule using address group."""
+        firewall = FirewallConfig(
+            groups=FirewallGroups(address={"SCORING_ENGINE": ["10.63.0.101"]}),
+            zones={
+                "WAN": FirewallZone(name="WAN", interfaces=["eth0"], default_action="drop"),
+                "SCORING": FirewallZone(name="SCORING", interfaces=["eth2"], default_action="drop"),
+            },
+            policies=[
+                FirewallPolicy(
+                    from_zone="WAN",
+                    to_zone="SCORING",
+                    rules=[
+                        FirewallRule(
+                            action="accept",
+                            destination_address_group="SCORING_ENGINE",
+                            description="NAT'd traffic to scoring",
+                        )
+                    ],
+                )
+            ],
+        )
+        gen = FirewallGenerator(firewall)
+        commands = gen.generate()
+
+        expected_cmd = (
+            "set firewall ipv4 name WAN-to-SCORING rule 100 "
+            "destination group address-group SCORING_ENGINE"
+        )
+        assert expected_cmd in commands
+
+    def test_generate_policy_with_network_group(self):
+        """Test policy rule using network group."""
+        firewall = FirewallConfig(
+            groups=FirewallGroups(network={"GAME": ["10.64.0.0/10", "10.128.0.0/9"]}),
+            zones={
+                "SCORING": FirewallZone(name="SCORING", interfaces=["eth2"], default_action="drop"),
+                "GAME": FirewallZone(name="GAME", interfaces=["eth1"], default_action="drop"),
+            },
+            policies=[
+                FirewallPolicy(
+                    from_zone="SCORING",
+                    to_zone="GAME",
+                    rules=[
+                        FirewallRule(
+                            action="accept",
+                            destination_network_group="GAME",
+                            description="Scoring can reach game networks",
+                        )
+                    ],
+                )
+            ],
+        )
+        gen = FirewallGenerator(firewall)
+        commands = gen.generate()
+
+        assert (
+            "set firewall ipv4 name SCORING-to-GAME rule 100 destination group network-group GAME"
+            in commands
+        )
+
+    def test_generate_policy_with_source_filters(self):
+        """Test policy rule with source filters."""
+        firewall = FirewallConfig(
+            groups=FirewallGroups(address={"SCORING_ENGINE": ["10.63.0.101"]}),
+            zones={
+                "SCORING": FirewallZone(name="SCORING", interfaces=["eth2"], default_action="drop"),
+                "GAME": FirewallZone(name="GAME", interfaces=["eth1"], default_action="drop"),
+            },
+            policies=[
+                FirewallPolicy(
+                    from_zone="SCORING",
+                    to_zone="GAME",
+                    rules=[
+                        FirewallRule(
+                            action="accept",
+                            source_address_group="SCORING_ENGINE",
+                            description="Only scoring engine can reach game",
+                        )
+                    ],
+                )
+            ],
+        )
+        gen = FirewallGenerator(firewall)
+        commands = gen.generate()
+
+        expected_cmd = (
+            "set firewall ipv4 name SCORING-to-GAME rule 100 "
+            "source group address-group SCORING_ENGINE"
+        )
+        assert expected_cmd in commands
+
+    def test_generate_policy_with_inline_addresses(self):
+        """Test policy rule with inline IP addresses."""
+        firewall = FirewallConfig(
+            zones={
+                "WAN": FirewallZone(name="WAN", interfaces=["eth0"], default_action="drop"),
+                "SCORING": FirewallZone(name="SCORING", interfaces=["eth2"], default_action="drop"),
+            },
+            policies=[
+                FirewallPolicy(
+                    from_zone="WAN",
+                    to_zone="SCORING",
+                    rules=[
+                        FirewallRule(
+                            action="accept",
+                            source_address="203.0.113.0/24",
+                            destination_address="10.62.0.20",
+                            description="Specific source to specific dest",
+                        )
+                    ],
+                )
+            ],
+        )
+        gen = FirewallGenerator(firewall)
+        commands = gen.generate()
+
+        assert (
+            "set firewall ipv4 name WAN-to-SCORING rule 100 source address 203.0.113.0/24"
+            in commands
+        )
+        assert (
+            "set firewall ipv4 name WAN-to-SCORING rule 100 destination address 10.62.0.20"
+            in commands
+        )
+
+    def test_generate_policy_with_icmp(self):
+        """Test policy rule with ICMP protocol and type."""
+        firewall = FirewallConfig(
+            zones={
+                "WAN": FirewallZone(name="WAN", interfaces=["eth0"], default_action="drop"),
+                "GAME": FirewallZone(name="GAME", interfaces=["eth1"], default_action="drop"),
+            },
+            policies=[
+                FirewallPolicy(
+                    from_zone="WAN",
+                    to_zone="GAME",
+                    rules=[
+                        FirewallRule(
+                            action="accept",
+                            protocol="icmp",
+                            icmp_type="echo-request",
+                            description="Allow ping from WAN",
+                        )
+                    ],
+                )
+            ],
+        )
+        gen = FirewallGenerator(firewall)
+        commands = gen.generate()
+
+        assert "set firewall ipv4 name WAN-to-GAME rule 100 protocol icmp" in commands
+        assert "set firewall ipv4 name WAN-to-GAME rule 100 icmp type-name echo-request" in commands
+
+    def test_generate_policy_with_tcp_udp(self):
+        """Test policy rule with tcp_udp protocol."""
+        firewall = FirewallConfig(
+            zones={
+                "GAME": FirewallZone(name="GAME", interfaces=["eth1"], default_action="drop"),
+                "SCORING": FirewallZone(name="SCORING", interfaces=["eth2"], default_action="drop"),
+            },
+            policies=[
+                FirewallPolicy(
+                    from_zone="GAME",
+                    to_zone="SCORING",
+                    rules=[
+                        FirewallRule(
+                            action="accept",
+                            protocol="tcp_udp",
+                            destination_port=53,
+                            description="DNS queries (both TCP and UDP)",
+                        )
+                    ],
+                )
+            ],
+        )
+        gen = FirewallGenerator(firewall)
+        commands = gen.generate()
+
+        assert "set firewall ipv4 name GAME-to-SCORING rule 100 protocol tcp_udp" in commands
+        assert "set firewall ipv4 name GAME-to-SCORING rule 100 destination port 53" in commands
+
+    def test_generate_policy_with_multiple_inline_ports(self):
+        """Test policy rule with multiple inline destination ports."""
+        firewall = FirewallConfig(
+            zones={
+                "GAME": FirewallZone(name="GAME", interfaces=["eth1"], default_action="drop"),
+                "SCORING": FirewallZone(name="SCORING", interfaces=["eth2"], default_action="drop"),
+            },
+            policies=[
+                FirewallPolicy(
+                    from_zone="GAME",
+                    to_zone="SCORING",
+                    rules=[
+                        FirewallRule(
+                            action="accept",
+                            protocol="tcp",
+                            destination_port=[80, 443, 8080],
+                            description="Allow multiple web ports",
+                        )
+                    ],
+                )
+            ],
+        )
+        gen = FirewallGenerator(firewall)
+        commands = gen.generate()
+
+        # Each port should get its own command
+        assert "set firewall ipv4 name GAME-to-SCORING rule 100 destination port 80" in commands
+        assert "set firewall ipv4 name GAME-to-SCORING rule 100 destination port 443" in commands
+        assert "set firewall ipv4 name GAME-to-SCORING rule 100 destination port 8080" in commands
+
+    def test_generate_multiple_policies(self):
+        """Test multiple inter-zone policies."""
+        firewall = FirewallConfig(
+            zones={
+                "WAN": FirewallZone(name="WAN", interfaces=["eth0"], default_action="drop"),
+                "GAME": FirewallZone(name="GAME", interfaces=["eth1"], default_action="drop"),
+                "SCORING": FirewallZone(name="SCORING", interfaces=["eth2"], default_action="drop"),
+            },
+            policies=[
+                FirewallPolicy(
+                    from_zone="GAME",
+                    to_zone="SCORING",
+                    rules=[FirewallRule(action="accept", protocol="tcp", destination_port=443)],
+                ),
+                FirewallPolicy(
+                    from_zone="SCORING",
+                    to_zone="GAME",
+                    rules=[FirewallRule(action="accept", protocol="icmp")],
+                ),
+                FirewallPolicy(
+                    from_zone="WAN",
+                    to_zone="SCORING",
+                    rules=[FirewallRule(action="drop", description="Drop all from WAN")],
+                ),
+            ],
+        )
+        gen = FirewallGenerator(firewall)
+        commands = gen.generate()
+
+        # Check all three rulesets are created
+        assert "set firewall ipv4 name GAME-to-SCORING default-action drop" in commands
+        assert "set firewall ipv4 name SCORING-to-GAME default-action drop" in commands
+        assert "set firewall ipv4 name WAN-to-SCORING default-action drop" in commands
+
+        # Check zone bindings
+        assert "set firewall zone GAME from SCORING firewall name GAME-to-SCORING" in commands
+        assert "set firewall zone SCORING from GAME firewall name SCORING-to-GAME" in commands
+        assert "set firewall zone WAN from SCORING firewall name WAN-to-SCORING" in commands
+
+    def test_generate_complete_firewall_config(self):
+        """Test complete firewall configuration with all components."""
+        firewall = FirewallConfig(
+            groups=FirewallGroups(
+                network={"GAME": ["10.64.0.0/10"]},
+                address={"SCORING_ENGINE": ["10.63.0.101"]},
+                port={"WEB": [80, 443]},
+            ),
+            zones={
+                "WAN": FirewallZone(name="WAN", interfaces=["eth0"], default_action="drop"),
+                "GAME": FirewallZone(name="GAME", interfaces=["eth1"], default_action="drop"),
+                "SCORING": FirewallZone(name="SCORING", interfaces=["eth2"], default_action="drop"),
+            },
+            policies=[
+                FirewallPolicy(
+                    from_zone="GAME",
+                    to_zone="SCORING",
+                    rules=[
+                        FirewallRule(
+                            action="accept",
+                            protocol="tcp",
+                            destination_port_group="WEB",
+                            description="Game to scoring web",
+                        )
+                    ],
+                ),
+                FirewallPolicy(
+                    from_zone="SCORING",
+                    to_zone="GAME",
+                    rules=[
+                        FirewallRule(
+                            action="accept",
+                            source_address_group="SCORING_ENGINE",
+                            destination_network_group="GAME",
+                            description="Scoring engine can reach game",
+                        )
+                    ],
+                ),
+            ],
+        )
+        gen = FirewallGenerator(firewall)
+        commands = gen.generate()
+
+        # Should have global state policy
+        assert "set firewall global-options state-policy established action accept" in commands
+
+        # Should have groups
+        assert "set firewall group network-group GAME network '10.64.0.0/10'" in commands
+        assert "set firewall group address-group SCORING_ENGINE address '10.63.0.101'" in commands
+        assert "set firewall group port-group WEB port 80" in commands
+
+        # Should have zones
+        assert "set firewall zone WAN interface eth0" in commands
+        assert "set firewall zone GAME interface eth1" in commands
+        assert "set firewall zone SCORING interface eth2" in commands
+
+        # Should have policies
+        assert (
+            "set firewall ipv4 name GAME-to-SCORING rule 100 destination group port-group WEB"
+            in commands
+        )
+        expected_cmd = (
+            "set firewall ipv4 name SCORING-to-GAME rule 100 "
+            "source group address-group SCORING_ENGINE"
+        )
+        assert expected_cmd in commands
+
+    def test_generate_rule_without_protocol(self):
+        """Test rule without protocol (matches all protocols)."""
+        firewall = FirewallConfig(
+            zones={
+                "WAN": FirewallZone(name="WAN", interfaces=["eth0"], default_action="drop"),
+                "SCORING": FirewallZone(name="SCORING", interfaces=["eth2"], default_action="drop"),
+            },
+            policies=[
+                FirewallPolicy(
+                    from_zone="WAN",
+                    to_zone="SCORING",
+                    rules=[
+                        FirewallRule(
+                            action="accept",
+                            destination_address="10.62.0.20",
+                            description="Allow all protocols to specific host",
+                        )
+                    ],
+                )
+            ],
+        )
+        gen = FirewallGenerator(firewall)
+        commands = gen.generate()
+
+        # Should not have protocol command (check for "rule 100 protocol" specifically)
+        assert not any("rule 100 protocol" in cmd for cmd in commands)
+        assert (
+            "set firewall ipv4 name WAN-to-SCORING rule 100 destination address 10.62.0.20"
+            in commands
+        )
+
+    def test_generate_rule_with_drop_action(self):
+        """Test rule with drop action."""
+        firewall = FirewallConfig(
+            zones={
+                "WAN": FirewallZone(name="WAN", interfaces=["eth0"], default_action="drop"),
+                "SCORING": FirewallZone(name="SCORING", interfaces=["eth2"], default_action="drop"),
+            },
+            policies=[
+                FirewallPolicy(
+                    from_zone="WAN",
+                    to_zone="SCORING",
+                    rules=[
+                        FirewallRule(
+                            action="drop",
+                            source_address="192.0.2.0/24",
+                            description="Block specific network",
+                        )
+                    ],
+                )
+            ],
+        )
+        gen = FirewallGenerator(firewall)
+        commands = gen.generate()
+
+        assert "set firewall ipv4 name WAN-to-SCORING rule 100 action drop" in commands
+
+    def test_generate_rule_with_reject_action(self):
+        """Test rule with reject action."""
+        firewall = FirewallConfig(
+            zones={
+                "WAN": FirewallZone(name="WAN", interfaces=["eth0"], default_action="drop"),
+                "SCORING": FirewallZone(name="SCORING", interfaces=["eth2"], default_action="drop"),
+            },
+            policies=[
+                FirewallPolicy(
+                    from_zone="WAN",
+                    to_zone="SCORING",
+                    rules=[
+                        FirewallRule(
+                            action="reject",
+                            protocol="tcp",
+                            destination_port=23,
+                            description="Reject telnet",
+                        )
+                    ],
+                )
+            ],
+        )
+        gen = FirewallGenerator(firewall)
+        commands = gen.generate()
+
+        assert "set firewall ipv4 name WAN-to-SCORING rule 100 action reject" in commands
