@@ -12,6 +12,25 @@ from pydantic import BaseModel, Field, field_validator
 VALID_INTERFACE_PATTERN = re.compile(r"^eth\d+$")
 
 
+def _validate_interface_name(name: str) -> str:
+    """Validate interface name follows expected pattern.
+
+    Args:
+        name: Interface name to validate
+
+    Returns:
+        The validated interface name
+
+    Raises:
+        ValueError: If interface name is invalid
+    """
+    if not VALID_INTERFACE_PATTERN.match(name):
+        raise ValueError(
+            f"Invalid interface name '{name}' (expected ethN format, e.g., eth0, eth1)"
+        )
+    return name
+
+
 class InterfaceConfig(BaseModel):
     """Configuration for a network interface.
 
@@ -30,22 +49,8 @@ class InterfaceConfig(BaseModel):
     @field_validator("name")
     @classmethod
     def validate_interface_name(cls, v: str) -> str:
-        """Validate interface name follows expected pattern.
-
-        Args:
-            v: Interface name to validate
-
-        Returns:
-            The validated interface name
-
-        Raises:
-            ValueError: If interface name is invalid
-        """
-        if not VALID_INTERFACE_PATTERN.match(v):
-            raise ValueError(
-                f"Invalid interface name '{v}' (expected ethN format, e.g., eth0, eth1)"
-            )
-        return v
+        """Validate interface name follows expected pattern."""
+        return _validate_interface_name(v)
 
     @field_validator("mask")
     @classmethod
@@ -97,22 +102,8 @@ class AliasConfig(BaseModel):
     @field_validator("interface")
     @classmethod
     def validate_interface_name(cls, v: str) -> str:
-        """Validate parent interface name follows expected pattern.
-
-        Args:
-            v: Interface name to validate
-
-        Returns:
-            The validated interface name
-
-        Raises:
-            ValueError: If interface name is invalid
-        """
-        if not VALID_INTERFACE_PATTERN.match(v):
-            raise ValueError(
-                f"Invalid interface name '{v}' (expected ethN format, e.g., eth0, eth1)"
-            )
-        return v
+        """Validate parent interface name follows expected pattern."""
+        return _validate_interface_name(v)
 
     @field_validator("mask")
     @classmethod
