@@ -112,6 +112,57 @@ class TestRunStartScript:
             # Verify timeout parameter was passed
             assert mock_run.call_args[1]["timeout"] == 60
 
+    def test_run_start_script_path_with_leading_whitespace(self, tmp_path: Path) -> None:
+        """Test START_SCRIPT handles file paths with leading whitespace."""
+        # Create a test script file
+        script_file = tmp_path / "test_script.sh"
+        script_file.write_text("#!/bin/bash\necho 'from file'")
+
+        # Add leading whitespace to the path
+        script_content = f"  {script_file}"
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="from file", stderr="")
+            run_start_script(script_content)
+            mock_run.assert_called_once()
+            # Should execute the file directly (whitespace stripped)
+            call_args = mock_run.call_args[0][0]
+            assert call_args[1] == str(script_file)
+
+    def test_run_start_script_path_with_trailing_whitespace(self, tmp_path: Path) -> None:
+        """Test START_SCRIPT handles file paths with trailing whitespace."""
+        # Create a test script file
+        script_file = tmp_path / "test_script.sh"
+        script_file.write_text("#!/bin/bash\necho 'from file'")
+
+        # Add trailing whitespace to the path
+        script_content = f"{script_file}  "
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="from file", stderr="")
+            run_start_script(script_content)
+            mock_run.assert_called_once()
+            # Should execute the file directly (whitespace stripped)
+            call_args = mock_run.call_args[0][0]
+            assert call_args[1] == str(script_file)
+
+    def test_run_start_script_path_with_both_whitespace(self, tmp_path: Path) -> None:
+        """Test START_SCRIPT handles file paths with leading and trailing whitespace."""
+        # Create a test script file
+        script_file = tmp_path / "test_script.sh"
+        script_file.write_text("#!/bin/bash\necho 'from file'")
+
+        # Add both leading and trailing whitespace to the path
+        script_content = f"  {script_file}  "
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="from file", stderr="")
+            run_start_script(script_content)
+            mock_run.assert_called_once()
+            # Should execute the file directly (whitespace stripped)
+            call_args = mock_run.call_args[0][0]
+            assert call_args[1] == str(script_file)
+
 
 class TestApplyConfiguration:
     """Tests for apply_configuration function."""

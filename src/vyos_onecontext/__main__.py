@@ -78,12 +78,16 @@ def run_start_script(script_content: str, timeout: int = 300) -> None:
     """
     logger.info("Executing START_SCRIPT")
 
-    # Check if script_content is a file path
-    is_file_path = script_content.startswith("/") and Path(script_content).exists()
+    # Check if script_content is a file path (strip whitespace first)
+    script_content_stripped = script_content.strip()
+    is_file_path = (
+        script_content_stripped.startswith("/")
+        and Path(script_content_stripped).exists()
+    )
 
     if is_file_path:
         # Execute the script file directly
-        script_path = script_content
+        script_path = script_content_stripped
         cleanup_script = False
         logger.debug("START_SCRIPT: executing file at %s", script_path)
     else:
