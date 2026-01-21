@@ -47,12 +47,13 @@ When starting work:
 
 3. **Create Worktree if Needed**:
    ```bash
-   WORKTREE_NAME="vyos-${ISSUE_NUMBER}-$(date +%s)"
+   # Worktree naming: issue-{N}-{timestamp}, feat-{desc}-{timestamp}, or fix-{desc}-{timestamp}
+   WORKTREE_NAME="issue-${ISSUE_NUMBER}-$(date +%s)"
    WORKTREE_PATH="/home/george/swccdc/vyos-onecontext-worktrees/${WORKTREE_NAME}"
 
    cd /home/george/swccdc/deployment/packer/opennebula-context/vyos-sagitta
    git fetch origin
-   git worktree add "${WORKTREE_PATH}" -b "fix/vyos-${ISSUE_NUMBER}" origin/sagitta
+   git worktree add "${WORKTREE_PATH}" -b "${WORKTREE_NAME}" origin/sagitta
 
    cd "${WORKTREE_PATH}"
    ```
