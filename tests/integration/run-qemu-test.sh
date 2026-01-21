@@ -287,6 +287,40 @@ case "$CONTEXT_NAME" in
         assert_command_generated "mac-address 00:11:22:33:44:55" "DHCP static mapping MAC address"
         assert_command_generated "ip-address 10.50.1.50" "DHCP static mapping IP address"
         ;;
+    snat)
+        assert_command_generated "set system host-name" "Hostname configuration"
+        # Source NAT rule
+        assert_command_generated "set nat source rule 100" "Source NAT rule created"
+        assert_command_generated "outbound-interface name eth0" "SNAT outbound interface (eth0)"
+        assert_command_generated "source address 10.100.0.0/24" "SNAT source address"
+        assert_command_generated "translation address masquerade" "SNAT masquerade translation"
+        ;;
+    dnat)
+        assert_command_generated "set system host-name" "Hostname configuration"
+        # Destination NAT rule
+        assert_command_generated "set nat destination rule 100" "Destination NAT rule created"
+        assert_command_generated "inbound-interface name eth0" "DNAT inbound interface (eth0)"
+        assert_command_generated "protocol tcp" "DNAT protocol (tcp)"
+        assert_command_generated "destination port 443" "DNAT destination port"
+        assert_command_generated "translation address 10.100.0.50" "DNAT translation address"
+        ;;
+    nat-full)
+        assert_command_generated "set system host-name" "Hostname configuration"
+        # Source NAT (masquerade)
+        assert_command_generated "set nat source rule 100" "Source NAT rule created"
+        assert_command_generated "outbound-interface name eth0" "SNAT outbound interface"
+        assert_command_generated "translation address masquerade" "SNAT masquerade translation"
+        # Destination NAT (port forward)
+        assert_command_generated "set nat destination rule 100" "Destination NAT rule created"
+        assert_command_generated "destination port 8080" "DNAT destination port"
+        assert_command_generated "translation address 10.100.0.80" "DNAT translation address"
+        assert_command_generated "translation port 80" "DNAT translation port"
+        # Binat (1:1 NAT) - creates both source and destination rules at 500
+        assert_command_generated "set nat source rule 500" "Binat source rule created"
+        assert_command_generated "set nat destination rule 500" "Binat destination rule created"
+        assert_command_generated "source address.*10.100.0.100" "Binat internal address (source rule)"
+        assert_command_generated "destination address.*192.168.122.100" "Binat external address (destination rule)"
+        ;;
     *)
         echo "[WARN] Unknown context '$CONTEXT_NAME' - no specific assertions"
         ;;

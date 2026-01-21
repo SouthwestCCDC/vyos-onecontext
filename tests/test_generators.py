@@ -7,6 +7,7 @@ from vyos_onecontext.generators import (
     VRF_TABLE_ID,
     HostnameGenerator,
     InterfaceGenerator,
+    NatGenerator,
     OspfGenerator,
     RoutingGenerator,
     SshKeyGenerator,
@@ -16,11 +17,15 @@ from vyos_onecontext.generators import (
 )
 from vyos_onecontext.models import (
     AliasConfig,
+    BinatRule,
+    DestinationNatRule,
     InterfaceConfig,
+    NatConfig,
     OspfConfig,
     OspfDefaultInformation,
     OspfInterface,
     RouterConfig,
+    SourceNatRule,
 )
 
 
@@ -2265,3 +2270,410 @@ class TestGenerateConfigWithDhcp:
         # Interfaces -> ... -> OSPF -> DHCP
         assert interface_idx < ospf_idx
         assert ospf_idx < dhcp_idx
+
+
+class TestNatGenerator:
+    """Tests for NAT configuration generator."""
+
+    def test_generate_empty_nat_config(self):
+        """Test NAT generator with no NAT configured."""
+        gen = NatGenerator(None)
+        commands = gen.generate()
+        assert len(commands) == 0
+
+    def test_generate_empty_nat_object(self):
+        """Test NAT generator with empty NAT config object."""
+        nat = NatConfig()
+        gen = NatGenerator(nat)
+        commands = gen.generate()
+        assert len(commands) == 0
+
+    # Source NAT Tests
+
+    def test_generate_source_nat_masquerade(self):
+        """Test source NAT with masquerade translation."""
+        nat = NatConfig(
+            source=[
+                SourceNatRule(
+                    outbound_interface="eth0",
+                    source_address="10.0.0.0/8",
+                    translation="masquerade",
+                )
+            ]
+        )
+        gen = NatGenerator(nat)
+        commands = gen.generate()
+
+        assert len(commands) == 3
+        assert "set nat source rule 100 outbound-interface name eth0" in commands
+        assert "set nat source rule 100 source address 10.0.0.0/8" in commands
+        assert "set nat source rule 100 translation address masquerade" in commands
+
+    def test_generate_source_nat_static_address(self):
+        """Test source NAT with static IP translation."""
+        nat = NatConfig(
+            source=[
+                SourceNatRule(
+                    outbound_interface="eth0",
+                    source_address="192.168.0.0/16",
+                    translation_address="203.0.113.10",
+                )
+            ]
+        )
+        gen = NatGenerator(nat)
+        commands = gen.generate()
+
+        assert len(commands) == 3
+        assert "set nat source rule 100 outbound-interface name eth0" in commands
+        assert "set nat source rule 100 source address 192.168.0.0/16" in commands
+        assert "set nat source rule 100 translation address 203.0.113.10" in commands
+
+    def test_generate_source_nat_without_source_address(self):
+        """Test source NAT without source address (matches all sources)."""
+        nat = NatConfig(
+            source=[
+                SourceNatRule(
+                    outbound_interface="eth1",
+                    translation="masquerade",
+                )
+            ]
+        )
+        gen = NatGenerator(nat)
+        commands = gen.generate()
+
+        assert len(commands) == 2
+        assert "set nat source rule 100 outbound-interface name eth1" in commands
+        assert "set nat source rule 100 translation address masquerade" in commands
+        assert not any("source address" in cmd for cmd in commands)
+
+    def test_generate_source_nat_with_description(self):
+        """Test source NAT with description."""
+        nat = NatConfig(
+            source=[
+                SourceNatRule(
+                    outbound_interface="eth0",
+                    source_address="10.0.0.0/8",
+                    translation="masquerade",
+                    description="NAT for internal network",
+                )
+            ]
+        )
+        gen = NatGenerator(nat)
+        commands = gen.generate()
+
+        assert len(commands) == 4
+        assert "set nat source rule 100 description 'NAT for internal network'" in commands
+
+    def test_generate_multiple_source_nat_rules(self):
+        """Test multiple source NAT rules with correct numbering."""
+        nat = NatConfig(
+            source=[
+                SourceNatRule(
+                    outbound_interface="eth0",
+                    source_address="10.0.0.0/8",
+                    translation="masquerade",
+                ),
+                SourceNatRule(
+                    outbound_interface="eth0",
+                    source_address="192.168.0.0/16",
+                    translation_address="203.0.113.10",
+                ),
+                SourceNatRule(
+                    outbound_interface="eth1",
+                    translation="masquerade",
+                ),
+            ]
+        )
+        gen = NatGenerator(nat)
+        commands = gen.generate()
+
+        # Check rule numbering (100, 200, 300)
+        assert "set nat source rule 100 outbound-interface name eth0" in commands
+        assert "set nat source rule 200 outbound-interface name eth0" in commands
+        assert "set nat source rule 300 outbound-interface name eth1" in commands
+
+    # Destination NAT Tests
+
+    def test_generate_destination_nat_basic(self):
+        """Test basic destination NAT (port forwarding)."""
+        nat = NatConfig(
+            destination=[
+                DestinationNatRule(
+                    inbound_interface="eth0",
+                    protocol="tcp",
+                    destination_port=443,
+                    translation_address=IPv4Address("10.62.0.20"),
+                    translation_port=443,
+                )
+            ]
+        )
+        gen = NatGenerator(nat)
+        commands = gen.generate()
+
+        assert len(commands) == 5
+        assert "set nat destination rule 100 inbound-interface name eth0" in commands
+        assert "set nat destination rule 100 protocol tcp" in commands
+        assert "set nat destination rule 100 destination port 443" in commands
+        assert "set nat destination rule 100 translation address 10.62.0.20" in commands
+        assert "set nat destination rule 100 translation port 443" in commands
+
+    def test_generate_destination_nat_without_protocol(self):
+        """Test destination NAT without protocol (all protocols)."""
+        nat = NatConfig(
+            destination=[
+                DestinationNatRule(
+                    inbound_interface="eth0",
+                    translation_address=IPv4Address("10.62.0.20"),
+                )
+            ]
+        )
+        gen = NatGenerator(nat)
+        commands = gen.generate()
+
+        assert "set nat destination rule 100 inbound-interface name eth0" in commands
+        assert "set nat destination rule 100 translation address 10.62.0.20" in commands
+        assert not any("protocol" in cmd for cmd in commands)
+
+    def test_generate_destination_nat_tcp_udp(self):
+        """Test destination NAT with tcp_udp protocol."""
+        nat = NatConfig(
+            destination=[
+                DestinationNatRule(
+                    inbound_interface="eth0",
+                    protocol="tcp_udp",
+                    destination_port=53,
+                    translation_address=IPv4Address("10.62.0.20"),
+                )
+            ]
+        )
+        gen = NatGenerator(nat)
+        commands = gen.generate()
+
+        assert "set nat destination rule 100 protocol tcp_udp" in commands
+
+    def test_generate_destination_nat_with_destination_address(self):
+        """Test destination NAT with destination address (for 1:1 NAT)."""
+        nat = NatConfig(
+            destination=[
+                DestinationNatRule(
+                    inbound_interface="eth0",
+                    destination_address=IPv4Address("203.0.113.100"),
+                    translation_address=IPv4Address("10.62.0.100"),
+                )
+            ]
+        )
+        gen = NatGenerator(nat)
+        commands = gen.generate()
+
+        assert "set nat destination rule 100 destination address 203.0.113.100" in commands
+        assert "set nat destination rule 100 translation address 10.62.0.100" in commands
+
+    def test_generate_destination_nat_without_translation_port(self):
+        """Test destination NAT without translation port (port preserved)."""
+        nat = NatConfig(
+            destination=[
+                DestinationNatRule(
+                    inbound_interface="eth0",
+                    protocol="tcp",
+                    destination_port=80,
+                    translation_address=IPv4Address("10.62.0.20"),
+                )
+            ]
+        )
+        gen = NatGenerator(nat)
+        commands = gen.generate()
+
+        assert "set nat destination rule 100 destination port 80" in commands
+        assert not any("translation port" in cmd for cmd in commands)
+
+    def test_generate_destination_nat_port_translation(self):
+        """Test destination NAT with port translation."""
+        nat = NatConfig(
+            destination=[
+                DestinationNatRule(
+                    inbound_interface="eth0",
+                    protocol="tcp",
+                    destination_port=2222,
+                    translation_address=IPv4Address("10.62.0.30"),
+                    translation_port=22,
+                    description="SSH to jump host",
+                )
+            ]
+        )
+        gen = NatGenerator(nat)
+        commands = gen.generate()
+
+        assert "set nat destination rule 100 destination port 2222" in commands
+        assert "set nat destination rule 100 translation port 22" in commands
+        assert "set nat destination rule 100 description 'SSH to jump host'" in commands
+
+    def test_generate_multiple_destination_nat_rules(self):
+        """Test multiple destination NAT rules with correct numbering."""
+        nat = NatConfig(
+            destination=[
+                DestinationNatRule(
+                    inbound_interface="eth0",
+                    protocol="tcp",
+                    destination_port=443,
+                    translation_address=IPv4Address("10.62.0.20"),
+                ),
+                DestinationNatRule(
+                    inbound_interface="eth0",
+                    protocol="tcp",
+                    destination_port=80,
+                    translation_address=IPv4Address("10.62.0.21"),
+                ),
+            ]
+        )
+        gen = NatGenerator(nat)
+        commands = gen.generate()
+
+        # Check rule numbering (100, 200)
+        assert "set nat destination rule 100 inbound-interface name eth0" in commands
+        assert "set nat destination rule 200 inbound-interface name eth0" in commands
+
+    # Bidirectional NAT Tests
+
+    def test_generate_binat_basic(self):
+        """Test basic bidirectional 1:1 NAT."""
+        nat = NatConfig(
+            binat=[
+                BinatRule(
+                    external_address=IPv4Address("129.244.246.66"),
+                    internal_address=IPv4Address("10.63.0.101"),
+                    interface="eth0",
+                )
+            ]
+        )
+        gen = NatGenerator(nat)
+        commands = gen.generate()
+
+        # Should generate 6 commands (3 for destination, 3 for source)
+        assert len(commands) == 6
+
+        # Destination NAT (inbound: external -> internal)
+        assert "set nat destination rule 500 inbound-interface name eth0" in commands
+        assert "set nat destination rule 500 destination address 129.244.246.66" in commands
+        assert "set nat destination rule 500 translation address 10.63.0.101" in commands
+
+        # Source NAT (outbound: internal -> external)
+        assert "set nat source rule 500 outbound-interface name eth0" in commands
+        assert "set nat source rule 500 source address 10.63.0.101" in commands
+        assert "set nat source rule 500 translation address 129.244.246.66" in commands
+
+    def test_generate_binat_with_description(self):
+        """Test bidirectional 1:1 NAT with description."""
+        nat = NatConfig(
+            binat=[
+                BinatRule(
+                    external_address=IPv4Address("129.244.246.66"),
+                    internal_address=IPv4Address("10.63.0.101"),
+                    interface="eth0",
+                    description="Scoring engine",
+                )
+            ]
+        )
+        gen = NatGenerator(nat)
+        commands = gen.generate()
+
+        # Should have description on both rules
+        assert "set nat destination rule 500 description 'Scoring engine'" in commands
+        assert "set nat source rule 500 description 'Scoring engine'" in commands
+
+    def test_generate_multiple_binat_rules(self):
+        """Test multiple bidirectional NAT rules with correct numbering."""
+        nat = NatConfig(
+            binat=[
+                BinatRule(
+                    external_address=IPv4Address("129.244.246.66"),
+                    internal_address=IPv4Address("10.63.0.101"),
+                    interface="eth0",
+                    description="Scoring engine 1",
+                ),
+                BinatRule(
+                    external_address=IPv4Address("129.244.246.67"),
+                    internal_address=IPv4Address("10.63.0.102"),
+                    interface="eth0",
+                    description="Scoring engine 2",
+                ),
+            ]
+        )
+        gen = NatGenerator(nat)
+        commands = gen.generate()
+
+        # Check rule numbering (500, 600)
+        assert "set nat destination rule 500 destination address 129.244.246.66" in commands
+        assert "set nat source rule 500 source address 10.63.0.101" in commands
+        assert "set nat destination rule 600 destination address 129.244.246.67" in commands
+        assert "set nat source rule 600 source address 10.63.0.102" in commands
+
+    # Mixed NAT Tests
+
+    def test_generate_mixed_nat_rules(self):
+        """Test combination of source, destination, and binat rules."""
+        nat = NatConfig(
+            source=[
+                SourceNatRule(
+                    outbound_interface="eth0",
+                    source_address="10.0.0.0/8",
+                    translation="masquerade",
+                )
+            ],
+            destination=[
+                DestinationNatRule(
+                    inbound_interface="eth0",
+                    protocol="tcp",
+                    destination_port=443,
+                    translation_address=IPv4Address("10.62.0.20"),
+                )
+            ],
+            binat=[
+                BinatRule(
+                    external_address=IPv4Address("129.244.246.66"),
+                    internal_address=IPv4Address("10.63.0.101"),
+                    interface="eth0",
+                )
+            ],
+        )
+        gen = NatGenerator(nat)
+        commands = gen.generate()
+
+        # Source NAT rules (100 series)
+        assert "set nat source rule 100 outbound-interface name eth0" in commands
+
+        # Destination NAT rules (100 series)
+        assert "set nat destination rule 100 inbound-interface name eth0" in commands
+        assert "set nat destination rule 100 protocol tcp" in commands
+
+        # Binat rules (500 series for both source and destination)
+        assert "set nat destination rule 500 destination address 129.244.246.66" in commands
+        assert "set nat source rule 500 source address 10.63.0.101" in commands
+
+    def test_generate_binat_no_conflict_with_regular_nat(self):
+        """Test that binat rules (500+) don't conflict with regular NAT rules (100-400)."""
+        nat = NatConfig(
+            source=[
+                SourceNatRule(
+                    outbound_interface="eth0",
+                    translation="masquerade",
+                )
+                for _ in range(4)  # Rules 100, 200, 300, 400
+            ],
+            binat=[
+                BinatRule(
+                    external_address=IPv4Address("129.244.246.66"),
+                    internal_address=IPv4Address("10.63.0.101"),
+                    interface="eth0",
+                )
+            ],
+        )
+        gen = NatGenerator(nat)
+        commands = gen.generate()
+
+        # Regular source NAT should be 100-400
+        assert "set nat source rule 100 outbound-interface name eth0" in commands
+        assert "set nat source rule 400 outbound-interface name eth0" in commands
+
+        # Binat should start at 500
+        assert "set nat source rule 500 source address 10.63.0.101" in commands
+        assert "set nat destination rule 500 destination address 129.244.246.66" in commands
