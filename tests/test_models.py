@@ -1135,45 +1135,50 @@ class TestInputValidation:
         iface = InterfaceConfig(name="eth99", ip="10.0.1.1", mask="255.255.255.0")
         assert iface.name == "eth99"
 
-    def test_interface_name_valid_bond(self) -> None:
-        """Test valid bond interface name."""
-        iface = InterfaceConfig(name="bond0", ip="10.0.1.1", mask="255.255.255.0")
-        assert iface.name == "bond0"
-
-    def test_interface_name_valid_bridge(self) -> None:
-        """Test valid bridge interface name."""
-        iface = InterfaceConfig(name="br0", ip="10.0.1.1", mask="255.255.255.0")
-        assert iface.name == "br0"
-
-    def test_interface_name_valid_wireguard(self) -> None:
-        """Test valid wireguard interface name."""
-        iface = InterfaceConfig(name="wg0", ip="10.0.1.1", mask="255.255.255.0")
-        assert iface.name == "wg0"
-
-    def test_interface_name_valid_vti(self) -> None:
-        """Test valid VPN tunnel interface name."""
-        iface = InterfaceConfig(name="vti0", ip="10.0.1.1", mask="255.255.255.0")
-        assert iface.name == "vti0"
-
-    def test_interface_name_valid_tun(self) -> None:
-        """Test valid tun interface name."""
-        iface = InterfaceConfig(name="tun0", ip="10.0.1.1", mask="255.255.255.0")
-        assert iface.name == "tun0"
-
-    def test_interface_name_valid_tap(self) -> None:
-        """Test valid tap interface name."""
-        iface = InterfaceConfig(name="tap0", ip="10.0.1.1", mask="255.255.255.0")
-        assert iface.name == "tap0"
-
-    def test_interface_name_valid_loopback(self) -> None:
-        """Test valid loopback interface name."""
-        iface = InterfaceConfig(name="lo", ip="127.0.0.1", mask="255.0.0.0")
-        assert iface.name == "lo"
-
-    def test_interface_name_invalid_unknown_type(self) -> None:
-        """Test that unknown interface types are rejected."""
+    def test_interface_name_invalid_bond(self) -> None:
+        """Test that bond interface is rejected (not supported by ONE context)."""
         with pytest.raises(ValidationError, match="Invalid interface name"):
-            InterfaceConfig(name="eno1", ip="10.0.1.1", mask="255.255.255.0")
+            InterfaceConfig(name="bond0", ip="10.0.1.1", mask="255.255.255.0")
+
+    def test_interface_name_invalid_bridge(self) -> None:
+        """Test that bridge interface is rejected (not supported by ONE context)."""
+        with pytest.raises(ValidationError, match="Invalid interface name"):
+            InterfaceConfig(name="br0", ip="10.0.1.1", mask="255.255.255.0")
+
+    def test_interface_name_invalid_wireguard(self) -> None:
+        """Test that wireguard interface is rejected (not supported by ONE context)."""
+        with pytest.raises(ValidationError, match="Invalid interface name"):
+            InterfaceConfig(name="wg0", ip="10.0.1.1", mask="255.255.255.0")
+
+    def test_interface_name_invalid_vti(self) -> None:
+        """Test that VPN tunnel interface is rejected (not supported by ONE context)."""
+        with pytest.raises(ValidationError, match="Invalid interface name"):
+            InterfaceConfig(name="vti0", ip="10.0.1.1", mask="255.255.255.0")
+
+    def test_interface_name_invalid_tun(self) -> None:
+        """Test that tun interface is rejected (not supported by ONE context)."""
+        with pytest.raises(ValidationError, match="Invalid interface name"):
+            InterfaceConfig(name="tun0", ip="10.0.1.1", mask="255.255.255.0")
+
+    def test_interface_name_invalid_tap(self) -> None:
+        """Test that tap interface is rejected (not supported by ONE context)."""
+        with pytest.raises(ValidationError, match="Invalid interface name"):
+            InterfaceConfig(name="tap0", ip="10.0.1.1", mask="255.255.255.0")
+
+    def test_interface_name_invalid_loopback(self) -> None:
+        """Test that loopback interface is rejected (not supported by ONE context)."""
+        with pytest.raises(ValidationError, match="Invalid interface name"):
+            InterfaceConfig(name="lo", ip="127.0.0.1", mask="255.0.0.0")
+
+    def test_interface_name_invalid_ens(self) -> None:
+        """Test that ens-style interface is rejected."""
+        with pytest.raises(ValidationError, match="Invalid interface name"):
+            InterfaceConfig(name="ens3", ip="10.0.1.1", mask="255.255.255.0")
+
+    def test_interface_name_invalid_enp(self) -> None:
+        """Test that enp-style interface is rejected."""
+        with pytest.raises(ValidationError, match="Invalid interface name"):
+            InterfaceConfig(name="enp0s3", ip="10.0.1.1", mask="255.255.255.0")
 
     def test_interface_name_invalid_no_number(self) -> None:
         """Test that interface name without number is rejected."""
@@ -1184,6 +1189,11 @@ class TestInputValidation:
         """Test that interface name with special chars is rejected."""
         with pytest.raises(ValidationError, match="Invalid interface name"):
             InterfaceConfig(name="eth_0", ip="10.0.1.1", mask="255.255.255.0")
+
+    def test_interface_name_invalid_vlan_subinterface(self) -> None:
+        """Test that VLAN subinterface is rejected (deferred to issue #46)."""
+        with pytest.raises(ValidationError, match="Invalid interface name"):
+            InterfaceConfig(name="eth0.100", ip="10.0.1.1", mask="255.255.255.0")
 
     def test_alias_interface_name_valid(self) -> None:
         """Test valid alias interface name."""
