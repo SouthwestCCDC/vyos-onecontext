@@ -237,30 +237,31 @@ build {
       DIAG
       ,
       # =======================================================================
-      # NETWORK VERIFICATION
+      # NETWORK READINESS CHECK
       # Ensure network is up before attempting downloads. Sometimes eth0
       # disappears between provisioners due to DHCP/vyos-hostsd interactions.
       # See: https://github.com/SouthwestCCDC/vyos-onecontext/issues/108
       # =======================================================================
       <<-NETWAIT
-      echo "Verifying network connectivity before proceeding..."
+      echo "Checking network readiness before proceeding..."
       for attempt in $(seq 1 30); do
-        # Check if eth0 exists and has an IP
-        if ip -4 addr show eth0 2>/dev/null | grep -q "inet "; then
-          # Check if default route exists
-          if ip -4 route show default 2>/dev/null | grep -q "default"; then
-            echo "Network is ready (attempt $attempt/30)"
-            break
-          else
-            echo "Waiting for default route (attempt $attempt/30)..."
-          fi
+        # Level 1: Check if eth0 interface exists
+        if ! ip link show eth0 >/dev/null 2>&1; then
+          echo "Waiting for eth0 interface to exist (attempt $attempt/30)..."
+        # Level 2: Check if eth0 has an IPv4 address
+        elif ! ip -4 addr show eth0 2>/dev/null | grep -q "inet "; then
+          echo "Waiting for eth0 to obtain IPv4 address (attempt $attempt/30)..."
+        # Level 3: Check if default route exists
+        elif ! ip -4 route show default 2>/dev/null | grep -q "default"; then
+          echo "Waiting for default route (attempt $attempt/30)..."
         else
-          echo "Waiting for eth0 interface (attempt $attempt/30)..."
+          echo "Network is ready (attempt $attempt/30)"
+          break
         fi
 
         if [ "$attempt" -eq 30 ]; then
-          echo "ERROR: Network failed to come up after 30 attempts"
-          dns_diag 'NETWORK VERIFICATION FAILED'
+          echo "ERROR: Network failed to become ready after 30 attempts"
+          dns_diag 'NETWORK READINESS CHECK FAILED'
           exit 1
         fi
 
