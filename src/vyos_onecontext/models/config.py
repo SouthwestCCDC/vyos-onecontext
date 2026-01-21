@@ -146,9 +146,7 @@ class RouterConfig(BaseModel):
     )
 
     # Routing
-    routes: Annotated[
-        RoutesConfig | None, Field(None, description="Static routing configuration")
-    ]
+    routes: Annotated[RoutesConfig | None, Field(None, description="Static routing configuration")]
     ospf: Annotated[OspfConfig | None, Field(None, description="OSPF dynamic routing")]
 
     # Services
@@ -260,9 +258,7 @@ class RouterConfig(BaseModel):
 
         for pool in self.dhcp.pools:
             if pool.interface not in interface_names:
-                raise ValueError(
-                    f"DHCP pool references non-existent interface: '{pool.interface}'"
-                )
+                raise ValueError(f"DHCP pool references non-existent interface: '{pool.interface}'")
 
         for reservation in self.dhcp.reservations:
             if reservation.interface not in interface_names:
@@ -303,6 +299,31 @@ class RouterConfig(BaseModel):
                 raise ValueError(
                     f"OSPF configuration references non-existent interface: '{ospf_iface.name}'"
                 )
+
+        return self
+
+    @model_validator(mode="after")
+    def validate_ospf_not_on_management_vrf(self) -> "RouterConfig":
+        """Validate that OSPF is never configured on management VRF interfaces.
+
+        Design principle: OSPF scope is data-plane only, never in management VRF.
+        Management VRF is for out-of-band access and should remain isolated from
+        routing protocols.
+        """
+        if self.ospf is None or not self.ospf.enabled:
+            return self
+
+        # Get management interface names
+        mgmt_interfaces = {iface.name for iface in self.interfaces if iface.management}
+
+        # Check OSPF interfaces
+        if self.ospf.interfaces:
+            for ospf_iface in self.ospf.interfaces:
+                if ospf_iface.name in mgmt_interfaces:
+                    raise ValueError(
+                        f"OSPF cannot be configured on management VRF interface: "
+                        f"'{ospf_iface.name}'"
+                    )
 
         return self
 
