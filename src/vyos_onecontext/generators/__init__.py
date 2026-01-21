@@ -60,6 +60,7 @@ def generate_config(config: RouterConfig) -> list[str]:
     commands.extend(DhcpGenerator(config.dhcp).generate())
 
     # Future generators will be added here in later phases:
+    # - DNS service (recursive resolver, forwarding)
     # - NAT (source, destination, binat)
     # - Firewall (zones, policies, rules)
     # - Custom config (START_CONFIG)
