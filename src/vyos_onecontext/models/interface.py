@@ -6,11 +6,10 @@ from typing import Annotated
 
 from pydantic import BaseModel, Field, field_validator
 
-# Pattern for valid VyOS interface names (VyOS 1.4 Sagitta)
-# Supports: eth, bond, br (bridge), wg (wireguard), vti (VPN tunnel),
-# tun, tap, dum (dummy), peth (physical eth), and lo (loopback)
-# See: https://docs.vyos.io/en/sagitta/configuration/interfaces/index.html
-VALID_INTERFACE_PATTERN = re.compile(r"^(eth|bond|br|wg|vti|tun|tap|dum|peth)\d+$|^lo$")
+# Pattern for valid interface names in OpenNebula context
+# OpenNebula provides only ETHx variables, so we only support eth interfaces.
+# VLAN subinterfaces (e.g., eth0.100) are not yet supported (see issue #46).
+VALID_INTERFACE_PATTERN = re.compile(r"^eth\d+$")
 
 
 class InterfaceConfig(BaseModel):
@@ -44,8 +43,7 @@ class InterfaceConfig(BaseModel):
         """
         if not VALID_INTERFACE_PATTERN.match(v):
             raise ValueError(
-                f"Invalid interface name '{v}'. Supported types: "
-                "eth, bond, br, wg, vti, tun, tap, dum, peth (with number), or lo"
+                f"Invalid interface name '{v}' (expected ethN format, e.g., eth0, eth1)"
             )
         return v
 
@@ -112,8 +110,7 @@ class AliasConfig(BaseModel):
         """
         if not VALID_INTERFACE_PATTERN.match(v):
             raise ValueError(
-                f"Invalid interface name '{v}'. Supported types: "
-                "eth, bond, br, wg, vti, tun, tap, dum, peth (with number), or lo"
+                f"Invalid interface name '{v}' (expected ethN format, e.g., eth0, eth1)"
             )
         return v
 
