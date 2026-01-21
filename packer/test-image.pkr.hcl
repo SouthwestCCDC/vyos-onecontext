@@ -126,7 +126,7 @@ build {
       # =======================================================================
       # DNS DIAGNOSTIC INSTRUMENTATION
       # This captures DNS state at key points to debug intermittent failures.
-      # See: https://github.com/SouthwestCCDC/vyos-onecontext/issues/TBD
+      # See: https://github.com/SouthwestCCDC/vyos-onecontext/issues/108
       # =======================================================================
       <<-DIAG
       dns_diag() {
@@ -140,9 +140,6 @@ build {
         echo ""
         echo "--- /etc/gai.conf ---"
         cat /etc/gai.conf 2>/dev/null || echo "(file not found or empty)"
-        echo ""
-        echo "--- vyos-hostsd-client state ---"
-        sudo /usr/bin/vyos-hostsd-client --show-name-servers 2>&1 || echo "(command failed)"
         echo ""
         echo "--- Network interfaces ---"
         ip -4 addr show 2>/dev/null | grep -E "^[0-9]+:|inet " || echo "(no IPv4 addresses)"
@@ -176,6 +173,10 @@ build {
       "echo 'Calling vyos-hostsd-client to add DNS server...'",
       "sudo /usr/bin/vyos-hostsd-client --add-name-servers 10.0.2.3 --tag system --apply",
       "echo 'vyos-hostsd-client completed with exit code: '$?",
+      # Wait for vyos-hostsd to settle and avoid triggering network reconfiguration
+      # See: https://github.com/SouthwestCCDC/vyos-onecontext/issues/108
+      "echo 'Waiting for vyos-hostsd to settle...'",
+      "sleep 5",
       # Capture state after vyos-hostsd-client
       "dns_diag 'AFTER vyos-hostsd-client'",
       # Prefer IPv4 over IPv6 (QEMU SLIRP doesn't support IPv6)
@@ -209,9 +210,6 @@ build {
         echo "--- /etc/gai.conf ---"
         cat /etc/gai.conf 2>/dev/null || echo "(file not found or empty)"
         echo ""
-        echo "--- vyos-hostsd-client state ---"
-        sudo /usr/bin/vyos-hostsd-client --show-name-servers 2>&1 || echo "(command failed)"
-        echo ""
         echo "--- Network interfaces ---"
         ip -4 addr show 2>/dev/null | grep -E "^[0-9]+:|inet " || echo "(no IPv4 addresses)"
         echo ""
@@ -237,6 +235,39 @@ build {
         echo ""
       }
       DIAG
+      ,
+      # =======================================================================
+      # NETWORK READINESS CHECK
+      # Ensure network is up before attempting downloads. Sometimes eth0
+      # disappears between provisioners due to DHCP/vyos-hostsd interactions.
+      # See: https://github.com/SouthwestCCDC/vyos-onecontext/issues/108
+      # =======================================================================
+      <<-NETWAIT
+      echo "Checking network readiness before proceeding..."
+      for attempt in $(seq 1 30); do
+        # Level 1: Check if eth0 interface exists
+        if ! ip link show eth0 >/dev/null 2>&1; then
+          echo "Waiting for eth0 interface to exist (attempt $attempt/30)..."
+        # Level 2: Check if eth0 has an IPv4 address
+        elif ! ip -4 addr show eth0 2>/dev/null | grep -q "inet "; then
+          echo "Waiting for eth0 to obtain IPv4 address (attempt $attempt/30)..."
+        # Level 3: Check if default route exists
+        elif ! ip -4 route show default 2>/dev/null | grep -q "default"; then
+          echo "Waiting for default route (attempt $attempt/30)..."
+        else
+          echo "Network is ready (attempt $attempt/30)"
+          break
+        fi
+
+        if [ "$attempt" -eq 30 ]; then
+          echo "ERROR: Network failed to become ready after 30 attempts"
+          dns_diag 'NETWORK READINESS CHECK FAILED'
+          exit 1
+        fi
+
+        sleep 2
+      done
+      NETWAIT
       ,
       # Capture DNS state at start of this provisioner
       "dns_diag 'START OF UV INSTALL PROVISIONER'",
