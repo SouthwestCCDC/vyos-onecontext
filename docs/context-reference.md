@@ -859,22 +859,33 @@ Shell script executed after VyOS configuration is committed.
 
 | Variable | Type | Description |
 |----------|------|-------------|
-| `START_SCRIPT` | String | Shell script content |
+| `START_SCRIPT` | String | Shell script content or path to script file |
 
-**Terraform Example:**
+**Terraform Examples:**
 
+Inline script:
 ```hcl
 START_SCRIPT = <<-EOT
   #!/bin/bash
   echo "Configuration complete at $(date)" >> /var/log/contextualization.log
+  curl -X POST https://inventory.example.com/register -d "hostname=$(hostname)"
 EOT
+```
+
+Path to script on context CD:
+```hcl
+START_SCRIPT = "/mnt/context/setup.sh"
 ```
 
 **Notes:**
 
-- Runs after `commit` succeeds
-- Runs as root
-- Use for non-VyOS configuration (custom files, external integrations)
+- Runs after VyOS `commit` succeeds
+- Runs as root with a 5-minute timeout (300 seconds)
+- Supports both inline scripts and file paths
+  - If value starts with `/` and the file exists, it's executed directly
+  - Otherwise, content is written to a temp file and executed
+- Script failures are logged but don't break boot
+- Use for non-VyOS configuration (custom files, external integrations, registration)
 
 ---
 

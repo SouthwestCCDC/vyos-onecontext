@@ -65,31 +65,52 @@ def create_freeze_marker() -> None:
     logger.info("Created freeze marker at %s", FREEZE_MARKER_PATH)
 
 
-def run_start_script(script_content: str) -> None:
+def run_start_script(script_content: str, timeout: int = 300) -> None:
     """Execute the START_SCRIPT after configuration is committed.
 
+    Supports both inline scripts and file paths. If script_content looks like
+    a file path (starts with / and exists), it's executed directly. Otherwise,
+    it's treated as inline script content and written to a temporary file.
+
     Args:
-        script_content: Shell script content to execute.
+        script_content: Shell script content or path to script file.
+        timeout: Maximum execution time in seconds (default: 300 = 5 minutes).
     """
     logger.info("Executing START_SCRIPT")
 
-    # Write script to temporary file
-    with tempfile.NamedTemporaryFile(
-        mode="w",
-        suffix=".sh",
-        delete=False,
-    ) as script_file:
-        script_file.write(script_content)
-        script_path = script_file.name
+    # Check if script_content is a file path
+    is_file_path = script_content.startswith("/") and Path(script_content).exists()
+
+    if is_file_path:
+        # Execute the script file directly
+        script_path = script_content
+        cleanup_script = False
+        logger.debug("START_SCRIPT: executing file at %s", script_path)
+    else:
+        # Write inline script to temporary file
+        logger.debug("START_SCRIPT: writing inline script to temporary file")
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            suffix=".sh",
+            delete=False,
+        ) as script_file:
+            script_file.write(script_content)
+            script_path = script_file.name
+        cleanup_script = True
 
     try:
+        # Ensure script is executable
         os.chmod(script_path, 0o700)
+
+        # Execute with timeout
         result = subprocess.run(
             ["/bin/bash", script_path],
             capture_output=True,
             text=True,
             check=False,
+            timeout=timeout,
         )
+
         if result.returncode != 0:
             logger.error(
                 "START_SCRIPT failed with exit code %d: %s",
@@ -100,9 +121,18 @@ def run_start_script(script_content: str) -> None:
             logger.info("START_SCRIPT completed successfully")
             if result.stdout:
                 logger.debug("START_SCRIPT output: %s", result.stdout)
+
+    except subprocess.TimeoutExpired:
+        logger.error(
+            "START_SCRIPT exceeded timeout of %d seconds and was terminated",
+            timeout,
+        )
+    except Exception as e:
+        logger.error("START_SCRIPT execution failed: %s", e)
     finally:
-        # Clean up the temporary script
-        Path(script_path).unlink(missing_ok=True)
+        # Clean up the temporary script if we created one
+        if cleanup_script:
+            Path(script_path).unlink(missing_ok=True)
 
 
 def apply_configuration(

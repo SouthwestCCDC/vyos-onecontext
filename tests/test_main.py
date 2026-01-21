@@ -68,6 +68,49 @@ class TestRunStartScript:
             # Should not raise, just log the error
             run_start_script(script)
 
+    def test_run_start_script_from_file_path(self, tmp_path: Path) -> None:
+        """Test START_SCRIPT execution from file path."""
+        # Create a test script file
+        script_file = tmp_path / "test_script.sh"
+        script_file.write_text("#!/bin/bash\necho 'from file'")
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="from file", stderr="")
+            run_start_script(str(script_file))
+            mock_run.assert_called_once()
+            # Should execute the file directly
+            call_args = mock_run.call_args[0][0]
+            assert call_args[1] == str(script_file)
+
+    def test_run_start_script_inline_vs_path(self, tmp_path: Path) -> None:
+        """Test that inline scripts with path-like content are handled correctly."""
+        # Even if content starts with /, if file doesn't exist, treat as inline
+        script = "/nonexistent/script.sh\necho 'inline'"
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+            run_start_script(script)
+            # Should create temp file since path doesn't exist
+            call_args = mock_run.call_args[0][0]
+            # Should NOT be the literal path from script content
+            assert call_args[1] != "/nonexistent/script.sh"
+
+    def test_run_start_script_timeout(self) -> None:
+        """Test START_SCRIPT timeout handling."""
+        script = "#!/bin/bash\nsleep 100"
+        with patch("subprocess.run") as mock_run:
+            mock_run.side_effect = subprocess.TimeoutExpired("/bin/bash", 1)
+            # Should not raise, just log the timeout
+            run_start_script(script, timeout=1)
+
+    def test_run_start_script_custom_timeout(self) -> None:
+        """Test START_SCRIPT with custom timeout value."""
+        script = "#!/bin/bash\necho 'test'"
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="test", stderr="")
+            run_start_script(script, timeout=60)
+            # Verify timeout parameter was passed
+            assert mock_run.call_args[1]["timeout"] == 60
+
 
 class TestApplyConfiguration:
     """Tests for apply_configuration function."""

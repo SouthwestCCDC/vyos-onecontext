@@ -72,6 +72,16 @@ class TestFixturesParsing:
         alias_interfaces = {alias.interface for alias in config.aliases}
         assert "eth0" in alias_interfaces
 
+    def test_start_script_fixture_parses(self) -> None:
+        """Test start-script.env fixture parses with START_SCRIPT content."""
+        parser = ContextParser(str(FIXTURES_DIR / "start-script.env"))
+        config = parser.parse()
+
+        assert config.hostname == "test-start-script"
+        assert config.start_script is not None
+        assert "START_SCRIPT executed" in config.start_script
+        assert config.start_script.startswith("#!/bin/bash")
+
     def test_all_fixtures_produce_valid_configs(self) -> None:
         """Test that all .env fixtures in the contexts directory parse successfully."""
         fixture_files = list(FIXTURES_DIR.glob("*.env"))
