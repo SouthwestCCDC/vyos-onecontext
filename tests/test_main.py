@@ -1,5 +1,6 @@
 """Unit tests for the __main__ entry point."""
 
+import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
