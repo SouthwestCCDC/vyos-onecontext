@@ -326,10 +326,9 @@ case "$CONTEXT_NAME" in
         # Management VRF
         assert_command_generated "set vrf name management" "VRF creation"
         assert_command_generated "set interfaces ethernet eth0 vrf management" "Interface VRF assignment"
-        # Static routes in VRF
-        assert_command_generated "set protocols static route 10.10.0.0/16" "Static route in VRF"
-        assert_command_generated "vrf management" "VRF routing table assignment"
-        # OSPF configuration
+        # Static routes in VRF (Sagitta syntax: set vrf name <vrf> protocols static route ...)
+        assert_command_generated "set vrf name management protocols static route 10.10.0.0/16" "Static route in VRF"
+        # OSPF configuration (not in VRF)
         assert_command_generated "set protocols ospf" "OSPF configuration"
         assert_command_generated "set protocols ospf parameters router-id" "OSPF router ID"
         assert_command_generated "set protocols ospf interface eth0 area" "OSPF interface area assignment"
