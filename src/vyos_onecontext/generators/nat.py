@@ -81,28 +81,26 @@ class NatGenerator(BaseGenerator):
 
             # Outbound interface (required)
             commands.append(
-                f"set nat source rule {rule_num} "
-                f"outbound-interface name '{rule.outbound_interface}'"
+                f"set nat source rule {rule_num} outbound-interface name {rule.outbound_interface}"
             )
 
             # Source address (optional - if not specified, matches all sources)
             if rule.source_address:
                 commands.append(
-                    f"set nat source rule {rule_num} source address '{rule.source_address}'"
+                    f"set nat source rule {rule_num} source address {rule.source_address}"
                 )
 
             # Translation (masquerade or static address)
             if rule.translation == "masquerade":
-                commands.append(f"set nat source rule {rule_num} translation address 'masquerade'")
+                commands.append(f"set nat source rule {rule_num} translation address masquerade")
             elif rule.translation_address:
                 commands.append(
-                    f"set nat source rule {rule_num} "
-                    f"translation address '{rule.translation_address}'"
+                    f"set nat source rule {rule_num} translation address {rule.translation_address}"
                 )
 
             # Description (optional)
             if rule.description:
-                commands.append(f"set nat source rule {rule_num} description '{rule.description}'")
+                commands.append(f"set nat source rule {rule_num} description {rule.description}")
 
         return commands
 
@@ -129,50 +127,46 @@ class NatGenerator(BaseGenerator):
             # Inbound interface (required)
             commands.append(
                 f"set nat destination rule {rule_num} "
-                f"inbound-interface name '{rule.inbound_interface}'"
+                f"inbound-interface name {rule.inbound_interface}"
             )
 
             # Protocol (optional - if not specified, matches all protocols)
             if rule.protocol:
                 # Handle tcp_udp specially - need to set both protocols
                 if rule.protocol == "tcp_udp":
-                    commands.append(f"set nat destination rule {rule_num} protocol 'tcp_udp'")
+                    commands.append(f"set nat destination rule {rule_num} protocol tcp_udp")
                 else:
-                    commands.append(
-                        f"set nat destination rule {rule_num} protocol '{rule.protocol}'"
-                    )
+                    commands.append(f"set nat destination rule {rule_num} protocol {rule.protocol}")
 
             # Destination address (optional - for 1:1 NAT scenarios)
             if rule.destination_address:
                 commands.append(
                     f"set nat destination rule {rule_num} "
-                    f"destination address '{rule.destination_address}'"
+                    f"destination address {rule.destination_address}"
                 )
 
             # Destination port (optional - not used with ICMP)
             if rule.destination_port is not None:
                 commands.append(
-                    f"set nat destination rule {rule_num} "
-                    f"destination port '{rule.destination_port}'"
+                    f"set nat destination rule {rule_num} destination port {rule.destination_port}"
                 )
 
             # Translation address (required)
             commands.append(
                 f"set nat destination rule {rule_num} "
-                f"translation address '{rule.translation_address}'"
+                f"translation address {rule.translation_address}"
             )
 
             # Translation port (optional - if not specified, port is preserved)
             if rule.translation_port is not None:
                 commands.append(
-                    f"set nat destination rule {rule_num} "
-                    f"translation port '{rule.translation_port}'"
+                    f"set nat destination rule {rule_num} translation port {rule.translation_port}"
                 )
 
             # Description (optional)
             if rule.description:
                 commands.append(
-                    f"set nat destination rule {rule_num} description '{rule.description}'"
+                    f"set nat destination rule {rule_num} description {rule.description}"
                 )
 
         return commands
@@ -204,31 +198,31 @@ class NatGenerator(BaseGenerator):
 
             # Destination NAT rule (inbound: external -> internal)
             commands.append(
-                f"set nat destination rule {rule_num} inbound-interface name '{rule.interface}'"
+                f"set nat destination rule {rule_num} inbound-interface name {rule.interface}"
             )
             commands.append(
-                f"set nat destination rule {rule_num} destination address '{rule.external_address}'"
+                f"set nat destination rule {rule_num} destination address {rule.external_address}"
             )
             commands.append(
-                f"set nat destination rule {rule_num} translation address '{rule.internal_address}'"
+                f"set nat destination rule {rule_num} translation address {rule.internal_address}"
             )
 
             # Source NAT rule (outbound: internal -> external)
             commands.append(
-                f"set nat source rule {rule_num} outbound-interface name '{rule.interface}'"
+                f"set nat source rule {rule_num} outbound-interface name {rule.interface}"
             )
             commands.append(
-                f"set nat source rule {rule_num} source address '{rule.internal_address}'"
+                f"set nat source rule {rule_num} source address {rule.internal_address}"
             )
             commands.append(
-                f"set nat source rule {rule_num} translation address '{rule.external_address}'"
+                f"set nat source rule {rule_num} translation address {rule.external_address}"
             )
 
             # Description (applied to both rules if provided)
             if rule.description:
                 commands.append(
-                    f"set nat destination rule {rule_num} description '{rule.description}'"
+                    f"set nat destination rule {rule_num} description {rule.description}"
                 )
-                commands.append(f"set nat source rule {rule_num} description '{rule.description}'")
+                commands.append(f"set nat source rule {rule_num} description {rule.description}")
 
         return commands
