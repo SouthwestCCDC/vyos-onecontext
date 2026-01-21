@@ -373,9 +373,14 @@ case "$CONTEXT_NAME" in
         assert_command_generated "set interfaces ethernet eth0 vrf management" "Interface VRF assignment"
         # Static routes in VRF (Sagitta syntax: set vrf name <vrf> protocols static route ...)
         assert_command_generated "set vrf name management protocols static route 10.10.0.0/16" "Static route in VRF"
-        # OSPF enabled but no interfaces (can't use eth0 - it's in management VRF)
-        assert_command_generated "set protocols ospf" "OSPF configuration"
-        assert_command_generated "set protocols ospf parameters router-id" "OSPF router ID"
+        # OSPF is disabled in this test (no interfaces available due to single-NIC limitation)
+        # Negative assertion: Verify OSPF commands are NOT generated
+        if grep -q "VYOS_CMD:.*set protocols ospf" "$SERIAL_LOG"; then
+            echo "[FAIL] OSPF commands should not be generated (OSPF disabled in fixture)"
+            VALIDATION_FAILED=1
+        else
+            echo "[PASS] OSPF correctly not configured (disabled in fixture)"
+        fi
         ;;
     nat-with-firewall)
         assert_command_generated "set system host-name" "Hostname configuration"
