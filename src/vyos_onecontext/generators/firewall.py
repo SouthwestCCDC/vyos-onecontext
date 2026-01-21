@@ -268,8 +268,10 @@ class FirewallGenerator(BaseGenerator):
                     )
 
             # Bind ruleset to zone pair
+            # VyOS syntax: set firewall zone <dest-zone> from <source-zone> firewall name <ruleset>
+            # This means "traffic TO dest-zone FROM source-zone uses this ruleset"
             commands.append(
-                f"set firewall zone {policy.from_zone} from {policy.to_zone} "
+                f"set firewall zone {policy.to_zone} from {policy.from_zone} "
                 f"firewall name {ruleset_name}"
             )
 

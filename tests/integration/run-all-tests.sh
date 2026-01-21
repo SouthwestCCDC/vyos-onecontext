@@ -35,6 +35,8 @@ declare -a TEST_SCENARIOS=(
     "snat:Source NAT (masquerade)"
     "dnat:Destination NAT (port forwarding)"
     "nat-full:Full NAT (SNAT+DNAT+binat)"
+    "vrf-with-routing:VRF with routing (VRF+static+OSPF)"
+    "nat-with-firewall:NAT with firewall zones"
 )
 
 TEMP_DIR=$(mktemp -d)

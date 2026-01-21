@@ -2916,8 +2916,8 @@ class TestFirewallGenerator:
             "set firewall ipv4 name GAME-to-SCORING rule 100 description 'Allow HTTPS'" in commands
         )
 
-        # Check zone binding
-        assert "set firewall zone GAME from SCORING firewall name GAME-to-SCORING" in commands
+        # Check zone binding (VyOS syntax: zone <dest> from <source>)
+        assert "set firewall zone SCORING from GAME firewall name GAME-to-SCORING" in commands
 
     def test_generate_policy_with_multiple_rules(self):
         """Test policy with multiple rules and correct numbering."""
@@ -3226,10 +3226,10 @@ class TestFirewallGenerator:
         assert "set firewall ipv4 name SCORING-to-GAME default-action drop" in commands
         assert "set firewall ipv4 name WAN-to-SCORING default-action drop" in commands
 
-        # Check zone bindings
-        assert "set firewall zone GAME from SCORING firewall name GAME-to-SCORING" in commands
-        assert "set firewall zone SCORING from GAME firewall name SCORING-to-GAME" in commands
-        assert "set firewall zone WAN from SCORING firewall name WAN-to-SCORING" in commands
+        # Check zone bindings (VyOS syntax: zone <dest> from <source>)
+        assert "set firewall zone SCORING from GAME firewall name GAME-to-SCORING" in commands
+        assert "set firewall zone GAME from SCORING firewall name SCORING-to-GAME" in commands
+        assert "set firewall zone SCORING from WAN firewall name WAN-to-SCORING" in commands
 
     def test_generate_complete_firewall_config(self):
         """Test complete firewall configuration with all components."""
