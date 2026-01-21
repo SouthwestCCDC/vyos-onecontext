@@ -265,6 +265,28 @@ case "$CONTEXT_NAME" in
         # Router ID configuration
         assert_command_generated "set protocols ospf parameters router-id" "OSPF router ID"
         ;;
+    dhcp)
+        assert_command_generated "set system host-name" "Hostname configuration"
+        # DHCP shared-network creation for eth0
+        assert_command_generated "set service dhcp-server shared-network-name dhcp-eth0" "DHCP shared-network creation"
+        # Subnet configuration
+        assert_command_generated "set service dhcp-server shared-network-name dhcp-eth0 subnet 10.50.1.0/24" "DHCP subnet configuration"
+        # DHCP range configuration
+        assert_command_generated "range 0 start 10.50.1.100" "DHCP range start address"
+        assert_command_generated "range 0 stop 10.50.1.200" "DHCP range end address"
+        # Gateway option (default-router)
+        assert_command_generated "default-router 10.50.1.1" "DHCP default router option"
+        # DNS servers option
+        assert_command_generated "name-server" "DHCP DNS server option"
+        # Lease time
+        assert_command_generated "lease 3600" "DHCP lease time"
+        # Domain name option
+        assert_command_generated "domain-name test.local" "DHCP domain name option"
+        # Static mapping
+        assert_command_generated "static-mapping reserved-host" "DHCP static mapping"
+        assert_command_generated "mac-address 00:11:22:33:44:55" "DHCP static mapping MAC address"
+        assert_command_generated "ip-address 10.50.1.50" "DHCP static mapping IP address"
+        ;;
     *)
         echo "[WARN] Unknown context '$CONTEXT_NAME' - no specific assertions"
         ;;

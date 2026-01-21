@@ -31,6 +31,7 @@ declare -a TEST_SCENARIOS=(
     "management-vrf:Management VRF"
     "static-routes:Static routing"
     "ospf:OSPF dynamic routing"
+    "dhcp:DHCP server"
 )
 
 TEMP_DIR=$(mktemp -d)
