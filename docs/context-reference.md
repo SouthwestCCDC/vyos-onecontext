@@ -887,6 +887,15 @@ START_SCRIPT = "/mnt/context/setup.sh"
 - Script failures are logged but don't break boot
 - Use for non-VyOS configuration (custom files, external integrations, registration)
 
+**Security Considerations:**
+
+The START_SCRIPT mechanism trusts OpenNebula context as an authoritative source.
+No path validation or sandboxing is performed - the script executes with full root
+privileges and can access any file on the system. This is intentional: OpenNebula
+context is infrastructure-controlled and implicitly trusted to perform arbitrary
+administrative operations. Operators should treat context data (including START_SCRIPT
+paths and content) with the same security controls as any other infrastructure-as-code.
+
 ---
 
 ## Complete Terraform Example

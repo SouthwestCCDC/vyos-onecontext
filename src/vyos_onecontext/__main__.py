@@ -72,17 +72,24 @@ def run_start_script(script_content: str, timeout: int = 300) -> None:
     a file path (starts with / and exists), it's executed directly. Otherwise,
     it's treated as inline script content and written to a temporary file.
 
+    Security note: START_SCRIPT content comes from OpenNebula context, which is
+    infrastructure-controlled and implicitly trusted. No path restrictions are
+    applied - the script can execute from any location with full privileges.
+
     Args:
         script_content: Shell script content or path to script file.
         timeout: Maximum execution time in seconds (default: 300 = 5 minutes).
     """
     logger.info("Executing START_SCRIPT")
 
+    # Initialize variables to avoid UnboundLocalError in finally block
+    script_path = ""
+    cleanup_script = False
+
     # Check if script_content is a file path (strip whitespace first)
     script_content_stripped = script_content.strip()
     is_file_path = (
-        script_content_stripped.startswith("/")
-        and Path(script_content_stripped).exists()
+        script_content_stripped.startswith("/") and Path(script_content_stripped).exists()
     )
 
     if is_file_path:
