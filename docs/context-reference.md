@@ -882,7 +882,7 @@ START_SCRIPT = "/mnt/context/setup.sh"
 - Runs after VyOS `commit` succeeds
 - Runs as root with a 5-minute timeout (300 seconds)
 - Supports both inline scripts and file paths
-  - If value starts with `/` and the file exists, it's executed directly
+  - If value (after stripping leading/trailing whitespace) starts with `/` and the file exists, it's executed directly
   - Otherwise, content is written to a temp file and executed
 - Script failures are logged but don't break boot
 - Use for non-VyOS configuration (custom files, external integrations, registration)
