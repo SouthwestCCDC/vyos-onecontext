@@ -135,6 +135,25 @@ class TestSshKeyGenerator:
 
         assert len(commands) == 0
 
+    def test_generate_with_quoted_comment(self):
+        """Test SSH key generation with quoted comment (issue #40 regression test)."""
+        # SSH key with double quotes around the comment, as seen in issue #40
+        key = (
+            "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC+Z0iQ4AaHmgc9OWxSBKJnkXtOa57N0AVMv8cJYWi+F "
+            '"test@quotes"'
+        )
+        gen = SshKeyGenerator(key)
+        commands = gen.generate()
+
+        assert len(commands) == 3
+        assert commands[0] == "set service ssh port 22"
+        # Quotes should be stripped, @ should be replaced with _at_
+        assert "test_at_quotes" in commands[1]
+        assert "test_at_quotes" in commands[2]
+        # Verify no quotes remain in the key identifier
+        assert '"test_at_quotes"' not in commands[1]
+        assert '"test_at_quotes"' not in commands[2]
+
 
 class TestInterfaceGenerator:
     """Tests for interface configuration generator."""

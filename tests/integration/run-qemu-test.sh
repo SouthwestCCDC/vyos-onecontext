@@ -253,17 +253,62 @@ case "$CONTEXT_NAME" in
         ;;
     static-routes)
         assert_command_generated "set system host-name" "Hostname configuration"
-        # Gateway route: 10.0.0.0/8 via 192.168.122.1 (must be reachable in QEMU)
-        assert_command_generated "set protocols static route 10.0.0.0/8 next-hop 192.168.122.1" "Gateway route (10.0.0.0/8)"
-        # Interface route: 172.16.0.0/12 via eth0 (no gateway)
-        assert_command_generated "set protocols static route 172.16.0.0/12 interface eth0" "Interface route (172.16.0.0/12)"
+
+        # Static route validation: Gateway route
+        # Fixture: {"interface": "eth0", "destination": "10.0.0.0/8", "gateway": "192.168.122.1"}
+        assert_command_generated "set protocols static route 10.0.0.0/8 next-hop 192.168.122.1" "Gateway route (10.0.0.0/8 via 192.168.122.1)"
+
+        # Static route validation: Interface route (no next-hop)
+        # Fixture: {"interface": "eth0", "destination": "172.16.0.0/12"}
+        assert_command_generated "set protocols static route 172.16.0.0/12 interface eth0" "Interface route (172.16.0.0/12 via eth0)"
+
+        # Negative assertion: Interface route must NOT have next-hop
+        if grep -q "VYOS_CMD:.*route 172.16.0.0/12.*next-hop" "$SERIAL_LOG"; then
+            echo "[FAIL] Interface route 172.16.0.0/12 should not have next-hop"
+            VALIDATION_FAILED=1
+        else
+            echo "[PASS] Interface route 172.16.0.0/12 correctly has no next-hop"
+        fi
+
+        # Negative assertion: Gateway route must NOT use 'interface' syntax
+        if grep -q "VYOS_CMD:.*route 10.0.0.0/8 interface" "$SERIAL_LOG"; then
+            echo "[FAIL] Gateway route 10.0.0.0/8 should not use 'interface' syntax"
+            VALIDATION_FAILED=1
+        else
+            echo "[PASS] Gateway route 10.0.0.0/8 correctly uses next-hop syntax"
+        fi
         ;;
     ospf)
         assert_command_generated "set system host-name" "Hostname configuration"
-        # OSPF interface assignment to area
-        assert_command_generated "set protocols ospf interface eth0 area" "OSPF interface area assignment"
-        # Router ID configuration
-        assert_command_generated "set protocols ospf parameters router-id" "OSPF router ID"
+
+        # OSPF router ID validation
+        # Fixture: "router_id":"192.168.122.70"
+        assert_command_generated "set protocols ospf parameters router-id '192.168.122.70'" "OSPF router ID (192.168.122.70)"
+
+        # OSPF interface area assignment validation
+        # Fixture: {"name":"eth0","area":"0.0.0.0","passive":true}
+        assert_command_generated "set protocols ospf interface eth0 area '0.0.0.0'" "OSPF interface eth0 in area 0.0.0.0"
+
+        # OSPF passive interface validation
+        # Fixture specifies passive:true for eth0
+        assert_command_generated "set protocols ospf interface eth0 passive" "OSPF interface eth0 passive"
+
+        # OSPF route redistribution validation
+        # Fixture: "redistribute":["connected"]
+        assert_command_generated "set protocols ospf redistribute connected" "OSPF redistribute connected routes"
+
+        # OSPF default-information originate validation
+        # Fixture: "default_information":{"originate":true,"always":true,"metric":100}
+        assert_command_generated "set protocols ospf default-information originate always" "OSPF default-information originate always"
+        assert_command_generated "set protocols ospf default-information originate metric '100'" "OSPF default-information metric 100"
+
+        # Negative assertion: Verify only expected redistribution protocols
+        if grep -q "VYOS_CMD:.*ospf redistribute static" "$SERIAL_LOG"; then
+            echo "[FAIL] OSPF should not redistribute static routes (only connected)"
+            VALIDATION_FAILED=1
+        else
+            echo "[PASS] OSPF correctly redistributes only connected routes"
+        fi
         ;;
     dhcp)
         assert_command_generated "set system host-name" "Hostname configuration"
