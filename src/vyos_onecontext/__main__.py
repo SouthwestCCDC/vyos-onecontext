@@ -18,6 +18,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+from vyos_onecontext.errors import ErrorCollector
 from vyos_onecontext.generators import generate_config
 from vyos_onecontext.models import OnecontextMode
 from vyos_onecontext.parser import parse_context
@@ -165,6 +166,10 @@ def apply_configuration(
 ) -> int:
     """Parse context and apply configuration to VyOS.
 
+    This function implements graceful error handling: if some configuration
+    sections fail to parse, valid sections will still be applied. All errors
+    are collected and reported at the end.
+
     Args:
         context_path: Path to the OpenNebula context file.
         wrapper_path: Path to vyatta-cfg-cmd-wrapper (for testing).
@@ -173,6 +178,9 @@ def apply_configuration(
     Returns:
         Exit code (0 for success, non-zero for errors).
     """
+    # Initialize error collector
+    error_collector = ErrorCollector()
+
     # Check if frozen
     if is_frozen():
         logger.info(
@@ -190,23 +198,45 @@ def apply_configuration(
         )
         return EXIT_NO_CONTEXT
 
-    # Parse context
+    # Parse context with error collection
     try:
         logger.info("Parsing context from %s", context_path)
-        config = parse_context(context_path)
+        config = parse_context(context_path, error_collector=error_collector)
     except FileNotFoundError:
         logger.info("Context file not found. Skipping configuration.")
         return EXIT_NO_CONTEXT
     except ValueError as e:
+        # This should only happen for critical errors in base context variables
+        # (not JSON sections, which are handled gracefully)
         logger.error("Failed to parse context: %s", e)
+        error_collector.add_error(
+            section="CONTEXT_FILE",
+            message="Critical parsing error",
+            exception=e,
+        )
+        error_collector.log_summary()
         return EXIT_PARSE_ERROR
 
-    # Generate commands
+    # Generate commands (this will skip sections that failed to parse)
     logger.info("Generating VyOS configuration commands")
-    commands = generate_config(config)
+    try:
+        commands = generate_config(config)
+    except Exception as e:
+        logger.error("Failed to generate configuration: %s", e)
+        error_collector.add_error(
+            section="CONFIG_GENERATION",
+            message="Failed to generate VyOS commands",
+            exception=e,
+        )
+        error_collector.log_summary()
+        return EXIT_CONFIG_ERROR
 
     if not commands:
         logger.info("No configuration commands to apply")
+        # Still log errors if any occurred during parsing
+        if error_collector.has_errors():
+            error_collector.log_summary()
+            return EXIT_PARSE_ERROR
         return EXIT_SUCCESS
 
     logger.info("Generated %d configuration commands", len(commands))
@@ -218,7 +248,10 @@ def apply_configuration(
         print("Dry run - commands that would be executed:")
         for cmd in commands:
             print(f"  {cmd}")
-        return EXIT_SUCCESS
+        # Log error summary in dry-run mode too
+        if error_collector.has_errors() or error_collector.has_warnings():
+            error_collector.log_summary()
+        return EXIT_PARSE_ERROR if error_collector.has_errors() else EXIT_SUCCESS
 
     # Apply configuration
     try:
@@ -236,6 +269,12 @@ def apply_configuration(
 
     except VyOSConfigError as e:
         logger.error("Configuration failed: %s", e)
+        error_collector.add_error(
+            section="VYOS_CONFIG",
+            message="VyOS configuration commit failed",
+            exception=e,
+        )
+        error_collector.log_summary()
         return EXIT_CONFIG_ERROR
 
     # Handle post-commit actions based on mode
@@ -253,6 +292,12 @@ def apply_configuration(
             session.save()
         except VyOSConfigError as e:
             logger.error("Failed to save configuration: %s", e)
+            error_collector.add_error(
+                section="CONFIG_SAVE",
+                message="Failed to save configuration",
+                exception=e,
+            )
+            error_collector.log_summary()
             return EXIT_CONFIG_ERROR
 
     elif mode == OnecontextMode.FREEZE:
@@ -264,11 +309,29 @@ def apply_configuration(
             create_freeze_marker()
         except VyOSConfigError as e:
             logger.error("Failed to save configuration: %s", e)
+            error_collector.add_error(
+                section="CONFIG_SAVE",
+                message="Failed to save configuration",
+                exception=e,
+            )
+            error_collector.log_summary()
             return EXIT_CONFIG_ERROR
 
     # Run START_SCRIPT if present
     if config.start_script:
         run_start_script(config.start_script)
+
+    # Log error summary and return appropriate exit code
+    if error_collector.has_errors() or error_collector.has_warnings():
+        error_collector.log_summary()
+
+    # Return error exit code if any errors occurred, even though we applied what we could
+    if error_collector.has_errors():
+        logger.warning(
+            "Configuration completed with errors. Valid sections were applied, "
+            "but some sections were skipped."
+        )
+        return EXIT_PARSE_ERROR
 
     return EXIT_SUCCESS
 
