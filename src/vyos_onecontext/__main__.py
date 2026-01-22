@@ -65,31 +65,71 @@ def create_freeze_marker() -> None:
     logger.info("Created freeze marker at %s", FREEZE_MARKER_PATH)
 
 
-def run_start_script(script_content: str) -> None:
+def run_start_script(script_content: str, timeout: int = 300) -> None:
     """Execute the START_SCRIPT after configuration is committed.
 
+    Supports both inline scripts and file paths. If script_content looks like
+    a file path (starts with / and exists), it's executed directly. Otherwise,
+    it's treated as inline script content and written to a temporary file.
+
+    Security note: START_SCRIPT content comes from OpenNebula context, which is
+    infrastructure-controlled and implicitly trusted. No path restrictions are
+    applied - the script can execute from any location with full privileges.
+
     Args:
-        script_content: Shell script content to execute.
+        script_content: Shell script content or path to script file.
+        timeout: Maximum execution time in seconds (default: 300 = 5 minutes).
     """
     logger.info("Executing START_SCRIPT")
 
-    # Write script to temporary file
-    with tempfile.NamedTemporaryFile(
-        mode="w",
-        suffix=".sh",
-        delete=False,
-    ) as script_file:
-        script_file.write(script_content)
-        script_path = script_file.name
+    # Initialize variables to avoid UnboundLocalError in finally block
+    script_path = ""
+    cleanup_script = False
+
+    # Check if script_content is a file path (strip whitespace first)
+    script_content_stripped = script_content.strip()
+    is_file_path = (
+        script_content_stripped.startswith("/") and Path(script_content_stripped).exists()
+    )
+
+    if is_file_path:
+        # Execute the script file directly
+        script_path = script_content_stripped
+        cleanup_script = False
+        logger.debug("START_SCRIPT: executing file at %s", script_path)
+    else:
+        # Write inline script to temporary file
+        logger.debug("START_SCRIPT: writing inline script to temporary file")
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            suffix=".sh",
+            delete=False,
+        ) as script_file:
+            script_path = script_file.name
+            cleanup_script = True
+            script_file.write(script_content)
+
+    # Ensure script is executable for inline (temporary) scripts only
+    if cleanup_script:
+        try:
+            os.chmod(script_path, 0o700)
+        except OSError as e:
+            logger.warning(
+                "Failed to set executable permissions on temporary START_SCRIPT %s: %s",
+                script_path,
+                e,
+            )
 
     try:
-        os.chmod(script_path, 0o700)
+        # Execute with timeout
         result = subprocess.run(
             ["/bin/bash", script_path],
             capture_output=True,
             text=True,
             check=False,
+            timeout=timeout,
         )
+
         if result.returncode != 0:
             logger.error(
                 "START_SCRIPT failed with exit code %d: %s",
@@ -100,9 +140,22 @@ def run_start_script(script_content: str) -> None:
             logger.info("START_SCRIPT completed successfully")
             if result.stdout:
                 logger.debug("START_SCRIPT output: %s", result.stdout)
+
+    except subprocess.TimeoutExpired:
+        logger.error(
+            "START_SCRIPT exceeded timeout of %d seconds and was terminated",
+            timeout,
+        )
+    # Catch all exceptions to ensure START_SCRIPT failures don't abort boot.
+    # This is intentional: START_SCRIPT is a non-critical post-configuration hook,
+    # and any failure should be logged but not prevent the system from starting.
+    # Note: This does not catch SystemExit or KeyboardInterrupt (BaseException subclasses).
+    except Exception as e:
+        logger.error("START_SCRIPT execution failed: %s", e)
     finally:
-        # Clean up the temporary script
-        Path(script_path).unlink(missing_ok=True)
+        # Clean up the temporary script if we created one
+        if cleanup_script:
+            Path(script_path).unlink(missing_ok=True)
 
 
 def apply_configuration(
