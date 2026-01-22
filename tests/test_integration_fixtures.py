@@ -83,11 +83,26 @@ class TestFixturesParsing:
         assert config.start_script.startswith("#!/bin/bash")
 
     def test_all_fixtures_produce_valid_configs(self) -> None:
-        """Test that all .env fixtures in the contexts directory parse successfully."""
+        """Test that all .env fixtures in the contexts directory parse successfully.
+
+        Error scenario fixtures (invalid-json, missing-required-fields, partial-valid)
+        are explicitly skipped as they are designed to test error handling.
+        """
+        # Error scenario fixtures that should NOT parse successfully
+        error_fixtures = {
+            "invalid-json.env",
+            "missing-required-fields.env",
+            "partial-valid.env",
+        }
+
         fixture_files = list(FIXTURES_DIR.glob("*.env"))
         assert len(fixture_files) >= 3, "Expected at least 3 fixture files"
 
         for fixture_path in fixture_files:
+            # Skip error scenario fixtures
+            if fixture_path.name in error_fixtures:
+                continue
+
             parser = ContextParser(str(fixture_path))
             config = parser.parse()
 

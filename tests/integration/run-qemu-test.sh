@@ -394,6 +394,9 @@ case "$CONTEXT_NAME" in
         # Global state policies
         assert_command_generated "set firewall global-options state-policy" "Global state policy"
         ;;
+    invalid-json|missing-required-fields|partial-valid)
+        echo "[INFO] Error scenario '$CONTEXT_NAME' - harness does not yet support error scenario validation"
+        ;;
     *)
         echo "[WARN] Unknown context '$CONTEXT_NAME' - no specific assertions"
         ;;
