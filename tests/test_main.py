@@ -103,6 +103,15 @@ class TestRunStartScript:
             # Should not raise, just log the timeout
             run_start_script(script, timeout=1)
 
+    def test_run_start_script_default_timeout(self) -> None:
+        """Test START_SCRIPT uses 300 second default timeout."""
+        script = "#!/bin/bash\necho 'test'"
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="test", stderr="")
+            run_start_script(script)
+            # Verify default timeout of 300 seconds is applied
+            assert mock_run.call_args[1]["timeout"] == 300
+
     def test_run_start_script_custom_timeout(self) -> None:
         """Test START_SCRIPT with custom timeout value."""
         script = "#!/bin/bash\necho 'test'"

@@ -146,6 +146,10 @@ def run_start_script(script_content: str, timeout: int = 300) -> None:
             "START_SCRIPT exceeded timeout of %d seconds and was terminated",
             timeout,
         )
+    # Catch all exceptions to ensure START_SCRIPT failures don't abort boot.
+    # This is intentional: START_SCRIPT is a non-critical post-configuration hook,
+    # and any failure should be logged but not prevent the system from starting.
+    # Note: This does not catch SystemExit or KeyboardInterrupt (BaseException subclasses).
     except Exception as e:
         logger.error("START_SCRIPT execution failed: %s", e)
     finally:
