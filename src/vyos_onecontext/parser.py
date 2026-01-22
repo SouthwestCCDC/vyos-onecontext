@@ -11,6 +11,7 @@ from typing import TypeVar
 
 from pydantic import BaseModel
 
+from vyos_onecontext.errors import ErrorCollector, ErrorSeverity
 from vyos_onecontext.models.config import OnecontextMode, RouterConfig
 from vyos_onecontext.models.dhcp import DhcpConfig
 from vyos_onecontext.models.firewall import FirewallConfig
@@ -28,14 +29,20 @@ class ContextParser:
     into structured configuration objects.
     """
 
-    def __init__(self, path: str = "/var/run/one-context/one_env") -> None:
+    def __init__(
+        self,
+        path: str = "/var/run/one-context/one_env",
+        error_collector: ErrorCollector | None = None,
+    ) -> None:
         """Initialize the parser.
 
         Args:
             path: Path to the context file (default: /var/run/one-context/one_env)
+            error_collector: Optional error collector for graceful error handling
         """
         self.path = Path(path)
         self.variables: dict[str, str] = {}
+        self.error_collector = error_collector
 
     def parse(self) -> RouterConfig:
         """Parse the context file and return a validated RouterConfig.
@@ -361,10 +368,10 @@ class ContextParser:
             model_class: Pydantic model class to validate against
 
         Returns:
-            Validated model instance or None if variable not present
+            Validated model instance or None if variable not present or parsing failed
 
         Raises:
-            ValueError: If JSON is malformed or validation fails
+            ValueError: If JSON is malformed or validation fails (only when error_collector is None)
         """
         json_str = self.variables.get(var_name)
         if not json_str:
@@ -374,9 +381,27 @@ class ContextParser:
             data = json.loads(json_str)
             return model_class.model_validate(data)
         except json.JSONDecodeError as e:
-            raise ValueError(f"Invalid JSON in {var_name}: {e}") from e
+            error_msg = f"Invalid JSON in {var_name}"
+            if self.error_collector:
+                self.error_collector.add_error(
+                    section=var_name,
+                    message=error_msg,
+                    exception=e,
+                    severity=ErrorSeverity.ERROR,
+                )
+                return None
+            raise ValueError(f"{error_msg}: {e}") from e
         except Exception as e:
-            raise ValueError(f"Validation error in {var_name}: {e}") from e
+            error_msg = f"Validation error in {var_name}"
+            if self.error_collector:
+                self.error_collector.add_error(
+                    section=var_name,
+                    message=error_msg,
+                    exception=e,
+                    severity=ErrorSeverity.ERROR,
+                )
+                return None
+            raise ValueError(f"{error_msg}: {e}") from e
 
     def _parse_routes(self) -> RoutesConfig | None:
         """Parse ROUTES_JSON variable.
@@ -419,13 +444,17 @@ class ContextParser:
         return self._parse_json_variable("FIREWALL_JSON", FirewallConfig)
 
 
-def parse_context(path: str = "/var/run/one-context/one_env") -> RouterConfig:
+def parse_context(
+    path: str = "/var/run/one-context/one_env",
+    error_collector: ErrorCollector | None = None,
+) -> RouterConfig:
     """Parse ONE context file and return validated RouterConfig.
 
     This is a convenience function that creates a ContextParser and calls parse().
 
     Args:
         path: Path to the context file (default: /var/run/one-context/one_env)
+        error_collector: Optional error collector for graceful error handling
 
     Returns:
         RouterConfig: Validated router configuration
@@ -433,6 +462,7 @@ def parse_context(path: str = "/var/run/one-context/one_env") -> RouterConfig:
     Raises:
         FileNotFoundError: If the context file does not exist
         ValueError: If the context file is malformed or contains invalid data
+                   (only when error_collector is None)
     """
-    parser = ContextParser(path)
+    parser = ContextParser(path, error_collector=error_collector)
     return parser.parse()
