@@ -394,6 +394,104 @@ case "$CONTEXT_NAME" in
         # Global state policies
         assert_command_generated "set firewall global-options state-policy" "Global state policy"
         ;;
+    invalid-json)
+        # Error scenario: malformed JSON in ROUTES_JSON
+        # Valid sections should be applied, invalid section skipped
+        assert_command_generated "set system host-name" "Hostname configuration"
+        assert_command_generated "set interfaces ethernet eth0 address.*192.168.122.90" "Primary IP (192.168.122.90)"
+        assert_command_generated "set interfaces ethernet eth0 address.*10.60.1.1" "Alias IP (10.60.1.1)"
+        assert_command_generated "set system login user vyos authentication public-keys" "SSH public key"
+        # DHCP should work (valid section)
+        assert_command_generated "set service dhcp-server shared-network-name dhcp-eth0" "DHCP shared-network creation"
+        assert_command_generated "set service dhcp-server shared-network-name dhcp-eth0 subnet 10.60.1.0/24" "DHCP subnet configuration"
+        # Routes should NOT be generated (invalid JSON)
+        if grep -q "VYOS_CMD:.*set protocols static route" "$SERIAL_LOG"; then
+            echo "[FAIL] Static routes should not be generated (invalid JSON in ROUTES_JSON)"
+            VALIDATION_FAILED=1
+        else
+            echo "[PASS] Static routes correctly not generated (invalid section)"
+        fi
+        # Verify error was logged
+        if grep -q "ROUTES_JSON.*Invalid JSON\|ROUTES_JSON.*JSON" "$SERIAL_LOG"; then
+            echo "[PASS] ROUTES_JSON error logged"
+        else
+            echo "[FAIL] ROUTES_JSON error not logged"
+            VALIDATION_FAILED=1
+        fi
+        ;;
+    missing-required-fields)
+        # Error scenario: OSPF_JSON missing required router_id field
+        # Valid sections should be applied, invalid section skipped
+        assert_command_generated "set system host-name" "Hostname configuration"
+        assert_command_generated "set interfaces ethernet eth0 address.*192.168.122.91" "Primary IP (192.168.122.91)"
+        assert_command_generated "set interfaces ethernet eth0 address.*10.61.1.1" "Alias IP (10.61.1.1)"
+        assert_command_generated "set system login user vyos authentication public-keys" "SSH public key"
+        # DHCP should work (valid section)
+        assert_command_generated "set service dhcp-server shared-network-name dhcp-eth0" "DHCP shared-network creation"
+        assert_command_generated "set service dhcp-server shared-network-name dhcp-eth0 subnet 10.61.1.0/24" "DHCP subnet configuration"
+        # OSPF should NOT be generated (missing required field)
+        if grep -q "VYOS_CMD:.*set protocols ospf" "$SERIAL_LOG"; then
+            echo "[FAIL] OSPF commands should not be generated (missing required field)"
+            VALIDATION_FAILED=1
+        else
+            echo "[PASS] OSPF correctly not generated (validation error)"
+        fi
+        # Verify validation error was logged
+        if grep -q "OSPF_JSON.*Validation error\|OSPF_JSON.*router_id" "$SERIAL_LOG"; then
+            echo "[PASS] OSPF_JSON validation error logged"
+        else
+            echo "[FAIL] OSPF_JSON validation error not logged"
+            VALIDATION_FAILED=1
+        fi
+        ;;
+    partial-valid)
+        # Error scenario: mix of valid and invalid sections
+        # Multiple errors should be collected and reported
+        assert_command_generated "set system host-name" "Hostname configuration"
+        assert_command_generated "set interfaces ethernet eth0 address.*192.168.122.92" "Primary IP (192.168.122.92)"
+        assert_command_generated "set interfaces ethernet eth0 address.*10.62.1.1" "Alias IP (10.62.1.1)"
+        assert_command_generated "set system login user vyos authentication public-keys" "SSH public key"
+        # DHCP should work (valid section)
+        assert_command_generated "set service dhcp-server shared-network-name dhcp-eth0" "DHCP shared-network creation"
+        assert_command_generated "set service dhcp-server shared-network-name dhcp-eth0 subnet 10.62.1.0/24" "DHCP subnet configuration"
+        # Both DHCP pool AND reservation should be generated (testing complete valid section)
+        assert_command_generated "range 0 start 10.62.1.100" "DHCP range start"
+        assert_command_generated "static-mapping reserved-partial" "DHCP static mapping"
+        # Routes should NOT be generated (malformed JSON)
+        if grep -q "VYOS_CMD:.*set protocols static route" "$SERIAL_LOG"; then
+            echo "[FAIL] Static routes should not be generated (malformed JSON)"
+            VALIDATION_FAILED=1
+        else
+            echo "[PASS] Static routes correctly not generated (malformed JSON)"
+        fi
+        # OSPF should NOT be generated (missing required field)
+        if grep -q "VYOS_CMD:.*set protocols ospf" "$SERIAL_LOG"; then
+            echo "[FAIL] OSPF should not be generated (missing required field)"
+            VALIDATION_FAILED=1
+        else
+            echo "[PASS] OSPF correctly not generated (validation error)"
+        fi
+        # Verify both errors were logged
+        if grep -q "ROUTES_JSON.*Invalid JSON\|ROUTES_JSON.*JSON" "$SERIAL_LOG"; then
+            echo "[PASS] ROUTES_JSON error logged"
+        else
+            echo "[FAIL] ROUTES_JSON error not logged"
+            VALIDATION_FAILED=1
+        fi
+        if grep -q "OSPF_JSON.*Validation error\|OSPF_JSON.*router_id" "$SERIAL_LOG"; then
+            echo "[PASS] OSPF_JSON validation error logged"
+        else
+            echo "[FAIL] OSPF_JSON validation error not logged"
+            VALIDATION_FAILED=1
+        fi
+        # Verify error summary was logged
+        if grep -q "CONTEXTUALIZATION ERROR SUMMARY" "$SERIAL_LOG"; then
+            echo "[PASS] Error summary logged"
+        else
+            echo "[FAIL] Error summary not logged"
+            VALIDATION_FAILED=1
+        fi
+        ;;
     *)
         echo "[WARN] Unknown context '$CONTEXT_NAME' - no specific assertions"
         ;;
