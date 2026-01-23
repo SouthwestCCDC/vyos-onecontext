@@ -100,9 +100,10 @@ class TestVyOSConfigValidation:
         output = ssh_connection("show interfaces ethernet eth0")
 
         # Check for operational state indicators
-        # VyOS may use "state" or "link" or "UP" depending on output format
+        # VyOS output typically shows "state UP" or "state up" (word boundary)
+        # Using regex to avoid false positives from words like "group" or "input"
         output_lower = output.lower()
-        assert "up" in output_lower or "state up" in output_lower
+        assert re.search(r"\b(?:state|link)\s*:?\s*up\b", output_lower)
 
 
 @pytest.mark.integration

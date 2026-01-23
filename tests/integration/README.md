@@ -81,7 +81,7 @@ The test script checks:
 - No errors in contextualization output
 - No Python exceptions in logs
 - Successful completion message in logs
-- SSH connectivity is established (if test SSH key is available)
+- SSH connectivity is attempted (best-effort if test SSH key is available)
 
 ### SSH Infrastructure
 
