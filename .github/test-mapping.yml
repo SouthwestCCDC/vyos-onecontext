@@ -1,0 +1,150 @@
+# Mapping of source files to integration test fixtures
+# Used by CI to determine which fixtures to run based on changed files
+#
+# Format:
+#   pattern: glob pattern to match changed files
+#   fixtures: list of fixture names (without .env extension)
+#   description: explanation of why this mapping exists
+
+mappings:
+  # Core files - changes affect all fixtures
+  - pattern: "src/vyos_onecontext/__main__.py"
+    fixtures: ["all"]
+    description: "Entry point - affects all contexts"
+
+  - pattern: "src/vyos_onecontext/parser.py"
+    fixtures: ["all"]
+    description: "Context parser - affects all contexts"
+
+  - pattern: "src/vyos_onecontext/config_model.py"
+    fixtures: ["all"]
+    description: "Core config model - affects all contexts"
+
+  - pattern: "src/vyos_onecontext/wrapper.py"
+    fixtures: ["all"]
+    description: "VyOS command wrapper - affects all contexts"
+
+  # Models - affects all fixtures (validation is universal)
+  - pattern: "src/vyos_onecontext/models/*.py"
+    fixtures: ["all"]
+    description: "Data models - validation affects all contexts"
+
+  # Generator: System (hostname, SSH keys)
+  - pattern: "src/vyos_onecontext/generators/system.py"
+    fixtures: ["all"]
+    description: "System settings - hostname/SSH used by all contexts"
+
+  # Generator: Interfaces
+  - pattern: "src/vyos_onecontext/generators/interface.py"
+    fixtures:
+      - "simple"
+      - "quotes"
+      - "multi-interface"
+      - "management-vrf"
+      - "static-routes"
+      - "ospf"
+      - "dhcp"
+      - "snat"
+      - "dnat"
+      - "nat-full"
+      - "vrf-with-routing"
+      - "nat-with-firewall"
+    description: "Interface config - used by all valid contexts"
+
+  # Generator: VRF
+  - pattern: "src/vyos_onecontext/generators/vrf.py"
+    fixtures:
+      - "management-vrf"
+      - "vrf-with-routing"
+    description: "VRF configuration"
+
+  # Generator: Static Routes
+  - pattern: "src/vyos_onecontext/generators/routing.py"
+    fixtures:
+      - "static-routes"
+      - "vrf-with-routing"
+    description: "Static routing configuration"
+
+  # Generator: OSPF
+  - pattern: "src/vyos_onecontext/generators/ospf.py"
+    fixtures:
+      - "ospf"
+      - "vrf-with-routing"
+    description: "OSPF dynamic routing"
+
+  # Generator: DHCP
+  - pattern: "src/vyos_onecontext/generators/dhcp.py"
+    fixtures:
+      - "dhcp"
+    description: "DHCP server configuration"
+
+  # Generator: NAT
+  - pattern: "src/vyos_onecontext/generators/nat.py"
+    fixtures:
+      - "snat"
+      - "dnat"
+      - "nat-full"
+      - "nat-with-firewall"
+    description: "NAT configuration (SNAT/DNAT/binat)"
+
+  # Generator: Firewall
+  - pattern: "src/vyos_onecontext/generators/firewall.py"
+    fixtures:
+      - "nat-with-firewall"
+    description: "Zone-based firewall configuration"
+
+  # Generator: Services (NTP, etc)
+  - pattern: "src/vyos_onecontext/generators/service.py"
+    fixtures:
+      - "simple"
+      - "quotes"
+      - "multi-interface"
+      - "management-vrf"
+      - "static-routes"
+      - "ospf"
+      - "dhcp"
+      - "snat"
+      - "dnat"
+      - "nat-full"
+      - "vrf-with-routing"
+      - "nat-with-firewall"
+    description: "NTP and other services - used by most contexts"
+
+  # Generator: Custom (START_CONFIG, START_SCRIPT)
+  - pattern: "src/vyos_onecontext/generators/custom.py"
+    fixtures: ["all"]
+    description: "Custom commands/scripts - may be in any context"
+
+  # Test files - always run all tests
+  - pattern: "tests/**"
+    fixtures: ["all"]
+    description: "Test infrastructure changes affect all tests"
+
+  # Integration test infrastructure
+  - pattern: "tests/integration/**"
+    fixtures: ["all"]
+    description: "Integration test harness affects all fixtures"
+
+  # CI workflow changes
+  - pattern: ".github/workflows/ci.yml"
+    fixtures: ["all"]
+    description: "CI changes should validate all scenarios"
+
+  # Test mapping itself
+  - pattern: ".github/test-mapping.yml"
+    fixtures: ["all"]
+    description: "Mapping changes require full validation"
+
+  # Packer build changes
+  - pattern: "packer/**"
+    fixtures: ["all"]
+    description: "Image build changes affect runtime environment"
+
+  # Shell boot script
+  - pattern: "scripts/**"
+    fixtures: ["all"]
+    description: "Boot scripts affect contextualization runtime"
+
+# Default: if no patterns match, run all fixtures
+# This ensures we don't accidentally skip tests for unexpected file changes
+default: ["all"]

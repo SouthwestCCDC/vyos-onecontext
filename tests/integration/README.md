@@ -40,7 +40,11 @@ sudo apt-get install qemu-system-x86 qemu-kvm genisoimage sshpass
 3. **Run All Tests**
 
    ```bash
+   # Run all test fixtures
    ./tests/integration/run-all-tests.sh /path/to/vyos-image.qcow2
+
+   # Run specific fixtures only
+   ./tests/integration/run-all-tests.sh /path/to/vyos-image.qcow2 simple dhcp nat-full
    ```
 
 ## Test Contexts
@@ -49,21 +53,48 @@ Test context files are in `contexts/`:
 
 - **simple.env**: Basic single-interface router
 - **quotes.env**: Regression test for quote bug (#40)
-- **multi-interface.env**: Multi-interface router setup
+- **multi-interface.env**: Multi-interface router with alias IPs
+- **management-vrf.env**: Management VRF configuration
+- **static-routes.env**: Static routing configuration
+- **ospf.env**: OSPF dynamic routing
+- **dhcp.env**: DHCP server configuration
+- **snat.env**: Source NAT (masquerade)
+- **dnat.env**: Destination NAT (port forwarding)
+- **nat-full.env**: Full NAT suite (SNAT + DNAT + binat)
+- **vrf-with-routing.env**: VRF with static routes and OSPF
+- **nat-with-firewall.env**: NAT with zone-based firewall
 
 ## CI Integration
 
-In CI, these tests run on self-hosted KVM runners:
+In CI, these tests run on self-hosted KVM runners with selective testing based on
+changed files:
 
-```yaml
-jobs:
-  integration-test:
-    runs-on: [self-hosted, kvm]
-    steps:
-      - name: Download VyOS image artifact
-        # ...
-      - name: Run integration tests
-        run: ./tests/integration/run-all-tests.sh vyos-image.qcow2
+- **On pull requests**: Only affected test fixtures are run based on which source
+  files changed (see `.github/test-mapping.yml` for the mapping)
+- **On push to sagitta**: All test fixtures run to ensure comprehensive coverage
+
+This selective testing approach reduces CI time for typical PRs from 25-30 minutes
+to 2-6 minutes, while maintaining full coverage on the main branch.
+
+### How Selective Testing Works
+
+1. The `.github/scripts/select-fixtures.py` script compares changed files against
+   the mapping in `.github/test-mapping.yml`
+2. Each source file pattern maps to one or more test fixtures
+3. Core files (parser, models, wrapper) trigger all fixtures
+4. Generator files trigger only their relevant fixtures (e.g., `nat.py` → NAT fixtures)
+5. If no patterns match, all fixtures run (fail-safe)
+
+### Manual Fixture Selection
+
+You can run specific fixtures locally for faster iteration:
+
+```bash
+# Run only NAT-related tests
+./tests/integration/run-all-tests.sh vyos-image.qcow2 snat dnat nat-full
+
+# Run only interface and VRF tests
+./tests/integration/run-all-tests.sh vyos-image.qcow2 simple multi-interface management-vrf
 ```
 
 ## How It Works

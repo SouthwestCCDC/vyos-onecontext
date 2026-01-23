@@ -3,11 +3,20 @@
 #
 # This script runs all test scenarios with different context files.
 #
-# Usage: run-all-tests.sh <vyos-image.qcow2>
+# Usage: run-all-tests.sh <vyos-image.qcow2> [fixtures...]
+#
+# Arguments:
+#   vyos-image.qcow2: Path to VyOS image
+#   fixtures...:      Optional list of specific fixtures to run (without .env)
+#                     If "all" or no fixtures specified, runs all fixtures
+#                     Example: run-all-tests.sh vyos.qcow2 simple dhcp nat-full
 
 set -euo pipefail
 
 VYOS_IMAGE="${1:?VyOS image path required}"
+shift  # Remove first argument, leaving optional fixture list
+SELECTED_FIXTURES=("$@")  # Remaining arguments are fixture names
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Validate VyOS image exists
@@ -42,9 +51,40 @@ declare -a TEST_SCENARIOS=(
 TEMP_DIR=$(mktemp -d)
 trap 'rm -rf "$TEMP_DIR"' EXIT
 
-TOTAL_TESTS=${#TEST_SCENARIOS[@]}
+# Filter scenarios based on selected fixtures
+SCENARIOS_TO_RUN=()
+
+if [ ${#SELECTED_FIXTURES[@]} -eq 0 ] || [[ " ${SELECTED_FIXTURES[*]} " =~ " all " ]]; then
+    # No filter specified or "all" specified - run all scenarios
+    SCENARIOS_TO_RUN=("${TEST_SCENARIOS[@]}")
+    echo "Running all fixtures (no filter specified)"
+else
+    # Filter scenarios to only those specified
+    echo "Running selected fixtures: ${SELECTED_FIXTURES[*]}"
+    for scenario in "${TEST_SCENARIOS[@]}"; do
+        IFS=':' read -r name description <<< "$scenario"
+        for selected in "${SELECTED_FIXTURES[@]}"; do
+            if [ "$name" = "$selected" ]; then
+                SCENARIOS_TO_RUN+=("$scenario")
+                break
+            fi
+        done
+    done
+fi
+
+TOTAL_TESTS=${#SCENARIOS_TO_RUN[@]}
 PASSED=0
 FAILED=0
+
+if [ ${#SCENARIOS_TO_RUN[@]} -eq 0 ]; then
+    echo "ERROR: No matching fixtures found for: ${SELECTED_FIXTURES[*]}"
+    echo "Available fixtures:"
+    for scenario in "${TEST_SCENARIOS[@]}"; do
+        IFS=':' read -r name description <<< "$scenario"
+        echo "  - $name"
+    done
+    exit 1
+fi
 
 echo "========================================"
 echo "  VyOS Integration Test Suite"
@@ -53,7 +93,7 @@ echo "Image: $VYOS_IMAGE"
 echo "Tests: $TOTAL_TESTS scenarios"
 echo ""
 
-for scenario in "${TEST_SCENARIOS[@]}"; do
+for scenario in "${SCENARIOS_TO_RUN[@]}"; do
     IFS=':' read -r name description <<< "$scenario"
 
     echo "========================================"

@@ -38,6 +38,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Need full history for git diff
 
       - name: Verify KVM access
         run: |
@@ -71,7 +73,45 @@ jobs:
           packer build -var "base_image=${{ github.workspace }}/vyos-base.qcow2" .
         timeout-minutes: 10
 
-      - name: Run integration tests
+      - name: Select fixtures to test
+        id: select-fixtures
         run: |
-          ./tests/integration/run-all-tests.sh packer/output/vyos-onecontext-test.qcow2
+          # Install PyYAML for fixture selection script
+          pip install --user PyYAML
+
+          # Determine base ref for comparison
+          if [ "${{ github.event_name }}" = "push" ]; then
+            # On push to sagitta: always run all fixtures
+            echo "EVENT: push to sagitta - running ALL fixtures"
+            echo "fixtures=all" >> $GITHUB_OUTPUT
+          else
+            # On PR: run only affected fixtures
+            echo "EVENT: pull request - selecting affected fixtures"
+            BASE_REF="origin/${{ github.base_ref }}"
+
+            # Run fixture selection script
+            FIXTURES=$(.github/scripts/select-fixtures.py "$BASE_REF" HEAD)
+
+            if [ -z "$FIXTURES" ]; then
+              echo "No fixtures selected (no relevant changes)"
+              echo "fixtures=" >> $GITHUB_OUTPUT
+            else
+              echo "Selected fixtures: $FIXTURES"
+              echo "fixtures=$FIXTURES" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+      - name: Run integration tests
+        if: steps.select-fixtures.outputs.fixtures != ''
+        run: |
+          FIXTURES="${{ steps.select-fixtures.outputs.fixtures }}"
+
+          if [ "$FIXTURES" = "all" ]; then
+            echo "Running ALL integration test fixtures"
+            ./tests/integration/run-all-tests.sh packer/output/vyos-onecontext-test.qcow2
+          else
+            echo "Running selected fixtures: $FIXTURES"
+            # shellcheck disable=SC2086
+            ./tests/integration/run-all-tests.sh packer/output/vyos-onecontext-test.qcow2 $FIXTURES
+          fi
         timeout-minutes: 35
