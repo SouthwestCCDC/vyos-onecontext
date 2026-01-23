@@ -860,6 +860,7 @@ Shell script executed after VyOS configuration is committed.
 | Variable | Type | Description |
 |----------|------|-------------|
 | `START_SCRIPT` | String | Shell script content or path to script file |
+| `START_SCRIPT_TIMEOUT` | Integer | Timeout in seconds (default: 300, range: 1-3600) |
 
 **Terraform Examples:**
 
@@ -877,10 +878,21 @@ Path to script on context CD:
 START_SCRIPT = "/mnt/context/setup.sh"
 ```
 
+Custom timeout:
+```hcl
+START_SCRIPT = <<-EOT
+  #!/bin/bash
+  # Long-running setup script
+  apt-get update && apt-get install -y some-package
+EOT
+START_SCRIPT_TIMEOUT = "600"  # 10 minutes
+```
+
 **Notes:**
 
 - Runs after VyOS `commit` succeeds
-- Runs as root with a fixed 5-minute timeout (300 seconds, not user-configurable)
+- Runs as root with configurable timeout (default: 300 seconds / 5 minutes)
+- Timeout can be set via `START_SCRIPT_TIMEOUT` (range: 1-3600 seconds)
 - Supports both inline scripts and file paths
   - If value (after stripping leading/trailing whitespace) starts with `/` and the file exists, it's executed directly
   - Otherwise, content is written to a temp file and executed

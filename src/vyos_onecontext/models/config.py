@@ -173,6 +173,33 @@ class RouterConfig(BaseModel):
             "NO VALIDATION PERFORMED. Only use with trusted input from infrastructure admins.",
         ),
     ]
+    start_script_timeout: Annotated[
+        int,
+        Field(
+            300,
+            description="Timeout in seconds for START_SCRIPT execution (default: 300 = 5 minutes)",
+        ),
+    ]
+
+    @field_validator("start_script_timeout")
+    @classmethod
+    def validate_start_script_timeout(cls, v: int) -> int:
+        """Validate START_SCRIPT_TIMEOUT is reasonable.
+
+        Args:
+            v: Timeout value in seconds
+
+        Returns:
+            The validated timeout
+
+        Raises:
+            ValueError: If timeout is not in valid range
+        """
+        if v < 1:
+            raise ValueError("START_SCRIPT_TIMEOUT must be at least 1 second")
+        if v > 3600:
+            raise ValueError("START_SCRIPT_TIMEOUT cannot exceed 3600 seconds")
+        return v
 
     @model_validator(mode="after")
     def validate_nat_interface_references(self) -> "RouterConfig":
