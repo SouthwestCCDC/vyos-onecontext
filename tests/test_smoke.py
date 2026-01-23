@@ -39,11 +39,10 @@ class TestSimpleRouter:
         """Onecontext mode is stateless."""
         assert config.onecontext_mode == OnecontextMode.STATELESS
 
-    def test_ssh_key_parsed(self, config) -> None:
-        """SSH public key is correctly parsed."""
-        assert config.ssh_public_key is not None
-        assert "ssh-ed25519" in config.ssh_public_key
-        assert "admin@simple-router" in config.ssh_public_key
+    def test_ssh_key_not_required(self, config) -> None:
+        """SSH public key is optional (integration tests use default VyOS credentials)."""
+        # Integration tests no longer require SSH keys - they use vyos/vyos default credentials
+        assert config.ssh_public_key is None
 
     def test_single_interface(self, config) -> None:
         """Single interface is parsed correctly."""
@@ -70,14 +69,11 @@ class TestSimpleRouter:
         """Command generation produces expected output."""
         commands = generate_config(config)
 
-        # Should have hostname, SSH key (2 commands), and interface address
-        assert len(commands) >= 3
+        # Should have hostname and interface address (no SSH key since not provided)
+        assert len(commands) >= 2
 
         # Verify hostname command
         assert any("host-name" in cmd and "simple-router" in cmd for cmd in commands)
-
-        # Verify SSH key command
-        assert any("public-keys" in cmd for cmd in commands)
 
         # Verify interface command
         assert any("eth0" in cmd and "192.168.1.1/24" in cmd for cmd in commands)

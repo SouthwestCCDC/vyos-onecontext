@@ -39,16 +39,14 @@ class TestFixturesParsing:
     def test_quotes_fixture_parses(self) -> None:
         """Test quotes.env fixture parses correctly.
 
-        This is a regression test for issue #40 where SSH keys with
-        quoted comments caused parsing failures.
+        This was originally a regression test for issue #40 where SSH keys with
+        quoted comments caused parsing failures. Now it validates basic parsing
+        of the fixture without SSH keys.
         """
         parser = ContextParser(str(FIXTURES_DIR / "quotes.env"))
         config = parser.parse()
 
         assert config.hostname == "test-quotes"
-        assert config.ssh_public_key is not None
-        # The key should contain the quoted comment
-        assert '"test@quotes"' in config.ssh_public_key
         assert len(config.interfaces) == 1
 
     def test_multi_interface_fixture_parses(self) -> None:

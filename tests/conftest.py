@@ -2,7 +2,6 @@
 
 import subprocess
 from collections.abc import Callable
-from pathlib import Path
 
 import pytest
 
@@ -36,13 +35,10 @@ def ssh_connection() -> Callable[[str], str]:
         pytest.skip("SSH connection not available (not running in QEMU test harness)")
 
     # Get SSH connection parameters from environment
-    ssh_key = os.environ.get("SSH_KEY")
+    ssh_password = os.environ.get("SSH_PASSWORD", "vyos")
     ssh_port = os.environ.get("SSH_PORT", "10022")
     ssh_host = os.environ.get("SSH_HOST", "localhost")
     ssh_user = os.environ.get("SSH_USER", "vyos")
-
-    if not ssh_key:
-        pytest.skip("SSH_KEY not set in environment")
 
     def run_ssh_command(command: str) -> str:
         """Execute command via SSH and return output.
@@ -68,12 +64,13 @@ def ssh_connection() -> Callable[[str], str]:
         ]
 
         ssh_cmd = [
+            "sshpass",
+            "-p",
+            ssh_password,
             "ssh",
             *ssh_opts,
             "-p",
             ssh_port,
-            "-i",
-            ssh_key,
             f"{ssh_user}@{ssh_host}",
             command,
         ]
@@ -88,42 +85,6 @@ def ssh_connection() -> Callable[[str], str]:
         return result.stdout
 
     return run_ssh_command
-
-
-@pytest.fixture
-def ssh_key_path() -> Path:
-    """Fixture providing path to test SSH private key.
-
-    Returns:
-        Path to test_ssh_key file in tests/integration/
-
-    Raises:
-        pytest.skip: If key file does not exist
-    """
-    key_path = Path(__file__).parent / "integration" / "test_ssh_key"
-
-    if not key_path.exists():
-        pytest.skip(f"Test SSH key not found at {key_path}")
-
-    return key_path
-
-
-@pytest.fixture
-def ssh_public_key() -> str:
-    """Fixture providing test SSH public key content.
-
-    Returns:
-        SSH public key string suitable for SSH_PUBLIC_KEY context variable
-
-    Raises:
-        pytest.skip: If public key file does not exist
-    """
-    pub_key_path = Path(__file__).parent / "integration" / "test_ssh_key.pub"
-
-    if not pub_key_path.exists():
-        pytest.skip(f"Test SSH public key not found at {pub_key_path}")
-
-    return pub_key_path.read_text().strip()
 
 
 @pytest.fixture
