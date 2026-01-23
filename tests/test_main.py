@@ -122,18 +122,18 @@ class TestRunStartScript:
             assert mock_run.call_args[1]["timeout"] == 60
 
     @pytest.mark.parametrize(
-        ("whitespace_pattern", "test_id"),
+        "whitespace_pattern",
         [
-            ("  {path}", "leading"),
-            ("{path}  ", "trailing"),
-            ("  {path}  ", "both"),
+            "  {path}",
+            "{path}  ",
+            "  {path}  ",
         ],
+        ids=["leading", "trailing", "both"],
     )
     def test_run_start_script_path_with_whitespace(
         self,
         tmp_path: Path,
         whitespace_pattern: str,
-        test_id: str,
     ) -> None:
         """Test START_SCRIPT handles file paths with various whitespace patterns."""
         # Create a test script file
