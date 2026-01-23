@@ -46,6 +46,7 @@ SSH_PORT=10022
 QEMU_PID=""
 
 # Function to cleanup QEMU
+# shellcheck disable=SC2317
 cleanup_qemu() {
     if [ -n "$QEMU_PID" ] && kill -0 "$QEMU_PID" 2>/dev/null; then
         echo "Terminating QEMU (PID: $QEMU_PID)..."
@@ -59,6 +60,7 @@ cleanup_qemu() {
 }
 
 # Combined cleanup function to handle both QEMU and temp directory
+# shellcheck disable=SC2317
 cleanup_all() {
     cleanup_qemu
     rm -rf "$TEST_DIR"
@@ -150,7 +152,6 @@ if ! command -v sshpass >/dev/null 2>&1; then
     echo "WARNING: sshpass not found. SSH connectivity tests will be skipped"
     echo "Install sshpass to enable SSH-based validation"
     SSH_AVAILABLE=0
-    export SSH_AVAILABLE
 else
     SSH_AVAILABLE=1
     echo "Using password authentication (vyos/vyos default credentials)"
@@ -186,7 +187,6 @@ else
             echo "WARNING: SSH did not become ready within ${SSH_TIMEOUT}s"
             echo "SSH-based validation will be skipped"
             SSH_AVAILABLE=0
-            export SSH_AVAILABLE
             break
         fi
 
