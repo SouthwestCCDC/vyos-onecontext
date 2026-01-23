@@ -843,6 +843,16 @@ echo 'test'"
 
         assert config.start_script_timeout == 300
 
+    def test_start_script_timeout_default_when_not_provided(self, tmp_path: Path) -> None:
+        """Test START_SCRIPT_TIMEOUT defaults to 300 when variable is absent."""
+        context_file = tmp_path / "one_env"
+        # Empty context file - no START_SCRIPT_TIMEOUT variable
+        context_file.write_text("")
+
+        config = parse_context(str(context_file))
+
+        assert config.start_script_timeout == 300
+
     def test_start_script_timeout_custom(self, tmp_path: Path) -> None:
         """Test START_SCRIPT_TIMEOUT with custom value."""
         context_file = tmp_path / "one_env"
