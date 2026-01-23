@@ -87,7 +87,7 @@ The test script checks:
 
 The integration test harness includes SSH connectivity for functional validation:
 
-- **Test SSH key**: `test_ssh_key` and `test_ssh_key.pub` in `tests/integration/`
+- **Password authentication**: Uses default VyOS credentials (vyos/vyos) for SSH access
 - **SSH port forwarding**: Port 10022 on host forwards to port 22 in VM
 - **SSH connection retry**: Waits up to 60 seconds for SSH to become ready after boot
 - **Helper function**: `ssh_command()` is exported for running commands on the VM
@@ -106,7 +106,7 @@ QEMU harness is planned as follow-up work.
 The `ssh_connection` fixture requires these environment variables:
 
 - `SSH_AVAILABLE=1` - Enables the SSH fixture (otherwise tests are skipped)
-- `SSH_KEY` - Path to the SSH private key (e.g., `tests/integration/test_ssh_key`)
+- `SSH_PASSWORD` - SSH password (defaults to `vyos`)
 - `SSH_HOST` - SSH hostname (defaults to `localhost`)
 - `SSH_PORT` - SSH port (defaults to `10022`)
 - `SSH_USER` - SSH username (defaults to `vyos`)
@@ -124,7 +124,7 @@ Example:
 #   2. Manually export the variables in a new terminal:
 
 export SSH_AVAILABLE=1
-export SSH_KEY="tests/integration/test_ssh_key"
+export SSH_PASSWORD="vyos"
 export SSH_HOST="localhost"
 export SSH_PORT="10022"
 export SSH_USER="vyos"

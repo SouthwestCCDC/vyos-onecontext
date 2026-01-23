@@ -69,15 +69,16 @@ class TestSSHConnectivity:
 class TestVyOSConfigValidation:
     """Test actual VyOS configuration state via SSH."""
 
-    def test_ssh_keys_installed(self, ssh_connection: Callable[[str], str]) -> None:
-        """Verify SSH public key was installed for vyos user.
+    def test_default_vyos_user_accessible(self, ssh_connection: Callable[[str], str]) -> None:
+        """Verify default vyos user is accessible via password authentication.
 
-        The test context includes SSH_PUBLIC_KEY which should be configured.
+        Integration tests use the default VyOS credentials (vyos/vyos) for SSH access.
+        This test validates that we can authenticate and access the system.
         """
-        output = ssh_connection("show configuration | grep 'public-keys'")
+        output = ssh_connection("whoami")
 
-        # Should have at least one public key configured
-        assert "public-keys" in output
+        # Should be logged in as vyos user
+        assert "vyos" in output
 
     def test_commit_works(self, ssh_connection: Callable[[str], str]) -> None:
         """Verify configuration was committed successfully.
