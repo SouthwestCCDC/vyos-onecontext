@@ -40,7 +40,6 @@ def ssh_connection() -> Callable[[str], str]:
     ssh_host = os.environ.get("SSH_HOST", "localhost")
     ssh_user = os.environ.get("SSH_USER", "vyos")
 
-
     def run_ssh_command(command: str) -> str:
         """Execute command via SSH and return output.
 

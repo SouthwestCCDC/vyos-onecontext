@@ -40,12 +40,7 @@ class TestSimpleRouter:
         assert config.onecontext_mode == OnecontextMode.STATELESS
 
     def test_ssh_key_not_required(self, config) -> None:
-        """Validate basic router scenario without SSH key configuration.
-
-        Integration tests use default VyOS credentials (vyos/vyos), so SSH_PUBLIC_KEY
-        is not required in the context. This test validates that the parser correctly
-        handles contexts without SSH key configuration.
-        """
+        """SSH public key is optional (integration tests use default VyOS credentials)."""
         # Integration tests no longer require SSH keys - they use vyos/vyos default credentials
         assert config.ssh_public_key is None
 
