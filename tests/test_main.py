@@ -386,6 +386,7 @@ class TestApplyConfiguration:
         mock_config = MagicMock()
         mock_config.onecontext_mode = OnecontextMode.STATELESS
         mock_config.start_script = "#!/bin/bash\necho hello"
+        mock_config.start_script_timeout = 300
         mock_parse.return_value = mock_config
         mock_generate.return_value = ["set system host-name test-router"]
 

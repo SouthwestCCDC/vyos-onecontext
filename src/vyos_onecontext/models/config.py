@@ -178,8 +178,6 @@ class RouterConfig(BaseModel):
         Field(
             300,
             description="Timeout in seconds for START_SCRIPT execution (default: 300 = 5 minutes)",
-            ge=1,
-            le=3600,
         ),
     ]
 
@@ -200,7 +198,7 @@ class RouterConfig(BaseModel):
         if v < 1:
             raise ValueError("START_SCRIPT_TIMEOUT must be at least 1 second")
         if v > 3600:
-            raise ValueError("START_SCRIPT_TIMEOUT cannot exceed 3600 seconds (1 hour)")
+            raise ValueError("START_SCRIPT_TIMEOUT cannot exceed 3600 seconds")
         return v
 
     @model_validator(mode="after")
