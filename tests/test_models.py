@@ -1022,6 +1022,65 @@ class TestValidationEnhancements:
         )
 
 
+class TestStartScriptTimeout:
+    """Tests for START_SCRIPT_TIMEOUT default and validation (issue #106)."""
+
+    def test_default_timeout_when_not_specified(self) -> None:
+        """Test that START_SCRIPT_TIMEOUT defaults to 300 seconds when not provided."""
+        router = RouterConfig()
+        assert router.start_script_timeout == 300
+
+    def test_default_timeout_with_start_script_present(self) -> None:
+        """Test default timeout is applied even when START_SCRIPT is provided."""
+        router = RouterConfig(start_script="#!/bin/bash\necho 'test'")
+        assert router.start_script_timeout == 300
+        assert router.start_script is not None
+
+    def test_custom_timeout_value(self) -> None:
+        """Test that custom timeout values are preserved."""
+        router = RouterConfig(start_script_timeout=600)
+        assert router.start_script_timeout == 600
+
+    def test_minimum_timeout_value(self) -> None:
+        """Test minimum timeout value (1 second)."""
+        router = RouterConfig(start_script_timeout=1)
+        assert router.start_script_timeout == 1
+
+    def test_maximum_timeout_value(self) -> None:
+        """Test maximum timeout value (3600 seconds)."""
+        router = RouterConfig(start_script_timeout=3600)
+        assert router.start_script_timeout == 3600
+
+    def test_timeout_below_minimum_rejected(self) -> None:
+        """Test that timeout below 1 second is rejected."""
+        with pytest.raises(ValidationError, match="START_SCRIPT_TIMEOUT must be at least 1 second"):
+            RouterConfig(start_script_timeout=0)
+
+    def test_timeout_above_maximum_rejected(self) -> None:
+        """Test that timeout above 3600 seconds is rejected."""
+        with pytest.raises(
+            ValidationError, match="START_SCRIPT_TIMEOUT cannot exceed 3600 seconds"
+        ):
+            RouterConfig(start_script_timeout=3601)
+
+    def test_negative_timeout_rejected(self) -> None:
+        """Test that negative timeout values are rejected."""
+        with pytest.raises(ValidationError, match="START_SCRIPT_TIMEOUT must be at least 1 second"):
+            RouterConfig(start_script_timeout=-1)
+
+    def test_timeout_with_complete_router_config(self) -> None:
+        """Test timeout in complete router configuration."""
+        router = RouterConfig(
+            hostname="router-01",
+            interfaces=[InterfaceConfig(name="eth0", ip="10.0.1.1", mask="255.255.255.0")],
+            start_script="#!/bin/bash\necho 'setup complete'",
+            start_script_timeout=120,
+        )
+        assert router.start_script_timeout == 120
+        assert router.start_script is not None
+        assert router.hostname == "router-01"
+
+
 class TestInputValidation:
     """Tests for issue #41 input validation enhancements."""
 
