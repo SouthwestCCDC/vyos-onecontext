@@ -81,11 +81,11 @@ class TestVyOSConfigValidation:
         assert "vyos" in output
 
     def test_commit_works(self, ssh_connection: Callable[[str], str]) -> None:
-        """Verify configuration was committed successfully.
+        """Verify configuration is present after contextualization.
 
-        This checks that the commit message/status indicates success.
-        Since we can't easily commit from operational mode, we verify
-        the current config is committed by checking show configuration.
+        Validates that interfaces and system configuration exist in the running config,
+        confirming that the contextualization script successfully applied and committed
+        the generated VyOS configuration.
         """
         output = ssh_connection("show configuration")
 
