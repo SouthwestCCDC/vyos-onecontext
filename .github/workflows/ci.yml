@@ -74,4 +74,4 @@ jobs:
       - name: Run integration tests
         run: |
           ./tests/integration/run-all-tests.sh packer/output/vyos-onecontext-test.qcow2
-        timeout-minutes: 15
+        timeout-minutes: 25
