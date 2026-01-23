@@ -143,10 +143,75 @@ while true; do
 done
 
 echo ""
+echo "=== SSH Connection Setup ==="
+
+# Path to test SSH key (relative to script directory)
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SSH_KEY="${SCRIPT_DIR}/test_ssh_key"
+
+# Verify SSH key exists
+if [ ! -f "$SSH_KEY" ]; then
+    echo "WARNING: Test SSH key not found at $SSH_KEY"
+    echo "SSH connectivity tests will be skipped"
+    SSH_AVAILABLE=0
+    export SSH_AVAILABLE
+else
+    SSH_AVAILABLE=1
+    echo "Using SSH key: $SSH_KEY"
+
+    # SSH connection parameters
+    SSH_TIMEOUT="${SSH_TIMEOUT:-60}"  # Default 60s timeout for SSH readiness
+    SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=5"
+    # shellcheck disable=SC2086
+    # Note: SSH_OPTS is intentionally unquoted to allow multiple options
+    SSH_USER="vyos"
+    SSH_HOST="localhost"
+
+    # Helper function to run SSH commands on the VM
+    ssh_command() {
+        # shellcheck disable=SC2086
+        # Note: SSH_OPTS is intentionally unquoted to allow multiple options
+        ssh $SSH_OPTS -p "$SSH_PORT" -i "$SSH_KEY" "${SSH_USER}@${SSH_HOST}" "$@"
+    }
+
+    # Export for use in test scripts and validation
+    export -f ssh_command
+    export SSH_KEY SSH_PORT SSH_OPTS SSH_USER SSH_HOST SSH_AVAILABLE
+
+    # Wait for SSH to become available
+    echo "Waiting for SSH to become ready (timeout: ${SSH_TIMEOUT}s)..."
+    SSH_START_TIME=$(date +%s)
+
+    while true; do
+        SSH_ELAPSED=$(($(date +%s) - SSH_START_TIME))
+
+        if [ $SSH_ELAPSED -ge $SSH_TIMEOUT ]; then
+            echo "WARNING: SSH did not become ready within ${SSH_TIMEOUT}s"
+            echo "SSH-based validation will be skipped"
+            SSH_AVAILABLE=0
+            break
+        fi
+
+        # Try to connect via SSH
+        if ssh_command "echo 'SSH ready'" >/dev/null 2>&1; then
+            echo "[PASS] SSH connection established"
+            break
+        fi
+
+        # Show progress every 5 attempts (10 seconds)
+        if [ $((SSH_ELAPSED % 10)) -eq 0 ] && [ $SSH_ELAPSED -gt 0 ]; then
+            echo "  ... still waiting (${SSH_ELAPSED}s elapsed)"
+        fi
+
+        sleep 2
+    done
+fi
+
+echo ""
 echo "=== Validation ==="
 
 # Give the system a moment to settle after contextualization
-sleep 5
+sleep 2
 
 # Validate configuration by checking serial log
 VALIDATION_FAILED=0

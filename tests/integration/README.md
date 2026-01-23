@@ -70,7 +70,8 @@ jobs:
 1. **create-test-iso.sh**: Creates an ISO with context.sh from a test context file
 2. **run-qemu-test.sh**: Boots VyOS in QEMU with the context ISO attached
 3. The VM boots and runs the vyos-onecontext boot script (triggered via udev when the context CD is mounted)
-4. The script validates contextualization by checking serial log output
+4. The script waits for SSH to become available (using test SSH key)
+5. The script validates contextualization by checking serial log output and optionally via SSH
 
 ## Validation
 
@@ -80,6 +81,30 @@ The test script checks:
 - No errors in contextualization output
 - No Python exceptions in logs
 - Successful completion message in logs
+- SSH connectivity is established (if test SSH key is available)
+
+### SSH Infrastructure
+
+The integration test harness includes SSH connectivity for functional validation:
+
+- **Test SSH key**: `test_ssh_key` and `test_ssh_key.pub` in `tests/integration/`
+- **SSH port forwarding**: Port 10022 on host forwards to port 22 in VM
+- **SSH connection retry**: Waits up to 60 seconds for SSH to become ready after boot
+- **Helper function**: `ssh_command()` is exported for running commands on the VM
+
+The SSH infrastructure is available to pytest tests when running in the QEMU harness via
+the `ssh_connection` fixture (defined in `tests/conftest.py`).
+
+**Example pytest integration test:**
+
+```python
+@pytest.mark.integration
+def test_hostname_configured(ssh_connection):
+    output = ssh_connection("show configuration | grep 'host-name'")
+    assert "test-" in output
+```
+
+These tests are automatically skipped when running pytest normally (outside the QEMU harness).
 
 ## Debugging Failed Tests
 
