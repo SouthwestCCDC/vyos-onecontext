@@ -13,10 +13,11 @@ tests miss (like the quote bug in #40).
 - **VyOS image**: A VyOS Sagitta (1.4.x) qcow2 image with vyos-onecontext installed
 - **QEMU/KVM**: For running the VM
 - **genisoimage or mkisofs**: For creating context ISOs
+- **sshpass**: Required for SSH-based validation
 
 On Ubuntu/Debian:
 ```bash
-sudo apt-get install qemu-system-x86 qemu-kvm genisoimage
+sudo apt-get install qemu-system-x86 qemu-kvm genisoimage sshpass
 ```
 
 ## Running Tests Locally
