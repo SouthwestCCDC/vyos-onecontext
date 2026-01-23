@@ -77,7 +77,7 @@ jobs:
         id: select-fixtures
         run: |
           # Install PyYAML for fixture selection script
-          pip install --user PyYAML
+          pip install --user --break-system-packages PyYAML
 
           # Determine base ref for comparison
           if [ "${{ github.event_name }}" = "push" ]; then
