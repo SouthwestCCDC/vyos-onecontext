@@ -73,6 +73,7 @@ class ContextParser:
         # Parse escape hatches
         start_config = self.variables.get("START_CONFIG")
         start_script = self.variables.get("START_SCRIPT")
+        start_script_timeout = self._parse_start_script_timeout()
 
         # Build and validate complete configuration
         return RouterConfig(
@@ -88,6 +89,7 @@ class ContextParser:
             firewall=firewall,
             start_config=start_config,
             start_script=start_script,
+            start_script_timeout=start_script_timeout,
         )
 
     def _read_variables(self) -> None:
@@ -359,6 +361,24 @@ class ContextParser:
         except ValueError:
             # Default to stateless if invalid value
             return OnecontextMode.STATELESS
+
+    def _parse_start_script_timeout(self) -> int:
+        """Parse START_SCRIPT_TIMEOUT variable.
+
+        Returns:
+            Timeout in seconds (defaults to 300)
+        """
+        timeout_str = self.variables.get("START_SCRIPT_TIMEOUT")
+        if not timeout_str:
+            return 300  # Default: 5 minutes
+
+        try:
+            timeout = int(timeout_str)
+            # Validation will be done by Pydantic model
+            return timeout
+        except ValueError:
+            # Invalid value, use default
+            return 300
 
     def _parse_json_variable(self, var_name: str, model_class: type[T]) -> T | None:
         """Parse a JSON variable and validate with a Pydantic model.

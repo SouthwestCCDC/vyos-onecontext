@@ -397,7 +397,42 @@ class TestApplyConfiguration:
         with patch("vyos_onecontext.__main__.FREEZE_MARKER_PATH", str(tmp_path / "frozen")):
             result = apply_configuration(str(context_path))
             assert result == EXIT_SUCCESS
-            mock_run_script.assert_called_once_with("#!/bin/bash\necho hello")
+            mock_run_script.assert_called_once_with("#!/bin/bash\necho hello", timeout=300)
+
+    @patch("vyos_onecontext.__main__.run_start_script")
+    @patch("vyos_onecontext.__main__.VyOSConfigSession")
+    @patch("vyos_onecontext.__main__.generate_config")
+    @patch("vyos_onecontext.__main__.parse_context")
+    def test_apply_configuration_with_start_script_custom_timeout(
+        self,
+        mock_parse: MagicMock,
+        mock_generate: MagicMock,
+        mock_session_class: MagicMock,
+        mock_run_script: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """Test that START_SCRIPT_TIMEOUT is passed to run_start_script."""
+        context_path = tmp_path / "context.sh"
+        context_path.write_text('HOSTNAME="test-router"')
+
+        from vyos_onecontext.models import OnecontextMode
+
+        mock_config = MagicMock()
+        mock_config.onecontext_mode = OnecontextMode.STATELESS
+        mock_config.start_script = "#!/bin/bash\necho hello"
+        mock_config.start_script_timeout = 600
+        mock_parse.return_value = mock_config
+        mock_generate.return_value = ["set system host-name test-router"]
+
+        mock_session = MagicMock()
+        mock_session.__enter__ = MagicMock(return_value=mock_session)
+        mock_session.__exit__ = MagicMock(return_value=False)
+        mock_session_class.return_value = mock_session
+
+        with patch("vyos_onecontext.__main__.FREEZE_MARKER_PATH", str(tmp_path / "frozen")):
+            result = apply_configuration(str(context_path))
+            assert result == EXIT_SUCCESS
+            mock_run_script.assert_called_once_with("#!/bin/bash\necho hello", timeout=600)
 
     @patch("vyos_onecontext.__main__.VyOSConfigSession")
     @patch("vyos_onecontext.__main__.generate_config")

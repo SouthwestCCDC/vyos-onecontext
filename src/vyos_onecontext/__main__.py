@@ -319,7 +319,7 @@ def apply_configuration(
 
     # Run START_SCRIPT if present
     if config.start_script:
-        run_start_script(config.start_script)
+        run_start_script(config.start_script, timeout=config.start_script_timeout)
 
     # Log error summary and return appropriate exit code
     if error_collector.has_errors() or error_collector.has_warnings():

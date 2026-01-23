@@ -831,6 +831,85 @@ logger -t onecontext 'Configuration applied successfully'"
         assert '"Status: OK"' in config.start_script
         assert "logger -t onecontext" in config.start_script
 
+    def test_start_script_timeout_default(self, tmp_path: Path) -> None:
+        """Test START_SCRIPT_TIMEOUT defaults to 300 seconds."""
+        context_file = tmp_path / "one_env"
+        content = """START_SCRIPT="#!/bin/bash
+echo 'test'"
+"""
+        context_file.write_text(content)
+
+        config = parse_context(str(context_file))
+
+        assert config.start_script_timeout == 300
+
+    def test_start_script_timeout_custom(self, tmp_path: Path) -> None:
+        """Test START_SCRIPT_TIMEOUT with custom value."""
+        context_file = tmp_path / "one_env"
+        content = """START_SCRIPT="#!/bin/bash
+echo 'test'"
+START_SCRIPT_TIMEOUT="600"
+"""
+        context_file.write_text(content)
+
+        config = parse_context(str(context_file))
+
+        assert config.start_script_timeout == 600
+
+    def test_start_script_timeout_minimum(self, tmp_path: Path) -> None:
+        """Test START_SCRIPT_TIMEOUT minimum value."""
+        context_file = tmp_path / "one_env"
+        content = """START_SCRIPT_TIMEOUT="1"
+"""
+        context_file.write_text(content)
+
+        config = parse_context(str(context_file))
+
+        assert config.start_script_timeout == 1
+
+    def test_start_script_timeout_maximum(self, tmp_path: Path) -> None:
+        """Test START_SCRIPT_TIMEOUT maximum value."""
+        context_file = tmp_path / "one_env"
+        content = """START_SCRIPT_TIMEOUT="3600"
+"""
+        context_file.write_text(content)
+
+        config = parse_context(str(context_file))
+
+        assert config.start_script_timeout == 3600
+
+    def test_start_script_timeout_too_small(self, tmp_path: Path) -> None:
+        """Test START_SCRIPT_TIMEOUT rejects values below 1."""
+        context_file = tmp_path / "one_env"
+        content = """START_SCRIPT_TIMEOUT="0"
+"""
+        context_file.write_text(content)
+
+        with pytest.raises(ValueError, match="START_SCRIPT_TIMEOUT must be at least 1 second"):
+            parse_context(str(context_file))
+
+    def test_start_script_timeout_too_large(self, tmp_path: Path) -> None:
+        """Test START_SCRIPT_TIMEOUT rejects values above 3600."""
+        context_file = tmp_path / "one_env"
+        content = """START_SCRIPT_TIMEOUT="3601"
+"""
+        context_file.write_text(content)
+
+        with pytest.raises(ValueError, match="START_SCRIPT_TIMEOUT cannot exceed 3600 seconds"):
+            parse_context(str(context_file))
+
+    def test_start_script_timeout_invalid_format(self, tmp_path: Path) -> None:
+        """Test START_SCRIPT_TIMEOUT handles invalid format gracefully."""
+        context_file = tmp_path / "one_env"
+        content = """START_SCRIPT_TIMEOUT="not-a-number"
+"""
+        context_file.write_text(content)
+
+        config = parse_context(str(context_file))
+
+        # Should fall back to default
+        assert config.start_script_timeout == 300
+
 
 class TestCompleteContextFile:
     """Tests for complete context files."""
