@@ -189,6 +189,7 @@ else
             echo "WARNING: SSH did not become ready within ${SSH_TIMEOUT}s"
             echo "SSH-based validation will be skipped"
             SSH_AVAILABLE=0
+            export SSH_AVAILABLE
             break
         fi
 

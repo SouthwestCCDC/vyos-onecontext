@@ -114,10 +114,15 @@ The `ssh_connection` fixture requires these environment variables:
 Example:
 
 ```bash
-# In one terminal, start QEMU with SSH setup
+# In one terminal, start QEMU with SSH setup (exports variables to the environment)
 ./tests/integration/run-qemu-test.sh /path/to/vyos-image.qcow2 test-context.iso
 
-# In another terminal, once SSH is ready, export the required variables
+# In the SAME terminal (or source the exported variables), once SSH is ready:
+# The run-qemu-test.sh script exports SSH_* variables, but only in its own shell.
+# To use them in pytest, either:
+#   1. Run pytest in the same shell session after the QEMU script completes, OR
+#   2. Manually export the variables in a new terminal:
+
 export SSH_AVAILABLE=1
 export SSH_KEY="tests/integration/test_ssh_key"
 export SSH_HOST="localhost"
