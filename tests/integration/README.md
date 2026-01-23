@@ -92,8 +92,26 @@ The integration test harness includes SSH connectivity for functional validation
 - **SSH connection retry**: Waits up to 60 seconds for SSH to become ready after boot
 - **Helper function**: `ssh_command()` is exported for running commands on the VM
 
-The SSH infrastructure is available to pytest tests when running in the QEMU harness via
-the `ssh_connection` fixture (defined in `tests/conftest.py`).
+#### SSH-based pytest tests
+
+The SSH infrastructure sets up environment variables (`SSH_HOST`, `SSH_PORT`, `SSH_KEY`) that
+enable pytest-based functional validation through the `ssh_connection` fixture (defined in
+`tests/conftest.py`).
+
+**Current status**: These pytest tests exist in `tests/test_ssh_integration.py` but are **not
+currently invoked by the CI integration test workflow**. The CI job only runs
+`run-all-tests.sh`, which validates via serial log output. Full pytest integration into the
+QEMU harness is planned as follow-up work.
+
+**Manual usage**: You can run pytest tests manually after starting the QEMU harness:
+
+```bash
+# In one terminal, start QEMU with SSH setup
+./tests/integration/run-qemu-test.sh /path/to/vyos-image.qcow2 test-context.iso
+
+# In another terminal, once SSH is ready
+pytest tests/test_ssh_integration.py -v -m integration
+```
 
 **Example pytest integration test:**
 
@@ -104,7 +122,8 @@ def test_hostname_configured(ssh_connection):
     assert "test-" in output
 ```
 
-These tests are automatically skipped when running pytest normally (outside the QEMU harness).
+These tests are automatically skipped when running pytest normally (without the SSH environment
+variables set by the QEMU harness).
 
 ## Debugging Failed Tests
 
