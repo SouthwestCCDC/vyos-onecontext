@@ -94,22 +94,37 @@ The integration test harness includes SSH connectivity for functional validation
 
 #### SSH-based pytest tests
 
-The SSH infrastructure sets up environment variables (`SSH_HOST`, `SSH_PORT`, `SSH_KEY`) that
-enable pytest-based functional validation through the `ssh_connection` fixture (defined in
-`tests/conftest.py`).
+The SSH infrastructure sets up environment variables that enable pytest-based functional
+validation through the `ssh_connection` fixture (defined in `tests/conftest.py`).
 
 **Current status**: These pytest tests exist in `tests/test_ssh_integration.py` but are **not
 currently invoked by the CI integration test workflow**. The CI job only runs
 `run-all-tests.sh`, which validates via serial log output. Full pytest integration into the
 QEMU harness is planned as follow-up work.
 
-**Manual usage**: You can run pytest tests manually after starting the QEMU harness:
+**Manual usage**: You can run pytest tests manually after starting the QEMU harness.
+The `ssh_connection` fixture requires these environment variables:
+
+- `SSH_AVAILABLE=1` - Enables the SSH fixture (otherwise tests are skipped)
+- `SSH_KEY` - Path to the SSH private key (e.g., `tests/integration/test_ssh_key`)
+- `SSH_HOST` - SSH hostname (defaults to `localhost`)
+- `SSH_PORT` - SSH port (defaults to `10022`)
+- `SSH_USER` - SSH username (defaults to `vyos`)
+
+Example:
 
 ```bash
 # In one terminal, start QEMU with SSH setup
 ./tests/integration/run-qemu-test.sh /path/to/vyos-image.qcow2 test-context.iso
 
-# In another terminal, once SSH is ready
+# In another terminal, once SSH is ready, export the required variables
+export SSH_AVAILABLE=1
+export SSH_KEY="tests/integration/test_ssh_key"
+export SSH_HOST="localhost"
+export SSH_PORT="10022"
+export SSH_USER="vyos"
+
+# Run pytest with the integration marker
 pytest tests/test_ssh_integration.py -v -m integration
 ```
 
