@@ -18,7 +18,7 @@ FIXTURES_DIR = Path(__file__).parent / "fixtures"
 class TestSimpleRouter:
     """Test simple single-interface router configuration.
 
-    Scenario: Basic router with one interface, gateway, and SSH key.
+    Scenario: Basic router with one interface and gateway.
     This is the minimal realistic deployment pattern.
     """
 

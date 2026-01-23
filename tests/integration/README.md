@@ -88,6 +88,8 @@ The test script checks:
 The integration test harness includes SSH connectivity for functional validation:
 
 - **Password authentication**: Uses default VyOS credentials (vyos/vyos) for SSH access
+  - Note: Earlier designs considered SSH key-based authentication, but the final
+    implementation uses password auth for simplicity and compatibility with stock VyOS images
 - **SSH port forwarding**: Port 10022 on host forwards to port 22 in VM
 - **SSH connection retry**: Waits up to 60 seconds for SSH to become ready after boot
 - **Helper function**: `ssh_command()` is exported for running commands on the VM
@@ -113,16 +115,16 @@ The `ssh_connection` fixture requires these environment variables:
 
 Example:
 
+**Important:** The `run-qemu-test.sh` script runs in a subshell and has an EXIT trap that
+kills the QEMU VM when it exits. Variables exported by the script do not persist to the caller.
+
+To run pytest tests manually, you must either:
+
+**Option 1: Manually manage the VM and export variables**
+
 ```bash
-# In one terminal, start QEMU with SSH setup (exports variables to the environment)
-./tests/integration/run-qemu-test.sh /path/to/vyos-image.qcow2 test-context.iso
-
-# In the SAME terminal (or source the exported variables), once SSH is ready:
-# The run-qemu-test.sh script exports SSH_* variables, but only in its own shell.
-# To use them in pytest, either:
-#   1. Run pytest in the same shell session after the QEMU script completes, OR
-#   2. Manually export the variables in a new terminal:
-
+# Start QEMU manually and keep it running (modify run-qemu-test.sh or run QEMU directly)
+# Then export the variables yourself:
 export SSH_AVAILABLE=1
 export SSH_PASSWORD="vyos"
 export SSH_HOST="localhost"
@@ -132,6 +134,11 @@ export SSH_USER="vyos"
 # Run pytest with the integration marker
 pytest tests/test_ssh_integration.py -v -m integration
 ```
+
+**Option 2: Modify run-qemu-test.sh to invoke pytest before it exits**
+
+Edit the script to call pytest at the end (before the EXIT trap fires), or remove the
+EXIT trap and manage QEMU cleanup manually.
 
 **Example pytest integration test:**
 
