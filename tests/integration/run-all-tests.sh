@@ -46,6 +46,7 @@ declare -a TEST_SCENARIOS=(
     "nat-full:Full NAT (SNAT+DNAT+binat)"
     "vrf-with-routing:VRF with routing (VRF+static+OSPF)"
     "nat-with-firewall:NAT with firewall zones"
+    "start-script:START_SCRIPT execution"
 )
 
 TEMP_DIR=$(mktemp -d)

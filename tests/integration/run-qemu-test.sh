@@ -449,6 +449,31 @@ case "$CONTEXT_NAME" in
         # Global state policies
         assert_command_generated "set firewall global-options state-policy" "Global state policy"
         ;;
+    start-script)
+        assert_command_generated "set system host-name" "Hostname configuration"
+        # START_SCRIPT is executed AFTER commit, so we need SSH to verify it ran
+        if [ "$SSH_AVAILABLE" -eq 1 ]; then
+            echo ""
+            echo "=== START_SCRIPT Validation ==="
+            # Check if the marker file was created by START_SCRIPT
+            if ssh_command "test -f /tmp/start-script-marker" 2>/dev/null; then
+                echo "[PASS] START_SCRIPT marker file exists"
+                # Verify the content
+                MARKER_CONTENT=$(ssh_command "cat /tmp/start-script-marker" 2>/dev/null)
+                if echo "$MARKER_CONTENT" | grep -q "START_SCRIPT executed"; then
+                    echo "[PASS] START_SCRIPT marker file contains expected content"
+                else
+                    echo "[FAIL] START_SCRIPT marker file has unexpected content"
+                    VALIDATION_FAILED=1
+                fi
+            else
+                echo "[FAIL] START_SCRIPT marker file not found - script did not execute"
+                VALIDATION_FAILED=1
+            fi
+        else
+            echo "[WARN] SSH not available - cannot verify START_SCRIPT execution"
+        fi
+        ;;
     invalid-json|missing-required-fields|partial-valid)
         echo "[INFO] Error scenario '$CONTEXT_NAME' - harness does not yet support error scenario validation"
         ;;

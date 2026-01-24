@@ -122,7 +122,7 @@ mappings:
       - "vrf-with-routing"
     description: "SSH service configuration (management VRF)"
 
-  # Generator: Custom (START_CONFIG, START_SCRIPT)
+  # Generator: Custom (START_CONFIG runs during config, START_SCRIPT runs after commit)
   - pattern: "src/vyos_onecontext/generators/custom.py"
     fixtures: ["all"]
     description: "Custom commands/scripts - may be in any context"

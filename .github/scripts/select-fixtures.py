@@ -22,7 +22,6 @@ Exit codes:
 """
 
 import argparse
-import fnmatch
 import subprocess
 import sys
 from pathlib import Path
@@ -76,7 +75,7 @@ def select_fixtures(changed_files: list[str], mapping: dict[str, Any]) -> set[st
         matched = False
         for entry in mapping.get("mappings", []):
             pattern = entry.get("pattern")
-            if pattern and fnmatch.fnmatch(file, pattern):
+            if pattern and Path(file).match(pattern):
                 matched = True
                 entry_fixtures = entry.get("fixtures", [])
 
