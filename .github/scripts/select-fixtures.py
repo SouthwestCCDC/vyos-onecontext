@@ -26,9 +26,9 @@ import fnmatch
 import subprocess
 import sys
 from pathlib import Path
-from typing import Set
+from typing import Any, cast
 
-import yaml
+import yaml  # type: ignore[import-untyped]
 
 
 def get_changed_files(base_ref: str, head_ref: str) -> list[str]:
@@ -47,11 +47,11 @@ def get_changed_files(base_ref: str, head_ref: str) -> list[str]:
         sys.exit(1)
 
 
-def load_mapping(mapping_file: Path) -> dict:
+def load_mapping(mapping_file: Path) -> dict[str, Any]:
     """Load the test mapping configuration."""
     try:
         with open(mapping_file) as f:
-            return yaml.safe_load(f)
+            return cast(dict[str, Any], yaml.safe_load(f))
     except FileNotFoundError:
         print(f"ERROR: Mapping file not found: {mapping_file}", file=sys.stderr)
         sys.exit(1)
@@ -60,7 +60,7 @@ def load_mapping(mapping_file: Path) -> dict:
         sys.exit(1)
 
 
-def select_fixtures(changed_files: list[str], mapping: dict) -> Set[str]:
+def select_fixtures(changed_files: list[str], mapping: dict[str, Any]) -> set[str]:
     """
     Select fixtures to run based on changed files and mapping.
 
@@ -96,7 +96,7 @@ def select_fixtures(changed_files: list[str], mapping: dict) -> Set[str]:
     return fixtures
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         description="Select integration test fixtures based on changed files"
     )

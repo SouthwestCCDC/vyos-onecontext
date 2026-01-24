@@ -93,22 +93,12 @@ mappings:
       - "nat-with-firewall"
     description: "Zone-based firewall configuration"
 
-  # Generator: Services (NTP, etc)
+  # Generator: Services (SSH management VRF)
   - pattern: "src/vyos_onecontext/generators/service.py"
     fixtures:
-      - "simple"
-      - "quotes"
-      - "multi-interface"
       - "management-vrf"
-      - "static-routes"
-      - "ospf"
-      - "dhcp"
-      - "snat"
-      - "dnat"
-      - "nat-full"
       - "vrf-with-routing"
-      - "nat-with-firewall"
-    description: "NTP and other services - used by most contexts"
+    description: "SSH service configuration (management VRF)"
 
   # Generator: Custom (START_CONFIG, START_SCRIPT)
   - pattern: "src/vyos_onecontext/generators/custom.py"
