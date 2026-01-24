@@ -78,9 +78,13 @@ def ssh_connection() -> Callable[[str], str]:
             "ConnectTimeout=5",
         ]
 
-        # SSH to VyOS already provides a vbash login shell environment,
-        # so operational commands (show, configure, etc.) work directly.
-        # We just need to pass the command properly escaped for the remote shell.
+        # Non-interactive SSH sessions don't use vbash by default, which breaks
+        # VyOS operational commands. We need to explicitly invoke vbash in
+        # interactive mode (-i) to load the VyOS command environment.
+        # The -c flag runs the command, and -i enables interactive mode which
+        # loads the necessary VyOS shell functions and commands.
+        escaped_command = command.replace("'", "'\\''")
+        wrapped_command = f"/usr/bin/vbash -ic '{escaped_command}'"
 
         ssh_cmd = [
             sshpass_path,
@@ -91,7 +95,7 @@ def ssh_connection() -> Callable[[str], str]:
             "-p",
             ssh_port,
             f"{ssh_user}@{ssh_host}",
-            command,
+            wrapped_command,
         ]
 
         result = subprocess.run(
