@@ -1,5 +1,6 @@
 """Pytest configuration and fixtures for vyos-onecontext tests."""
 
+import shutil
 import subprocess
 from collections.abc import Callable
 
@@ -52,6 +53,20 @@ def ssh_connection() -> Callable[[str], str]:
         Raises:
             subprocess.CalledProcessError: If command exits non-zero
         """
+        # Find sshpass in system PATH (may not be in venv PATH)
+        # Try shutil.which first, fall back to common system locations
+        sshpass_path = shutil.which("sshpass")
+        if not sshpass_path:
+            # Common system locations for sshpass
+            import os.path
+
+            for path in ["/usr/bin/sshpass", "/usr/local/bin/sshpass"]:
+                if os.path.exists(path):
+                    sshpass_path = path
+                    break
+            else:
+                pytest.fail("sshpass not found in PATH or system locations")
+
         ssh_opts = [
             "-o",
             "StrictHostKeyChecking=no",
@@ -63,8 +78,16 @@ def ssh_connection() -> Callable[[str], str]:
             "ConnectTimeout=5",
         ]
 
+        # Non-interactive SSH sessions don't use vbash by default, which breaks
+        # VyOS operational commands. We need to explicitly invoke vbash in
+        # interactive mode (-i) to load the VyOS command environment.
+        # The -c flag runs the command, and -i enables interactive mode which
+        # loads the necessary VyOS shell functions and commands.
+        escaped_command = command.replace("'", "'\\''")
+        wrapped_command = f"/usr/bin/vbash -ic '{escaped_command}'"
+
         ssh_cmd = [
-            "sshpass",
+            sshpass_path,
             "-p",
             ssh_password,
             "ssh",
@@ -72,7 +95,7 @@ def ssh_connection() -> Callable[[str], str]:
             "-p",
             ssh_port,
             f"{ssh_user}@{ssh_host}",
-            command,
+            wrapped_command,
         ]
 
         result = subprocess.run(

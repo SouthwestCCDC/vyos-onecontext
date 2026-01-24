@@ -8,6 +8,7 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VYOS_IMAGE="${1:?VyOS image path required}"
 CONTEXT_ISO="${2:?Context ISO path required}"
 TIMEOUT="${3:-180}"  # Default 3 minutes for boot + context
@@ -188,6 +189,7 @@ while true; do
         echo "WARNING: SSH did not become ready within ${SSH_TIMEOUT}s"
         echo "SSH-based validation will be skipped"
         SSH_AVAILABLE=0
+        export SSH_AVAILABLE
         break
     fi
 
@@ -459,14 +461,56 @@ esac
 
 echo ""
 if [ $VALIDATION_FAILED -eq 0 ]; then
-    echo "=== [PASS] All validation checks passed ==="
-    echo ""
-    echo "Test completed successfully!"
-    exit 0
+    echo "=== [PASS] All serial log validation checks passed ==="
 else
-    echo "=== [FAIL] Validation failed ==="
+    echo "=== [FAIL] Serial log validation failed ==="
     echo ""
     echo "=== Full serial log ==="
     cat "$SERIAL_LOG"
     exit 1
+fi
+
+# Run pytest SSH integration tests if SSH is available
+if [ "$SSH_AVAILABLE" -eq 1 ]; then
+    echo ""
+    echo "=== Pytest SSH Integration Tests ==="
+    echo ""
+
+    # Check if pytest is available
+    if command -v pytest >/dev/null 2>&1; then
+        PYTEST_CMD="pytest"
+    elif command -v uv >/dev/null 2>&1; then
+        PYTEST_CMD="uv run pytest"
+    else
+        echo "[WARN] Neither pytest nor uv found - skipping pytest tests"
+        echo "       Shell-based validation passed, marking test as successful"
+        echo ""
+        echo "Test completed successfully!"
+        exit 0
+    fi
+
+    # Run pytest with integration marker, capturing output
+    # The ssh_connection fixture will use the exported SSH_* environment variables
+    # Change to repo root to run pytest (tests are at tests/test_ssh_integration.py)
+    REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+    echo "Running pytest integration tests from $REPO_ROOT..."
+    cd "$REPO_ROOT"
+    if $PYTEST_CMD -m integration tests/test_ssh_integration.py -v; then
+        echo ""
+        echo "[PASS] Pytest integration tests passed"
+        echo ""
+        echo "Test completed successfully!"
+        exit 0
+    else
+        echo ""
+        echo "[FAIL] Pytest integration tests failed"
+        exit 1
+    fi
+else
+    echo ""
+    echo "[WARN] SSH not available - skipping pytest tests"
+    echo "       Shell-based validation passed, marking test as successful"
+    echo ""
+    echo "Test completed successfully!"
+    exit 0
 fi

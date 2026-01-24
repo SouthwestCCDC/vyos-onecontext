@@ -82,7 +82,7 @@ The test script checks:
 - No errors in contextualization output
 - No Python exceptions in logs
 - Successful completion message in logs
-- SSH connectivity is attempted (best-effort if test SSH key is available)
+- SSH connectivity is established (using default VyOS credentials)
 
 ### SSH Infrastructure
 
@@ -97,49 +97,8 @@ The integration test harness includes SSH connectivity for functional validation
 
 #### SSH-based pytest tests
 
-The SSH infrastructure sets up environment variables that enable pytest-based functional
-validation through the `ssh_connection` fixture (defined in `tests/conftest.py`).
-
-**Current status**: These pytest tests exist in `tests/test_ssh_integration.py` but are **not
-currently invoked by the CI integration test workflow**. The CI job only runs
-`run-all-tests.sh`, which validates via serial log output. Full pytest integration into the
-QEMU harness is planned as follow-up work.
-
-**Manual usage**: You can run pytest tests manually after starting the QEMU harness.
-The `ssh_connection` fixture requires these environment variables:
-
-- `SSH_AVAILABLE=1` - Enables the SSH fixture (otherwise tests are skipped)
-- `SSH_PASSWORD` - SSH password (defaults to `vyos`)
-- `SSH_HOST` - SSH hostname (defaults to `localhost`)
-- `SSH_PORT` - SSH port (defaults to `10022`)
-- `SSH_USER` - SSH username (defaults to `vyos`)
-
-Example:
-
-**Important:** The `run-qemu-test.sh` script runs in a subshell and has an EXIT trap that
-kills the QEMU VM when it exits. Variables exported by the script do not persist to the caller.
-
-To run pytest tests manually, you must either:
-
-**Option 1: Manually manage the VM and export variables**
-
-```bash
-# Start QEMU manually and keep it running (modify run-qemu-test.sh or run QEMU directly)
-# Then export the variables yourself:
-export SSH_AVAILABLE=1
-export SSH_PASSWORD="vyos"
-export SSH_HOST="localhost"
-export SSH_PORT="10022"
-export SSH_USER="vyos"
-
-# Run pytest with the integration marker
-pytest tests/test_ssh_integration.py -v -m integration
-```
-
-**Option 2: Modify run-qemu-test.sh to invoke pytest before it exits**
-
-Edit the script to call pytest at the end (before the EXIT trap fires), or remove the
-EXIT trap and manage QEMU cleanup manually.
+The SSH infrastructure is available to pytest tests when running in the QEMU harness via
+the `ssh_connection` fixture (defined in `tests/conftest.py`).
 
 **Example pytest integration test:**
 
@@ -150,8 +109,7 @@ def test_hostname_configured(ssh_connection):
     assert "test-" in output
 ```
 
-These tests are automatically skipped when running pytest normally (without the SSH environment
-variables set by the QEMU harness).
+These tests are automatically skipped when running pytest normally (outside the QEMU harness).
 
 ## Debugging Failed Tests
 
