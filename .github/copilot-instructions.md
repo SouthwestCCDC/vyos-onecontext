@@ -50,3 +50,62 @@ just check           # Run all checks
 
 - **deployment** - Packer image builds (submodule at `packer/opennebula-context/vyos-sagitta`)
 - **scoring** - Uses vrouter-relay images for scoring infrastructure
+
+## Code Review Guidelines
+
+When reviewing pull requests, follow these guidelines to provide consistent, actionable feedback.
+
+### Priority System
+
+Categorize findings by severity:
+
+- **CRITICAL** (blocks merge): VyOS syntax errors that would break router boot, security vulnerabilities, incorrect network configurations
+- **IMPORTANT** (should fix before merge): Missing validation for context variables, inadequate test coverage, Pydantic model inconsistencies
+- **SUGGESTION** (non-blocking): Code style improvements, documentation enhancements, refactoring opportunities
+
+### Confidence Threshold
+
+Only comment when HIGH CONFIDENCE (>80%) an issue exists. VyOS syntax can be subtle - if unsure whether something is correct for Sagitta, ask rather than assume.
+
+### What CI Already Checks
+
+Our CI pipeline handles:
+- Python linting (`ruff`)
+- Type checking (`mypy`)
+- Unit tests (`pytest`)
+
+**Do not duplicate feedback** on issues these tools catch. Focus on VyOS command correctness, context variable handling, and router configuration logic.
+
+### VyOS-Specific Review Points
+
+- **Sagitta syntax**: Verify commands use Sagitta 1.4.x syntax (see syntax differences in project docs)
+- **Interface-based config**: NAT, routes should use `interface name 'X'` format
+- **Stateless routers**: All config derives from context - no persistent state assumptions
+- **Test fixtures**: New context patterns need corresponding test fixtures
+
+### Security Focus
+
+Flag these with **CRITICAL** priority:
+- Firewall rules that could expose internal networks
+- Missing input validation on context variables
+- Incorrect zone assignments that bypass security boundaries
+
+## MANDATORY: Be transparent about AI use
+
+Disclose when AI generates content that humans will read and might attribute to a specific person.
+
+**What requires disclosure:**
+- GitHub issues and PR descriptions
+- GitHub comments (on issues, PRs, or commits)
+- Documentation files (markdown, READMEs, guides)
+- Commit messages with substantive explanations
+
+**How to disclose:**
+- Commits: `Co-Authored-By:` line with AI identity
+- Documentation/comments: brief closing sentence
+- Include tool and model when known (e.g., "Claude Code w/ Opus 4.5")
+
+**Exceptions (no disclosure needed):**
+- Mechanical operations: git merge/rebase, conflict resolution
+- Source code and config files
+- Trivial changes: typo fixes, formatting
