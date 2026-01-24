@@ -286,7 +286,17 @@ def apply_configuration(
                         "Configuration applied, saved, and frozen "
                         "(onecontext disabled for future boots)"
                     )
-                session.save()
+                try:
+                    session.save()
+                except VyOSConfigError as e:
+                    logger.error("Failed to save configuration: %s", e)
+                    error_collector.add_error(
+                        section="CONFIG_SAVE",
+                        message="Failed to save configuration",
+                        exception=e,
+                    )
+                    error_collector.log_summary()
+                    return EXIT_CONFIG_ERROR
                 if mode == OnecontextMode.FREEZE:
                     create_freeze_marker()
             else:
