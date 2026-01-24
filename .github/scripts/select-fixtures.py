@@ -17,8 +17,9 @@ Arguments:
     head-ref: Git reference for the head (e.g., HEAD)
 
 Outputs:
-    Space-separated list of fixture names (without .env extension)
-    or "all" to indicate all fixtures should run.
+    Space-separated list of fixture names (without .env extension),
+    "all" to indicate all fixtures should run,
+    or empty string when no changed files or new fixtures are detected.
 
 Exit codes:
     0: Success
@@ -172,7 +173,15 @@ def warn_unmapped_fixtures(all_fixtures: set[str], mapped_fixtures: set[str]) ->
         for fixture in sorted(unmapped):
             print(f"#   {fixture}", file=sys.stderr)
         print(
-            "# These fixtures will only run if matched by default or 'all' patterns.",
+            "# These fixtures will only run if matched by default or 'all' patterns,",
+            file=sys.stderr,
+        )
+        print(
+            "# OR if they are newly added in this PR. Newly-added fixtures run automatically",
+            file=sys.stderr,
+        )
+        print(
+            "# but should still be mapped for future selective test runs.",
             file=sys.stderr,
         )
         print("#", file=sys.stderr)
