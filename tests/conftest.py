@@ -1,6 +1,5 @@
 """Pytest configuration and fixtures for vyos-onecontext tests."""
 
-import shlex
 import shutil
 import subprocess
 from collections.abc import Callable
@@ -81,8 +80,10 @@ def ssh_connection() -> Callable[[str], str]:
 
         # Wrap command with vbash to enable VyOS operational commands
         # VyOS operational mode commands (show, configure, etc.) require vbash
-        # Use shlex.quote to safely escape the command for shell execution
-        wrapped_command = f"/usr/bin/vbash -c {shlex.quote(command)}"
+        # We need to properly escape the command for the remote shell execution.
+        # Escape single quotes in the command, then wrap in single quotes.
+        escaped_command = command.replace("'", "'\\''")
+        wrapped_command = f"/usr/bin/vbash -c '{escaped_command}'"
 
         ssh_cmd = [
             sshpass_path,
