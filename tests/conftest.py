@@ -82,7 +82,7 @@ def ssh_connection() -> Callable[[str], str]:
         # Wrap command with vbash to enable VyOS operational commands
         # VyOS operational mode commands (show, configure, etc.) require vbash
         # Use shlex.quote to safely escape the command for shell execution
-        wrapped_command = f"/bin/vbash -c {shlex.quote(command)}"
+        wrapped_command = f"/usr/bin/vbash -c {shlex.quote(command)}"
 
         ssh_cmd = [
             sshpass_path,

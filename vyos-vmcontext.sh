@@ -1,4 +1,4 @@
-#!/bin/vbash
+#!/usr/bin/vbash
 # VyOS Sagitta OpenNebula Contextualization
 #
 # This script runs at boot to configure VyOS based on OpenNebula context.
