@@ -264,8 +264,35 @@ def apply_configuration(
                 "Use 'sg vyattacfg' to run with correct group."
             )
 
-        with session:
+        # Determine mode before entering session to plan save strategy
+        mode = config.onecontext_mode
+        needs_save = mode in (OnecontextMode.SAVE, OnecontextMode.FREEZE)
+
+        # Manual session management to allow save before session end
+        session.begin()
+        try:
             session.run_commands(commands)
+            session.commit()
+
+            # Save configuration if needed (while session is still active)
+            if needs_save:
+                if mode == OnecontextMode.SAVE:
+                    logger.warning(
+                        "Configuration applied and saved (WARNING: will regenerate from "
+                        "non-fresh state on next boot)"
+                    )
+                else:  # FREEZE mode
+                    logger.info(
+                        "Configuration applied, saved, and frozen "
+                        "(onecontext disabled for future boots)"
+                    )
+                session.save()
+                if mode == OnecontextMode.FREEZE:
+                    create_freeze_marker()
+            else:
+                logger.info("Configuration applied (stateless mode - not saved)")
+        finally:
+            session.end()
 
     except VyOSConfigError as e:
         logger.error("Configuration failed: %s", e)
@@ -276,46 +303,6 @@ def apply_configuration(
         )
         error_collector.log_summary()
         return EXIT_CONFIG_ERROR
-
-    # Handle post-commit actions based on mode
-    mode = config.onecontext_mode
-
-    if mode == OnecontextMode.STATELESS:
-        logger.info("Configuration applied (stateless mode - not saved)")
-
-    elif mode == OnecontextMode.SAVE:
-        logger.warning(
-            "Configuration applied and saved (WARNING: will regenerate from "
-            "non-fresh state on next boot)"
-        )
-        try:
-            session.save()
-        except VyOSConfigError as e:
-            logger.error("Failed to save configuration: %s", e)
-            error_collector.add_error(
-                section="CONFIG_SAVE",
-                message="Failed to save configuration",
-                exception=e,
-            )
-            error_collector.log_summary()
-            return EXIT_CONFIG_ERROR
-
-    elif mode == OnecontextMode.FREEZE:
-        logger.info(
-            "Configuration applied, saved, and frozen (onecontext disabled for future boots)"
-        )
-        try:
-            session.save()
-            create_freeze_marker()
-        except VyOSConfigError as e:
-            logger.error("Failed to save configuration: %s", e)
-            error_collector.add_error(
-                section="CONFIG_SAVE",
-                message="Failed to save configuration",
-                exception=e,
-            )
-            error_collector.log_summary()
-            return EXIT_CONFIG_ERROR
 
     # Run START_SCRIPT if present
     if config.start_script:

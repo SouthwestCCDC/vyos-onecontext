@@ -434,11 +434,12 @@ class TestApplyConfiguration:
 
         mock_config = MagicMock()
         mock_config.onecontext_mode = OnecontextMode.STATELESS
+        mock_config.start_script = None
         mock_parse.return_value = mock_config
         mock_generate.return_value = ["set system host-name test-router"]
 
         mock_session = MagicMock()
-        mock_session.__enter__ = MagicMock(side_effect=VyOSConfigError("Config failed"))
+        mock_session.begin.side_effect = VyOSConfigError("Config failed")
         mock_session_class.return_value = mock_session
 
         with patch("vyos_onecontext.__main__.FREEZE_MARKER_PATH", str(tmp_path / "frozen")):
