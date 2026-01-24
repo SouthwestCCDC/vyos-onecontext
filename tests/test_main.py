@@ -469,8 +469,8 @@ class TestApplyConfiguration:
 
             # Verify save was attempted before end was called (critical for bug fix)
             # Even though save() failed, end() should still be called in finally block
-            assert mock_session.save.called
-            assert mock_session.end.called
+            mock_session.save.assert_called_once()
+            mock_session.end.assert_called_once()
             
             # Verify verify_group/begin/run_commands/commit were called before save
             # and that save was called before end
