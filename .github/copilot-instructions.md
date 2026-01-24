@@ -79,7 +79,7 @@ Our CI pipeline handles:
 ### VyOS-Specific Review Points
 
 - **Sagitta syntax**: Verify commands use Sagitta 1.4.x syntax (see syntax differences in project docs)
-- **Interface-based config**: NAT, routes should use `interface name 'X'` format
+- **Sagitta interface syntax**: NAT uses `outbound-interface name eth0`, routes use `route X interface Y`
 - **Stateless routers**: All config derives from context - no persistent state assumptions
 - **Test fixtures**: New context patterns need corresponding test fixtures
 
