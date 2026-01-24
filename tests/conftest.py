@@ -78,12 +78,9 @@ def ssh_connection() -> Callable[[str], str]:
             "ConnectTimeout=5",
         ]
 
-        # Wrap command with vbash to enable VyOS operational commands
-        # VyOS operational mode commands (show, configure, etc.) require vbash
-        # We need to properly escape the command for the remote shell execution.
-        # Escape single quotes in the command, then wrap in single quotes.
-        escaped_command = command.replace("'", "'\\''")
-        wrapped_command = f"/usr/bin/vbash -c '{escaped_command}'"
+        # SSH to VyOS already provides a vbash login shell environment,
+        # so operational commands (show, configure, etc.) work directly.
+        # We just need to pass the command properly escaped for the remote shell.
 
         ssh_cmd = [
             sshpass_path,
@@ -94,7 +91,7 @@ def ssh_connection() -> Callable[[str], str]:
             "-p",
             ssh_port,
             f"{ssh_user}@{ssh_host}",
-            wrapped_command,
+            command,
         ]
 
         result = subprocess.run(
