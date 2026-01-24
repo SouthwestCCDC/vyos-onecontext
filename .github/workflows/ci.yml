@@ -90,7 +90,7 @@ jobs:
             BASE_REF="origin/${{ github.base_ref }}"
 
             # Run fixture selection script
-            FIXTURES=$(.github/scripts/select-fixtures.py "$BASE_REF" HEAD)
+            FIXTURES=$(python3 .github/scripts/select-fixtures.py "$BASE_REF" HEAD)
 
             if [ -z "$FIXTURES" ]; then
               echo "No fixtures selected (no relevant changes)"

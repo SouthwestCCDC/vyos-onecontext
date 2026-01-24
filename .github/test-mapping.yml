@@ -7,6 +7,15 @@
 #   description: explanation of why this mapping exists
 
 mappings:
+  # Root-level shell scripts
+  - pattern: "vyos-*.sh"
+    fixtures: ["all"]
+    description: "Main VyOS context scripts"
+
+  - pattern: "*.script"
+    fixtures: ["all"]
+    description: "VyOS bootup scripts"
+
   # Core files - changes affect all fixtures
   - pattern: "src/vyos_onecontext/__main__.py"
     fixtures: ["all"]
@@ -16,18 +25,31 @@ mappings:
     fixtures: ["all"]
     description: "Context parser - affects all contexts"
 
-  - pattern: "src/vyos_onecontext/config_model.py"
-    fixtures: ["all"]
-    description: "Core config model - affects all contexts"
-
   - pattern: "src/vyos_onecontext/wrapper.py"
     fixtures: ["all"]
     description: "VyOS command wrapper - affects all contexts"
+
+  - pattern: "src/vyos_onecontext/errors.py"
+    fixtures: ["all"]
+    description: "Error definitions affect all contexts"
 
   # Models - affects all fixtures (validation is universal)
   - pattern: "src/vyos_onecontext/models/*.py"
     fixtures: ["all"]
     description: "Data models - validation affects all contexts"
+
+  # Generator: Base classes and utilities
+  - pattern: "src/vyos_onecontext/generators/base.py"
+    fixtures: ["all"]
+    description: "Base generator class"
+
+  - pattern: "src/vyos_onecontext/generators/utils.py"
+    fixtures: ["all"]
+    description: "Generator utilities"
+
+  - pattern: "src/vyos_onecontext/generators/__init__.py"
+    fixtures: ["all"]
+    description: "Generator orchestration"
 
   # Generator: System (hostname, SSH keys)
   - pattern: "src/vyos_onecontext/generators/system.py"
