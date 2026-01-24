@@ -1,5 +1,7 @@
 # vyos-onecontext
 
+[![CI](https://github.com/SouthwestCCDC/vyos-onecontext/actions/workflows/ci.yml/badge.svg?branch=sagitta)](https://github.com/SouthwestCCDC/vyos-onecontext/actions/workflows/ci.yml)
+
 OpenNebula contextualization for VyOS Sagitta (1.4.x) router images.
 
 ## Overview
