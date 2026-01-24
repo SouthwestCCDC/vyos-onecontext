@@ -71,6 +71,7 @@ mappings:
       - "nat-full"
       - "vrf-with-routing"
       - "nat-with-firewall"
+      - "start-script"
     description: "Interface config - used by all valid contexts"
 
   # Generator: VRF

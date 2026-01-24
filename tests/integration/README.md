@@ -63,6 +63,7 @@ Test context files are in `contexts/`:
 - **nat-full.env**: Full NAT suite (SNAT + DNAT + binat)
 - **vrf-with-routing.env**: VRF with static routes and OSPF
 - **nat-with-firewall.env**: NAT with zone-based firewall
+- **start-script.env**: START_SCRIPT post-configuration script execution
 
 ## CI Integration
 
