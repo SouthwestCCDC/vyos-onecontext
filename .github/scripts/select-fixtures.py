@@ -73,8 +73,15 @@ def extract_test_scenarios(content: str) -> set[str]:
 
     Returns:
         Set of fixture names.
+
+    Raises:
+        SystemExit: If content is non-empty but TEST_SCENARIOS array not found,
+                    or if array is found but no fixtures parsed (suspicious).
     """
     fixtures = set()
+
+    # Track whether we found the array declaration
+    found_array = False
 
     # Match lines like: "simple:Simple router"
     # Between declare -a TEST_SCENARIOS=( and )
@@ -82,6 +89,7 @@ def extract_test_scenarios(content: str) -> set[str]:
     for line in content.splitlines():
         if "TEST_SCENARIOS=(" in line:
             in_array = True
+            found_array = True
             continue
         if in_array and line.strip() == ")":
             break
@@ -90,6 +98,28 @@ def extract_test_scenarios(content: str) -> set[str]:
             match = re.match(r'\s*"([^:]+):', line)
             if match:
                 fixtures.add(match.group(1))
+
+    # Validate parsing results
+    if content and not found_array:
+        print(
+            "ERROR: Failed to find TEST_SCENARIOS array in run-all-tests.sh",
+            file=sys.stderr,
+        )
+        print(
+            "The array syntax may have changed or the file structure was modified.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    if found_array and not fixtures:
+        print(
+            "WARNING: TEST_SCENARIOS array found but no fixtures parsed.",
+            file=sys.stderr,
+        )
+        print(
+            "This may indicate a parsing failure or empty array (suspicious).",
+            file=sys.stderr,
+        )
 
     return fixtures
 
