@@ -75,8 +75,10 @@ def extract_test_scenarios(content: str) -> set[str]:
         Set of fixture names.
 
     Raises:
-        SystemExit: If content is non-empty but TEST_SCENARIOS array not found,
-                    or if array is found but no fixtures parsed (suspicious).
+        SystemExit: If content is non-empty but TEST_SCENARIOS array not found.
+
+    Notes:
+        Prints a warning (but continues) if array is found but no fixtures parsed.
     """
     fixtures = set()
 
