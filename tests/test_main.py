@@ -344,6 +344,144 @@ class TestApplyConfiguration:
             mock_session.save.assert_called_once()
             mock_freeze.assert_called_once()
 
+    @patch("vyos_onecontext.__main__.VyOSConfigSession")
+    @patch("vyos_onecontext.__main__.generate_config")
+    @patch("vyos_onecontext.__main__.parse_context")
+    def test_apply_configuration_save_mode_lifecycle_ordering(
+        self,
+        mock_parse: MagicMock,
+        mock_generate: MagicMock,
+        mock_session_class: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """Test SAVE mode session lifecycle ordering: begin → run_commands → commit → save → end."""
+        context_path = tmp_path / "context.sh"
+        context_path.write_text('HOSTNAME="test-router"')
+
+        from vyos_onecontext.models import OnecontextMode
+        from unittest.mock import call
+
+        mock_config = MagicMock()
+        mock_config.onecontext_mode = OnecontextMode.SAVE
+        mock_config.start_script = None
+        mock_parse.return_value = mock_config
+        mock_generate.return_value = ["set system host-name test-router"]
+
+        # Create a mock session that tracks call order
+        mock_session = MagicMock()
+        mock_session_class.return_value = mock_session
+
+        with patch("vyos_onecontext.__main__.FREEZE_MARKER_PATH", str(tmp_path / "frozen")):
+            result = apply_configuration(str(context_path))
+            assert result == EXIT_SUCCESS
+
+            # Verify the exact order of calls: verify_group → begin → run_commands → commit → save → end
+            # The critical assertion is that save() is called BEFORE end()
+            expected_calls = [
+                call.verify_group(),
+                call.begin(),
+                call.run_commands(["set system host-name test-router"]),
+                call.commit(),
+                call.save(),
+                call.end(),
+            ]
+            assert mock_session.method_calls == expected_calls
+
+    @patch("vyos_onecontext.__main__.create_freeze_marker")
+    @patch("vyos_onecontext.__main__.VyOSConfigSession")
+    @patch("vyos_onecontext.__main__.generate_config")
+    @patch("vyos_onecontext.__main__.parse_context")
+    def test_apply_configuration_freeze_mode_lifecycle_ordering(
+        self,
+        mock_parse: MagicMock,
+        mock_generate: MagicMock,
+        mock_session_class: MagicMock,
+        mock_freeze: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """Test FREEZE mode session lifecycle ordering: begin → run_commands → commit → save → end."""
+        context_path = tmp_path / "context.sh"
+        context_path.write_text('HOSTNAME="test-router"')
+
+        from vyos_onecontext.models import OnecontextMode
+        from unittest.mock import call
+
+        mock_config = MagicMock()
+        mock_config.onecontext_mode = OnecontextMode.FREEZE
+        mock_config.start_script = None
+        mock_parse.return_value = mock_config
+        mock_generate.return_value = ["set system host-name test-router"]
+
+        # Create a mock session that tracks call order
+        mock_session = MagicMock()
+        mock_session_class.return_value = mock_session
+
+        with patch("vyos_onecontext.__main__.FREEZE_MARKER_PATH", str(tmp_path / "frozen")):
+            result = apply_configuration(str(context_path))
+            assert result == EXIT_SUCCESS
+
+            # Verify the exact order of calls: verify_group → begin → run_commands → commit → save → end
+            # The critical assertion is that save() is called BEFORE end()
+            expected_calls = [
+                call.verify_group(),
+                call.begin(),
+                call.run_commands(["set system host-name test-router"]),
+                call.commit(),
+                call.save(),
+                call.end(),
+            ]
+            assert mock_session.method_calls == expected_calls
+            # Also verify freeze marker was created after save
+            mock_freeze.assert_called_once()
+
+    @patch("vyos_onecontext.__main__.VyOSConfigSession")
+    @patch("vyos_onecontext.__main__.generate_config")
+    @patch("vyos_onecontext.__main__.parse_context")
+    def test_apply_configuration_save_before_end_on_error(
+        self,
+        mock_parse: MagicMock,
+        mock_generate: MagicMock,
+        mock_session_class: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """Test that save() is still called before end() even when save() fails."""
+        from vyos_onecontext.wrapper import VyOSConfigError
+
+        context_path = tmp_path / "context.sh"
+        context_path.write_text('HOSTNAME="test-router"')
+
+        from vyos_onecontext.models import OnecontextMode
+
+        mock_config = MagicMock()
+        mock_config.onecontext_mode = OnecontextMode.SAVE
+        mock_config.start_script = None
+        mock_parse.return_value = mock_config
+        mock_generate.return_value = ["set system host-name test-router"]
+
+        # Create a mock session where save() fails
+        mock_session = MagicMock()
+        mock_session.save.side_effect = VyOSConfigError("Save failed")
+        mock_session_class.return_value = mock_session
+
+        with patch("vyos_onecontext.__main__.FREEZE_MARKER_PATH", str(tmp_path / "frozen")):
+            result = apply_configuration(str(context_path))
+            assert result == EXIT_CONFIG_ERROR
+
+            # Verify save was attempted before end was called (critical for bug fix)
+            # Even though save() failed, end() should still be called in finally block
+            assert mock_session.save.called
+            assert mock_session.end.called
+            
+            # Verify verify_group/begin/run_commands/commit were called before save
+            # and that save was called before end
+            call_order = [c[0] for c in mock_session.method_calls]
+            assert "verify_group" in call_order
+            assert call_order.index("verify_group") < call_order.index("begin")
+            assert call_order.index("begin") < call_order.index("run_commands")
+            assert call_order.index("run_commands") < call_order.index("commit")
+            assert call_order.index("commit") < call_order.index("save")
+            assert call_order.index("save") < call_order.index("end")
+
     @patch("vyos_onecontext.__main__.run_start_script")
     @patch("vyos_onecontext.__main__.VyOSConfigSession")
     @patch("vyos_onecontext.__main__.generate_config")
