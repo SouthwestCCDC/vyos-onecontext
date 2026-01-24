@@ -175,3 +175,22 @@ To add a new test scenario:
 
 For custom validation, modify `run-qemu-test.sh` to check specific
 configuration elements.
+
+### Validating New Fixtures Before Merge
+
+**IMPORTANT**: New test fixtures MUST be validated before adding them to the
+`TEST_SCENARIOS` array in `run-all-tests.sh` and merging.
+
+With selective testing enabled (see CI Integration above), new fixtures may not
+run during PR CI if they're not mapped to changed code paths in
+`.github/test-mapping.yml`. This means a new fixture could be added to the repo
+but never actually execute until after merge, potentially introducing broken tests.
+
+**Before merging a PR that adds a new test fixture:**
+
+1. **Run the fixture locally** using the steps in "Running Tests Locally" above, OR
+2. **Add the fixture to test-mapping.yml** for the relevant code paths it exercises,
+   ensuring it runs during PR CI
+
+This validation requirement was added after PR #125 introduced `start-script.env`,
+which was added to `TEST_SCENARIOS` but never ran until post-merge, where it failed.
