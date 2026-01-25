@@ -17,7 +17,7 @@ applyTo: "**/*.py"
 ## Generator Pattern
 - Generators in `src/vyos_onecontext/generators/`
 - Each generator handles one aspect of VyOS config
-- Generators output VyOS command strings, shell executes them
+- Generators output VyOS command strings; Python applies them via the VyOS config session
 - Commands must be valid VyOS Sagitta 1.4.x syntax
 
 ## Testing
