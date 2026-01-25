@@ -30,7 +30,7 @@ context on every boot.
 Target version: **Sagitta 1.4.x LTS**
 
 Key syntax differences from Equuleus (interface-based config preferred in Sagitta):
-- NAT interface: `outbound-interface name eth0` (not bare `eth0`)
+- NAT interface: `outbound-interface name 'eth0'` (not `outbound-interface eth0`)
 - Static routes: `route X interface Y` (not `interface-route X next-hop-interface Y`)
 - Firewall zones: `firewall zone` (not `zone-policy zone`)
 - OSPF: `interface X area Y` (not `area Y network X`)
@@ -80,7 +80,7 @@ Our CI pipeline handles:
 ### VyOS-Specific Review Points
 
 - **Sagitta syntax**: Verify commands use Sagitta 1.4.x syntax (see syntax differences in project docs)
-- **Sagitta interface syntax**: NAT uses `outbound-interface name eth0`, routes use `route X interface Y`
+- **Sagitta interface syntax**: NAT uses `outbound-interface name 'eth0'`, routes use `route X interface Y`
 - **Stateless routers**: All config derives from context - no persistent state assumptions
 - **Test fixtures**: New context patterns need corresponding test fixtures
 
@@ -117,7 +117,7 @@ Disclose when AI generates content that humans will read and might attribute to 
 - Commit messages with substantive explanations
 
 **How to disclose:**
-- Commits: `Co-Authored-By:` line with AI identity
+- Commits: `Co-authored-by:` line with AI identity
 - Documentation/comments: brief closing sentence
 - Include tool and model when known (e.g., "Claude Code w/ Opus 4.5")
 
