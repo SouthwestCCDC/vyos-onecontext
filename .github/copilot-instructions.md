@@ -90,6 +90,21 @@ Flag these with **CRITICAL** priority:
 - Missing input validation on context variables
 - Incorrect zone assignments that bypass security boundaries
 
+### Review Self-Assessment
+
+At the end of your review, include a brief summary comment with:
+
+1. **Scope note**: If this PR has >10 changed files or >400 lines changed, note: "This is a large PR. Consider requesting a second review pass after addressing these comments."
+
+2. **Tooling gaps**: If you flag issues that a linter could catch automatically, note which tool would help rather than commenting on each instance. Examples:
+   - Python formatting → "Run `ruff format`"
+   - Type errors → "Covered by `mypy` in CI"
+   - Shell issues → "Run `shellcheck`"
+
+3. **Files skipped**: If you skipped any files as "low risk" or due to size limits, list them so the author knows to check them manually.
+
+4. **Categories reviewed**: Briefly note which categories you checked (VyOS syntax, Pydantic validation, test coverage, security) so authors know what wasn't covered if you focused narrowly.
+
 ## MANDATORY: Be transparent about AI use
 
 Disclose when AI generates content that humans will read and might attribute to a specific person.
