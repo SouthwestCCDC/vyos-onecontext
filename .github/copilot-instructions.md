@@ -9,7 +9,7 @@ OpenNebula context variables. Routers are stateless by default - all configurati
 context on every boot.
 
 **Architecture:**
-- Shell entry point for systemd integration and VyOS `vbash` execution
+- Shell entry point via VyOS boot hooks (`vyos-postconfig-bootup.script`)
 - Python package (`vyos_onecontext`) for JSON parsing, validation, and config generation
 - Pydantic models for schema validation
 - Generators output VyOS command strings; shell executes them
