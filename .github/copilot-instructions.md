@@ -12,7 +12,7 @@ context on every boot.
 - Shell entry point via VyOS boot hooks (`vyos-postconfig-bootup.script`)
 - Python package (`vyos_onecontext`) for JSON parsing, validation, and config generation
 - Pydantic models for schema validation
-- Generators output VyOS command strings; shell executes them
+- Generators output VyOS command strings; Python applies them via `VyOSConfigSession` (shell orchestrates boot and invokes Python)
 
 ## Branches
 
