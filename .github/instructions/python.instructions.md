@@ -5,7 +5,7 @@ applyTo: "**/*.py"
 # Python Code Guidelines
 
 ## Type Hints
-- All public functions must have type hints
+- All functions in `src/` must have type hints (CI runs `mypy src/` with `disallow_untyped_defs = true`)
 - Use Pydantic models for context variable validation
 - Generator functions return `list[str]` (VyOS commands)
 

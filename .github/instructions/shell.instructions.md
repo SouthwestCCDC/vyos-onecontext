@@ -13,7 +13,7 @@ applyTo: "**/*.{sh,script}"
 ## Error Handling
 - Check command exit codes
 - Log errors to syslog for debugging
-- Fail gracefully - partial config is better than boot failure
+- Use transactional config application (all-or-nothing) - avoid partial config that could leave security gaps
 
 ## VyOS Boot Integration
 - Entry point is `/config/scripts/vyos-postconfig-bootup.script` (VyOS hook, not systemd)
