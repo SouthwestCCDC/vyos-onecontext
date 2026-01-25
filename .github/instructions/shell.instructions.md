@@ -1,5 +1,5 @@
 ---
-applyTo: "**/*.sh"
+applyTo: "**/*.{sh,script}"
 ---
 
 # Shell Script Guidelines
@@ -17,7 +17,7 @@ applyTo: "**/*.sh"
 
 ## VyOS Boot Integration
 - Entry point is `/config/scripts/vyos-postconfig-bootup.script` (VyOS hook, not systemd)
-- This calls `scripts/vyos-onecontext-boot.sh` which runs the Python module
+- This calls `/opt/vyos-onecontext/boot.sh` (installed from `scripts/vyos-onecontext-boot.sh`)
 - Boot script requires `vyattacfg` group membership for VyOS config API access
 
 ## ShellCheck

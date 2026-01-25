@@ -30,7 +30,7 @@ context on every boot.
 Target version: **Sagitta 1.4.x LTS**
 
 Key syntax differences from Equuleus (interface-based config preferred in Sagitta):
-- NAT interface: `outbound-interface name 'eth0'` (not bare `eth0`)
+- NAT interface: `outbound-interface name eth0` (not bare `eth0`)
 - Static routes: `route X interface Y` (not `interface-route X next-hop-interface Y`)
 - Firewall zones: `firewall zone` (not `zone-policy zone`)
 - OSPF: `interface X area Y` (not `area Y network X`)
@@ -73,6 +73,7 @@ Our CI pipeline handles:
 - Python linting (`ruff`)
 - Type checking (`mypy`)
 - Unit tests (`pytest`)
+- Packer build and QEMU integration tests (runs on eligible self-hosted runners)
 
 **Do not duplicate feedback** on issues these tools catch. Focus on VyOS command correctness, context variable handling, and router configuration logic.
 
