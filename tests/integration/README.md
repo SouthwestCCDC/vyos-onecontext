@@ -65,6 +65,20 @@ Test context files are in `contexts/`:
 - **nat-with-firewall.env**: NAT with zone-based firewall
 - **start-script.env**: START_SCRIPT post-configuration script execution
 
+### Error Scenarios
+
+Error scenario fixtures test graceful error handling:
+
+- **invalid-json.env**: Malformed JSON in ROUTES_JSON (tests JSON parse error handling)
+- **missing-required-fields.env**: OSPF_JSON missing required 'enabled' field (tests Pydantic validation)
+- **partial-valid.env**: Multiple errors across different sections (tests error accumulation)
+
+These scenarios validate that:
+- Valid configuration sections are still applied when other sections fail
+- Errors are collected and logged with clear messages
+- An ERROR SUMMARY is generated
+- Exit code 1 is returned (indicating errors) but boot completes successfully
+
 ## CI Integration
 
 In CI, these tests run on self-hosted KVM runners with selective testing based on
