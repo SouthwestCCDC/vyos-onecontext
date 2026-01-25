@@ -128,6 +128,22 @@ while true; do
         if grep -q "vyos-onecontext.*completed successfully" "$SERIAL_LOG" 2>/dev/null; then
             echo "[PASS] Contextualization completed successfully"
             break
+        elif grep -q "vyos-onecontext.*failed with exit code 1" "$SERIAL_LOG" 2>/dev/null; then
+            # Exit code 1 is acceptable for error scenarios (partial valid config)
+            # Check if this is an expected error scenario
+            case "$CONTEXT_NAME" in
+                invalid-json|missing-required-fields|partial-valid)
+                    echo "[INFO] Contextualization completed with expected errors (exit code 1)"
+                    echo "      This is expected for error scenario '$CONTEXT_NAME'"
+                    break
+                    ;;
+                *)
+                    echo "ERROR: Contextualization failed with exit code 1"
+                    echo "=== Serial log ==="
+                    cat "$SERIAL_LOG"
+                    exit 1
+                    ;;
+            esac
         elif grep -q "vyos-onecontext.*failed" "$SERIAL_LOG" 2>/dev/null; then
             echo "ERROR: Contextualization failed"
             echo "=== Serial log ==="
@@ -226,13 +242,27 @@ else
     VALIDATION_FAILED=1
 fi
 
-# Check for errors in contextualization
-if grep -q "vyos-onecontext.*error\|vyos-onecontext.*ERROR" "$SERIAL_LOG"; then
-    echo "[FAIL] Contextualization errors detected"
-    VALIDATION_FAILED=1
-else
-    echo "[PASS] No contextualization errors detected"
-fi
+# Check for errors in contextualization (expected for error scenarios)
+case "$CONTEXT_NAME" in
+    invalid-json|missing-required-fields|partial-valid)
+        # Error scenarios SHOULD have errors
+        if grep -q "vyos-onecontext.*error\|vyos-onecontext.*ERROR" "$SERIAL_LOG"; then
+            echo "[PASS] Contextualization errors detected (expected for error scenario)"
+        else
+            echo "[FAIL] No contextualization errors detected (expected errors for '$CONTEXT_NAME')"
+            VALIDATION_FAILED=1
+        fi
+        ;;
+    *)
+        # Normal scenarios should NOT have errors
+        if grep -q "vyos-onecontext.*error\|vyos-onecontext.*ERROR" "$SERIAL_LOG"; then
+            echo "[FAIL] Contextualization errors detected"
+            VALIDATION_FAILED=1
+        else
+            echo "[PASS] No contextualization errors detected"
+        fi
+        ;;
+esac
 
 # Check for Python exceptions in vyos-onecontext output
 # Matches: "Traceback (most recent", "SomeError:", "SomeException:"
@@ -476,8 +506,123 @@ case "$CONTEXT_NAME" in
             echo "[WARN] SSH not available - cannot verify START_SCRIPT execution"
         fi
         ;;
-    invalid-json|missing-required-fields|partial-valid)
-        echo "[INFO] Error scenario '$CONTEXT_NAME' - harness does not yet support error scenario validation"
+    invalid-json)
+        echo ""
+        echo "=== Error Scenario: Invalid JSON ==="
+        assert_command_generated "set system host-name test-invalid-json" "Hostname configuration (valid)"
+        assert_command_generated "set interfaces ethernet eth0 address.*192.168.122.90" "Interface eth0 IP (valid)"
+
+        # DHCP should be configured (valid section)
+        assert_command_generated "set service dhcp-server" "DHCP server configuration (valid)"
+
+        # Should have error about ROUTES_JSON
+        if grep -q "ERROR.*ROUTES_JSON" "$SERIAL_LOG"; then
+            echo "[PASS] ROUTES_JSON error logged"
+        else
+            echo "[FAIL] ROUTES_JSON error not logged"
+            VALIDATION_FAILED=1
+        fi
+
+        # Should show error summary
+        if grep -q "ERROR SUMMARY" "$SERIAL_LOG"; then
+            echo "[PASS] Error summary logged"
+        else
+            echo "[FAIL] Error summary not logged"
+            VALIDATION_FAILED=1
+        fi
+
+        # Should NOT have route commands (invalid section skipped)
+        if grep -q "VYOS_CMD:.*set protocols static route" "$SERIAL_LOG"; then
+            echo "[FAIL] Static route commands should not be generated (invalid JSON)"
+            VALIDATION_FAILED=1
+        else
+            echo "[PASS] Static route commands correctly skipped (invalid JSON)"
+        fi
+        ;;
+    missing-required-fields)
+        echo ""
+        echo "=== Error Scenario: Missing Required Fields ==="
+        assert_command_generated "set system host-name test-missing-fields" "Hostname configuration (valid)"
+        assert_command_generated "set interfaces ethernet eth0 address.*192.168.122.91" "Interface eth0 IP (valid)"
+
+        # DHCP should be configured (valid section)
+        assert_command_generated "set service dhcp-server" "DHCP server configuration (valid)"
+
+        # Should have error about OSPF_JSON missing required field
+        if grep -q "ERROR.*OSPF_JSON" "$SERIAL_LOG"; then
+            echo "[PASS] OSPF_JSON error logged"
+        else
+            echo "[FAIL] OSPF_JSON error not logged"
+            VALIDATION_FAILED=1
+        fi
+
+        # Should show error summary
+        if grep -q "ERROR SUMMARY" "$SERIAL_LOG"; then
+            echo "[PASS] Error summary logged"
+        else
+            echo "[FAIL] Error summary not logged"
+            VALIDATION_FAILED=1
+        fi
+
+        # Should NOT have OSPF commands (invalid section skipped)
+        if grep -q "VYOS_CMD:.*set protocols ospf" "$SERIAL_LOG"; then
+            echo "[FAIL] OSPF commands should not be generated (missing required field)"
+            VALIDATION_FAILED=1
+        else
+            echo "[PASS] OSPF commands correctly skipped (missing required field)"
+        fi
+        ;;
+    partial-valid)
+        echo ""
+        echo "=== Error Scenario: Partial Valid Config (Multiple Errors) ==="
+        assert_command_generated "set system host-name test-partial-valid" "Hostname configuration (valid)"
+        assert_command_generated "set interfaces ethernet eth0 address.*192.168.122.92" "Interface eth0 IP (valid)"
+
+        # DHCP should be configured (valid section)
+        assert_command_generated "set service dhcp-server" "DHCP server configuration (valid)"
+
+        # Should have errors about both ROUTES_JSON and OSPF_JSON
+        ROUTES_ERROR_FOUND=0
+        OSPF_ERROR_FOUND=0
+
+        if grep -q "ERROR.*ROUTES_JSON" "$SERIAL_LOG"; then
+            echo "[PASS] ROUTES_JSON error logged"
+            ROUTES_ERROR_FOUND=1
+        else
+            echo "[FAIL] ROUTES_JSON error not logged"
+            VALIDATION_FAILED=1
+        fi
+
+        if grep -q "ERROR.*OSPF_JSON" "$SERIAL_LOG"; then
+            echo "[PASS] OSPF_JSON error logged"
+            OSPF_ERROR_FOUND=1
+        else
+            echo "[FAIL] OSPF_JSON error not logged"
+            VALIDATION_FAILED=1
+        fi
+
+        # Should show error summary with multiple errors
+        if grep -q "ERROR SUMMARY" "$SERIAL_LOG"; then
+            echo "[PASS] Error summary logged"
+        else
+            echo "[FAIL] Error summary not logged"
+            VALIDATION_FAILED=1
+        fi
+
+        # Should NOT have route or OSPF commands (both invalid)
+        if grep -q "VYOS_CMD:.*set protocols static route" "$SERIAL_LOG"; then
+            echo "[FAIL] Static route commands should not be generated (malformed JSON)"
+            VALIDATION_FAILED=1
+        else
+            echo "[PASS] Static route commands correctly skipped (malformed JSON)"
+        fi
+
+        if grep -q "VYOS_CMD:.*set protocols ospf" "$SERIAL_LOG"; then
+            echo "[FAIL] OSPF commands should not be generated (missing required field)"
+            VALIDATION_FAILED=1
+        else
+            echo "[PASS] OSPF commands correctly skipped (missing required field)"
+        fi
         ;;
     *)
         echo "[WARN] Unknown context '$CONTEXT_NAME' - no specific assertions"

@@ -16,10 +16,93 @@ from pathlib import Path
 
 import pytest
 
+from vyos_onecontext.errors import ErrorCollector
 from vyos_onecontext.parser import ContextParser
 
 # Path to integration test fixtures
 FIXTURES_DIR = Path(__file__).parent / "integration" / "contexts"
+
+
+class TestErrorScenarioFixtures:
+    """Test error scenario fixtures behave as expected."""
+
+    def test_invalid_json_fixture(self) -> None:
+        """Test invalid-json.env fixture produces expected errors."""
+        error_collector = ErrorCollector()
+        parser = ContextParser(
+            str(FIXTURES_DIR / "invalid-json.env"), error_collector=error_collector
+        )
+        config = parser.parse()
+
+        # Valid sections should parse
+        assert config.hostname == "test-invalid-json"
+        assert len(config.interfaces) >= 1
+        assert config.dhcp is not None
+
+        # Invalid ROUTES_JSON should be None
+        assert config.routes is None
+
+        # Should have exactly one error for ROUTES_JSON
+        assert error_collector.has_errors()
+        assert error_collector.get_error_count() == 1
+        assert error_collector.errors[0].section == "ROUTES_JSON"
+        assert "Invalid JSON" in error_collector.errors[0].message
+
+    def test_missing_required_fields_fixture(self) -> None:
+        """Test missing-required-fields.env fixture produces expected errors."""
+        error_collector = ErrorCollector()
+        parser = ContextParser(
+            str(FIXTURES_DIR / "missing-required-fields.env"),
+            error_collector=error_collector,
+        )
+        config = parser.parse()
+
+        # Valid sections should parse
+        assert config.hostname == "test-missing-fields"
+        assert len(config.interfaces) >= 1
+        assert config.dhcp is not None
+
+        # Invalid OSPF_JSON should be None (missing required 'enabled' field)
+        assert config.ospf is None
+
+        # Should have exactly one error for OSPF_JSON
+        assert error_collector.has_errors()
+        assert error_collector.get_error_count() == 1
+        assert error_collector.errors[0].section == "OSPF_JSON"
+        assert "Validation error" in error_collector.errors[0].message
+
+    def test_partial_valid_fixture(self) -> None:
+        """Test partial-valid.env fixture produces multiple expected errors."""
+        error_collector = ErrorCollector()
+        parser = ContextParser(
+            str(FIXTURES_DIR / "partial-valid.env"), error_collector=error_collector
+        )
+        config = parser.parse()
+
+        # Valid sections should parse
+        assert config.hostname == "test-partial-valid"
+        assert len(config.interfaces) >= 1
+        assert config.dhcp is not None
+
+        # Both ROUTES_JSON and OSPF_JSON should be None (both invalid)
+        assert config.routes is None
+        assert config.ospf is None
+
+        # Should have exactly two errors
+        assert error_collector.has_errors()
+        assert error_collector.get_error_count() == 2
+
+        # Verify both errors are present
+        error_sections = [e.section for e in error_collector.errors]
+        assert "ROUTES_JSON" in error_sections
+        assert "OSPF_JSON" in error_sections
+
+        # Verify error types
+        routes_error = next(e for e in error_collector.errors if e.section == "ROUTES_JSON")
+        ospf_error = next(e for e in error_collector.errors if e.section == "OSPF_JSON")
+
+        assert "Invalid JSON" in routes_error.message
+        assert "Validation error" in ospf_error.message
 
 
 class TestFixturesParsing:

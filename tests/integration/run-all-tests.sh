@@ -47,6 +47,9 @@ declare -a TEST_SCENARIOS=(
     "vrf-with-routing:VRF with routing (VRF+static+OSPF)"
     "nat-with-firewall:NAT with firewall zones"
     "start-script:START_SCRIPT execution"
+    "invalid-json:Error scenario - Invalid JSON"
+    "missing-required-fields:Error scenario - Missing required fields"
+    "partial-valid:Error scenario - Partial valid config"
 )
 
 TEMP_DIR=$(mktemp -d)
