@@ -652,6 +652,27 @@ case "$CONTEXT_NAME" in
             echo "[PASS] OSPF commands correctly skipped (missing required field)"
         fi
         ;;
+    ssh-keys)
+        assert_command_generated "set system host-name" "Hostname configuration"
+        # SSH key configuration commands
+        assert_command_generated "set service ssh port 22" "SSH service enabled on port 22"
+        assert_command_generated "set system login user vyos authentication public-keys" "SSH public key configuration"
+        # Verify key type and key data are configured
+        assert_command_generated "authentication public-keys.*type" "SSH key type configured"
+        assert_command_generated "authentication public-keys.*key" "SSH key data configured"
+
+        # Verify multiple keys if configured (ssh-keys.env has 2 keys)
+        # Count the number of public-key commands
+        KEY_COUNT=$(grep -c "VYOS_CMD:.*authentication public-keys.*key.*AAAA" "$SERIAL_LOG" || echo "0")
+        if [ "$KEY_COUNT" -ge 2 ]; then
+            echo "[PASS] Multiple SSH keys configured (found $KEY_COUNT keys)"
+        elif [ "$KEY_COUNT" -eq 1 ]; then
+            echo "[WARN] Only one SSH key found, expected multiple for ssh-keys fixture"
+        else
+            echo "[FAIL] No SSH keys found in configuration"
+            VALIDATION_FAILED=1
+        fi
+        ;;
     *)
         echo "[WARN] Unknown context '$CONTEXT_NAME' - no specific assertions"
         ;;

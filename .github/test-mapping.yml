@@ -53,8 +53,10 @@ mappings:
 
   # Generator: System (hostname, SSH keys)
   - pattern: "src/vyos_onecontext/generators/system.py"
-    fixtures: ["all"]
-    description: "System settings - hostname/SSH used by all contexts"
+    fixtures:
+      - "all"
+      - "ssh-keys"
+    description: "System settings - hostname/SSH used by all contexts, ssh-keys tests SSH key injection"
 
   # Generator: Interfaces
   - pattern: "src/vyos_onecontext/generators/interface.py"
