@@ -239,7 +239,7 @@ class TestSSHKeyInjection:
             # Verify we have both RSA and ED25519 keys
             key_types = [line.split()[0] for line in key_lines if line.strip()]
             assert (
-                "ssh-rsa" in key_types or "ssh-ed25519" in key_types
+                "ssh-rsa" in key_types and "ssh-ed25519" in key_types
             ), "Should have expected key types"
 
     def test_ssh_key_format_preserved(
@@ -286,6 +286,14 @@ class TestSSHKeyInjection:
         The SshKeyGenerator should enable SSH service on port 22 when
         installing public keys.
         """
+        # Check if SSH keys are configured first
+        check_output = ssh_connection(
+            "test -f /home/vyos/.ssh/authorized_keys && echo 'EXISTS' || echo 'MISSING'"
+        )
+
+        if "MISSING" in check_output:
+            pytest.skip("Context does not have SSH_PUBLIC_KEY configured")
+
         output = ssh_connection("show configuration | grep 'service ssh'")
 
         # Should have SSH service configured

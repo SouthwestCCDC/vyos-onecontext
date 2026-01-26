@@ -41,7 +41,7 @@ class SshKeyGenerator(BaseGenerator):
         """Generate SSH public key configuration commands.
 
         Parses the SSH key format (type key comment) and generates VyOS commands
-        to configure it for the vyos user.
+        to configure it for the vyos user. Supports multiple newline-separated keys.
 
         Returns:
             List with SSH key commands if key is set, empty list otherwise
@@ -49,29 +49,45 @@ class SshKeyGenerator(BaseGenerator):
         if self.ssh_public_key is None:
             return []
 
-        # Parse SSH key format: "type key comment"
-        # Example: "ssh-rsa AAAAB3NzaC1yc2E... user@host"
-        parts = self.ssh_public_key.strip().split(None, 2)
+        commands = []
+        key_configs = []
 
-        if len(parts) < 2:
-            # Invalid key format - skip configuration
-            return []
+        # Split on newlines to handle multiple keys
+        for key_line in self.ssh_public_key.strip().split('\n'):
+            key_line = key_line.strip()
+            if not key_line:
+                continue
 
-        key_type = parts[0]
-        key_data = parts[1]
+            # Parse SSH key format: "type key comment"
+            # Example: "ssh-rsa AAAAB3NzaC1yc2E... user@host"
+            parts = key_line.split(None, 2)
 
-        # Use comment as identifier if available, otherwise use "key1"
-        key_id = parts[2] if len(parts) >= 3 else "key1"
-        # Sanitize key_id for use as VyOS identifier
-        # VyOS only accepts alphanumeric characters and underscores
-        # Strip surrounding quotes (single or double) that may be in the comment
-        key_id = key_id.strip("\"'")
-        key_id = key_id.replace("@", "_at_").replace(" ", "_").replace(".", "_")
+            if len(parts) < 2:
+                # Invalid key format - skip this key
+                continue
 
-        return [
-            # Enable SSH service (required since base config is wiped)
-            "set service ssh port 22",
+            key_type = parts[0]
+            key_data = parts[1]
+
+            # Use comment as identifier if available, otherwise use "key1"
+            key_id = parts[2] if len(parts) >= 3 else "key1"
+            # Sanitize key_id for use as VyOS identifier
+            # VyOS only accepts alphanumeric characters and underscores
+            # Strip surrounding quotes (single or double) that may be in the comment
+            key_id = key_id.strip("\"'")
+            key_id = key_id.replace("@", "_at_").replace(" ", "_").replace(".", "_")
+
             # Configure the public key for authentication
-            f"set system login user vyos authentication public-keys {key_id} key {key_data}",
-            f"set system login user vyos authentication public-keys {key_id} type {key_type}",
-        ]
+            key_configs.append(
+                f"set system login user vyos authentication public-keys {key_id} key {key_data}"
+            )
+            key_configs.append(
+                f"set system login user vyos authentication public-keys {key_id} type {key_type}"
+            )
+
+        # Only enable SSH service if we have at least one valid key
+        if key_configs:
+            commands.append("set service ssh port 22")
+            commands.extend(key_configs)
+
+        return commands
