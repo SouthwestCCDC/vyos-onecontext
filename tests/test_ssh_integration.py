@@ -114,9 +114,7 @@ class TestContextSpecificValidation:
     These tests may be skipped if they don't match the current test context.
     """
 
-    def test_management_vrf_if_configured(
-        self, ssh_connection: Callable[[str], str]
-    ) -> None:
+    def test_management_vrf_if_configured(self, ssh_connection: Callable[[str], str]) -> None:
         """If management VRF is configured, verify it exists.
 
         This test checks if VRF is present in config and validates if so.
@@ -130,9 +128,7 @@ class TestContextSpecificValidation:
         # If VRF is configured, verify it has proper structure
         assert "vrf" in output
 
-    def test_static_routes_if_configured(
-        self, ssh_connection: Callable[[str], str]
-    ) -> None:
+    def test_static_routes_if_configured(self, ssh_connection: Callable[[str], str]) -> None:
         """If static routes configured, verify they exist.
 
         Not all contexts have static routes, so skip if not present.
@@ -156,9 +152,7 @@ class TestSSHKeyInjection:
     parsed, installed in authorized_keys, and preserved correctly.
     """
 
-    def test_ssh_keys_in_vyos_config(
-        self, ssh_connection: Callable[[str], str]
-    ) -> None:
+    def test_ssh_keys_in_vyos_config(self, ssh_connection: Callable[[str], str]) -> None:
         """Verify SSH public keys appear in VyOS configuration.
 
         This checks that the SshKeyGenerator successfully created VyOS commands
@@ -177,9 +171,7 @@ class TestSSHKeyInjection:
         assert "type" in output
         assert "key" in output
 
-    def test_ssh_keys_in_authorized_keys_file(
-        self, ssh_connection: Callable[[str], str]
-    ) -> None:
+    def test_ssh_keys_in_authorized_keys_file(self, ssh_connection: Callable[[str], str]) -> None:
         """Verify SSH public keys are installed in authorized_keys file.
 
         This is the critical E2E test - it validates that keys specified in
@@ -191,28 +183,22 @@ class TestSSHKeyInjection:
         )
 
         if "MISSING" in output:
-            pytest.skip(
-                "Context does not have SSH_PUBLIC_KEY configured (no authorized_keys file)"
-            )
+            pytest.skip("Context does not have SSH_PUBLIC_KEY configured (no authorized_keys file)")
 
         # Read the authorized_keys file
         output = ssh_connection("cat /home/vyos/.ssh/authorized_keys")
 
         # Should contain at least one SSH key
         # Valid SSH keys start with ssh-rsa, ssh-ed25519, ecdsa-sha2-nistp256, etc.
-        assert re.search(
-            r"ssh-(?:rsa|ed25519|dss|ecdsa)", output
-        ), "Should contain valid SSH key type"
+        assert re.search(r"ssh-(?:rsa|ed25519|dss|ecdsa)", output), (
+            "Should contain valid SSH key type"
+        )
 
         # Should contain base64-encoded key data
         # SSH keys have base64 data that's typically quite long
-        assert re.search(
-            r"[A-Za-z0-9+/]{64,}", output
-        ), "Should contain base64-encoded key data"
+        assert re.search(r"[A-Za-z0-9+/]{64,}", output), "Should contain base64-encoded key data"
 
-    def test_multiple_ssh_keys_if_configured(
-        self, ssh_connection: Callable[[str], str]
-    ) -> None:
+    def test_multiple_ssh_keys_if_configured(self, ssh_connection: Callable[[str], str]) -> None:
         """Verify multiple SSH keys are handled correctly if configured.
 
         Tests that newline-separated keys in SSH_PUBLIC_KEY result in
@@ -230,7 +216,7 @@ class TestSSHKeyInjection:
         output = ssh_connection("cat /home/vyos/.ssh/authorized_keys")
 
         # Count number of key lines (each valid key starts with ssh-)
-        key_lines = [line for line in output.split('\n') if line.strip().startswith('ssh-')]
+        key_lines = [line for line in output.split("\n") if line.strip().startswith("ssh-")]
 
         # If we have multiple keys, verify they're all present
         # The ssh-keys.env fixture has 2 keys (one RSA, one ED25519)
@@ -238,13 +224,11 @@ class TestSSHKeyInjection:
         if len(key_lines) >= 2:
             # Verify we have both RSA and ED25519 keys
             key_types = [line.split()[0] for line in key_lines if line.strip()]
-            assert (
-                "ssh-rsa" in key_types and "ssh-ed25519" in key_types
-            ), "Should have expected key types"
+            assert "ssh-rsa" in key_types and "ssh-ed25519" in key_types, (
+                "Should have expected key types"
+            )
 
-    def test_ssh_key_format_preserved(
-        self, ssh_connection: Callable[[str], str]
-    ) -> None:
+    def test_ssh_key_format_preserved(self, ssh_connection: Callable[[str], str]) -> None:
         """Verify SSH key format is not mangled during injection.
 
         This test validates that the key data and comments are preserved
@@ -263,9 +247,9 @@ class TestSSHKeyInjection:
 
         # Each line should follow the standard SSH key format:
         # <type> <base64-data> [comment]
-        for line in output.split('\n'):
+        for line in output.split("\n"):
             line = line.strip()
-            if not line or line.startswith('#'):
+            if not line or line.startswith("#"):
                 continue
 
             parts = line.split(None, 2)
@@ -273,14 +257,12 @@ class TestSSHKeyInjection:
             assert len(parts) >= 2, f"SSH key line malformed: {line}"
 
             # First part should be a valid key type
-            assert parts[0].startswith('ssh-'), f"Invalid key type: {parts[0]}"
+            assert parts[0].startswith("ssh-"), f"Invalid key type: {parts[0]}"
 
             # Second part should be base64 data (no spaces, only valid base64 chars)
-            assert re.match(r'^[A-Za-z0-9+/]+=*$', parts[1]), f"Invalid base64 key data: {parts[1]}"
+            assert re.match(r"^[A-Za-z0-9+/]+=*$", parts[1]), f"Invalid base64 key data: {parts[1]}"
 
-    def test_ssh_service_enabled(
-        self, ssh_connection: Callable[[str], str]
-    ) -> None:
+    def test_ssh_service_enabled(self, ssh_connection: Callable[[str], str]) -> None:
         """Verify SSH service is enabled when SSH keys are configured.
 
         The SshKeyGenerator should enable SSH service on port 22 when
@@ -294,7 +276,7 @@ class TestSSHKeyInjection:
         if "MISSING" in check_output:
             pytest.skip("Context does not have SSH_PUBLIC_KEY configured")
 
-        output = ssh_connection("show configuration | grep 'service ssh'")
+        output = ssh_connection("show configuration | grep 'service ssh' || echo 'No SSH service'")
 
         # Should have SSH service configured
         assert "service ssh" in output

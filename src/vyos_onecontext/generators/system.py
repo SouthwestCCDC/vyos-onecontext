@@ -53,7 +53,7 @@ class SshKeyGenerator(BaseGenerator):
         key_configs = []
 
         # Split on newlines to handle multiple keys
-        for key_line in self.ssh_public_key.strip().split('\n'):
+        for key_line in self.ssh_public_key.strip().split("\n"):
             key_line = key_line.strip()
             if not key_line:
                 continue

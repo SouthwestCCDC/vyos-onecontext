@@ -138,8 +138,7 @@ def full_context(sample_context: dict[str, str]) -> dict[str, str]:
     return {
         **sample_context,
         "ROUTES_JSON": (
-            '{"static":[{"interface":"eth1","destination":"0.0.0.0/0",'
-            '"gateway":"10.0.1.254"}]}'
+            '{"static":[{"interface":"eth1","destination":"0.0.0.0/0","gateway":"10.0.1.254"}]}'
         ),
         "OSPF_JSON": '{"enabled":true,"areas":[{"id":"0.0.0.0","networks":["10.0.0.0/8"]}]}',
     }

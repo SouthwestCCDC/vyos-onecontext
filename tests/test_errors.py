@@ -161,9 +161,7 @@ class TestErrorCollector:
         assert "Immediate error" in caplog.text
         assert "[TEST]" in caplog.text
 
-    def test_warnings_logged_at_warning_level(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_warnings_logged_at_warning_level(self, caplog: pytest.LogCaptureFixture) -> None:
         """Test that warnings are logged at WARNING level."""
         collector = ErrorCollector()
 
