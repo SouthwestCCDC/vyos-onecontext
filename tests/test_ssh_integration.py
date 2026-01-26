@@ -249,8 +249,7 @@ class TestSSHKeyInjection:
         # Each line should follow the standard SSH key format:
         # <type> <base64-data> [comment]
         for line in output.split("\n"):
-            line = line.strip()
-            if not line or line.startswith("#"):
+            if not line.strip() or line.startswith("#"):
                 continue
 
             parts = line.split(None, 2)

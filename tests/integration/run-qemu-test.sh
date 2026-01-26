@@ -662,10 +662,13 @@ case "$CONTEXT_NAME" in
         assert_command_generated "authentication public-keys.*key" "SSH key data configured"
 
         # Verify multiple keys if configured (ssh-keys.env has 2 keys)
-        # Count the number of public-key commands
-        KEY_COUNT=$(grep -c "VYOS_CMD:.*authentication public-keys.*key.*AAAA" "$SERIAL_LOG" || echo "0")
+        # Count distinct "authentication public-keys <identifier>" entries
+        # Extract key identifiers from commands like "set system login user vyos authentication public-keys <id> ..."
+        KEY_COUNT=$(grep "VYOS_CMD:.*authentication public-keys" "$SERIAL_LOG" | \
+                    sed -n 's/.*authentication public-keys \([^ ]*\).*/\1/p' | \
+                    sort -u | wc -l)
         if [ "$KEY_COUNT" -ge 2 ]; then
-            echo "[PASS] Multiple SSH keys configured (found $KEY_COUNT keys)"
+            echo "[PASS] Multiple SSH keys configured (found $KEY_COUNT distinct keys)"
         elif [ "$KEY_COUNT" -eq 1 ]; then
             echo "[WARN] Only one SSH key found, expected multiple for ssh-keys fixture"
         else
