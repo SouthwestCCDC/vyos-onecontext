@@ -224,7 +224,7 @@ class TestSSHKeyInjection:
         # Other fixtures may have 0 or 1 key
         if len(key_lines) >= 2:
             # Verify we have both RSA and ED25519 keys
-            key_types = [line.split()[0] for line in key_lines if line.strip()]
+            key_types = [line.split()[0] for line in key_lines]
             assert "ssh-rsa" in key_types and "ssh-ed25519" in key_types, (
                 "Should have expected key types"
             )
