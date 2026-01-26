@@ -276,14 +276,16 @@ class TestSSHKeyInjection:
         if "MISSING" in check_output:
             pytest.skip("Context does not have SSH_PUBLIC_KEY configured")
 
-        output = ssh_connection("show configuration | grep 'service ssh' || echo 'No SSH service'")
+        output = ssh_connection(
+            "show configuration commands | grep 'service ssh' || echo 'No SSH service'"
+        )
 
         # Should have SSH service configured
         assert "service ssh" in output
 
         # Should be on port 22 (standard SSH port)
         port_output = ssh_connection(
-            "show configuration | grep 'service ssh port' || echo 'default'"
+            "show configuration commands | grep 'service ssh port' || echo 'default'"
         )
         # Either explicitly set to 22 or using default
         assert "22" in port_output or "default" in port_output
