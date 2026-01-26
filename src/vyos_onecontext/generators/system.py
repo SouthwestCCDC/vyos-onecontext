@@ -1,5 +1,7 @@
 """System configuration generators (hostname, SSH keys)."""
 
+import re
+
 from vyos_onecontext.generators.base import BaseGenerator
 
 
@@ -71,7 +73,11 @@ class SshKeyGenerator(BaseGenerator):
             key_data = parts[1]
 
             # Use comment as identifier if available, otherwise use "keyN"
-            key_id = parts[2] if len(parts) >= 3 else f"key{key_counter}"
+            if len(parts) >= 3:
+                key_id = parts[2]
+            else:
+                key_id = f"key{key_counter}"
+                key_counter += 1  # Only increment when counter is used
 
             # Sanitize key_id for use as VyOS identifier
             # VyOS only accepts alphanumeric characters and underscores
@@ -80,11 +86,7 @@ class SshKeyGenerator(BaseGenerator):
             # Replace @ with _at_ for better readability
             key_id = key_id.replace("@", "_at_")
             # Replace all other non-alphanumeric characters (except underscores) with underscores
-            import re
             key_id = re.sub(r"[^a-zA-Z0-9_]", "_", key_id)
-
-            # Increment counter for next key
-            key_counter += 1
 
             # Configure the public key for authentication
             key_configs.append(

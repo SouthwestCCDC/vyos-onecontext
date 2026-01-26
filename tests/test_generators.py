@@ -178,14 +178,14 @@ class TestSshKeyGenerator:
             "set system login user vyos authentication public-keys user_at_host type ssh-rsa"
         ) in commands
 
-        # Second key should use "key2" as identifier (no comment)
-        assert any("key2" in cmd for cmd in commands)
+        # Second key should use "key1" as identifier (no comment, first to use counter)
+        assert any("key1" in cmd for cmd in commands)
         assert (
             "set system login user vyos authentication public-keys "
-            "key2 key AAAAC3NzaC1lZDI1NTE5AAAAI..."
+            "key1 key AAAAC3NzaC1lZDI1NTE5AAAAI..."
         ) in commands
         assert (
-            "set system login user vyos authentication public-keys key2 type ssh-ed25519"
+            "set system login user vyos authentication public-keys key1 type ssh-ed25519"
         ) in commands
 
     def test_generate_multiple_keys_without_comments(self):
