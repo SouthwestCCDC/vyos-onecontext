@@ -50,6 +50,7 @@ declare -a TEST_SCENARIOS=(
     "invalid-json:Error scenario - Invalid JSON"
     "missing-required-fields:Error scenario - Missing required fields"
     "partial-valid:Error scenario - Partial valid config"
+    "ssh-keys:SSH key injection"
 )
 
 TEMP_DIR=$(mktemp -d)

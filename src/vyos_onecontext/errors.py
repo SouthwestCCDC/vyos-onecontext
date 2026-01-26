@@ -163,8 +163,7 @@ class ErrorCollector:
                 warning_count,
             )
             logger.error(
-                "Some configuration sections were skipped. "
-                "Valid sections have been applied."
+                "Some configuration sections were skipped. Valid sections have been applied."
             )
         else:
             logger.warning(

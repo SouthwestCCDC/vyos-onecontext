@@ -154,6 +154,103 @@ class TestSshKeyGenerator:
         assert '"test_at_quotes"' not in commands[1]
         assert '"test_at_quotes"' not in commands[2]
 
+    def test_generate_multiple_keys(self):
+        """Test SSH key generation with multiple newline-separated keys."""
+        # Multiple keys: one with comment, one without
+        keys = (
+            "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC... user@host\n"
+            "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI..."
+        )
+        gen = SshKeyGenerator(keys)
+        commands = gen.generate()
+
+        # Should have: 1 SSH service command + 2 keys * 2 commands each = 5 total
+        assert len(commands) == 5
+        assert commands[0] == "set service ssh port 22"
+
+        # First key should use sanitized comment as identifier
+        assert any("user_at_host" in cmd for cmd in commands)
+        assert (
+            "set system login user vyos authentication public-keys "
+            "user_at_host key AAAAB3NzaC1yc2EAAAADAQABAAABAQC..."
+        ) in commands
+        assert (
+            "set system login user vyos authentication public-keys user_at_host type ssh-rsa"
+        ) in commands
+
+        # Second key should use "key1" as identifier (no comment, first to use counter)
+        assert any("key1" in cmd for cmd in commands)
+        assert (
+            "set system login user vyos authentication public-keys "
+            "key1 key AAAAC3NzaC1lZDI1NTE5AAAAI..."
+        ) in commands
+        assert (
+            "set system login user vyos authentication public-keys key1 type ssh-ed25519"
+        ) in commands
+
+    def test_generate_multiple_keys_without_comments(self):
+        """Test that multiple keys without comments get unique identifiers."""
+        # Three keys without comments
+        keys = (
+            "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC1...\n"
+            "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI2...\n"
+            "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC3..."
+        )
+        gen = SshKeyGenerator(keys)
+        commands = gen.generate()
+
+        # Should have: 1 SSH service command + 3 keys * 2 commands each = 7 total
+        assert len(commands) == 7
+        assert commands[0] == "set service ssh port 22"
+
+        # Verify unique identifiers (key1, key2, key3)
+        assert any("key1" in cmd for cmd in commands)
+        assert any("key2" in cmd for cmd in commands)
+        assert any("key3" in cmd for cmd in commands)
+
+        # Verify each key is configured with both key and type
+        key_ids = ["key1", "key2", "key3"]
+        for key_id in key_ids:
+            assert any(f"public-keys {key_id} key" in cmd for cmd in commands)
+            assert any(f"public-keys {key_id} type" in cmd for cmd in commands)
+
+    def test_generate_multiple_keys_enables_ssh_once(self):
+        """Test that SSH service is enabled only once when multiple keys are configured."""
+        keys = (
+            "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC... key1\n"
+            "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... key2"
+        )
+        gen = SshKeyGenerator(keys)
+        commands = gen.generate()
+
+        # Count SSH service commands
+        ssh_service_commands = [cmd for cmd in commands if "set service ssh" in cmd]
+        assert len(ssh_service_commands) == 1, "SSH service should be enabled exactly once"
+
+    def test_generate_duplicate_key_ids_get_suffix(self):
+        """Test that duplicate key IDs get unique suffixes to avoid overwrites."""
+        # Two keys with same comment (will have same key_id after sanitization)
+        keys = (
+            "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC1... same-key\n"
+            "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI2... same-key\n"
+            "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC3... same-key"
+        )
+        gen = SshKeyGenerator(keys)
+        commands = gen.generate()
+
+        # Should have: 1 SSH service + 3 keys * 2 commands = 7 total
+        assert len(commands) == 7
+
+        # First key uses "same_key", subsequent get "_2", "_3" suffixes
+        assert any("public-keys same_key key" in cmd for cmd in commands)
+        assert any("public-keys same_key_2 key" in cmd for cmd in commands)
+        assert any("public-keys same_key_3 key" in cmd for cmd in commands)
+
+        # All three should have type commands too
+        assert any("public-keys same_key type" in cmd for cmd in commands)
+        assert any("public-keys same_key_2 type" in cmd for cmd in commands)
+        assert any("public-keys same_key_3 type" in cmd for cmd in commands)
+
 
 class TestInterfaceGenerator:
     """Tests for interface configuration generator."""

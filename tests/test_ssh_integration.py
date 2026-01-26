@@ -114,9 +114,7 @@ class TestContextSpecificValidation:
     These tests may be skipped if they don't match the current test context.
     """
 
-    def test_management_vrf_if_configured(
-        self, ssh_connection: Callable[[str], str]
-    ) -> None:
+    def test_management_vrf_if_configured(self, ssh_connection: Callable[[str], str]) -> None:
         """If management VRF is configured, verify it exists.
 
         This test checks if VRF is present in config and validates if so.
@@ -130,9 +128,7 @@ class TestContextSpecificValidation:
         # If VRF is configured, verify it has proper structure
         assert "vrf" in output
 
-    def test_static_routes_if_configured(
-        self, ssh_connection: Callable[[str], str]
-    ) -> None:
+    def test_static_routes_if_configured(self, ssh_connection: Callable[[str], str]) -> None:
         """If static routes configured, verify they exist.
 
         Not all contexts have static routes, so skip if not present.
@@ -146,3 +142,150 @@ class TestContextSpecificValidation:
 
         # If static routes are configured, verify structure
         assert "protocols static" in output
+
+
+@pytest.mark.integration
+class TestSSHKeyInjection:
+    """Tests for SSH public key injection and installation.
+
+    These tests validate that SSH_PUBLIC_KEY context variables are properly
+    parsed, installed in authorized_keys, and preserved correctly.
+    """
+
+    def test_ssh_keys_in_vyos_config(self, ssh_connection: Callable[[str], str]) -> None:
+        """Verify SSH public keys appear in VyOS configuration.
+
+        This checks that the SshKeyGenerator successfully created VyOS commands
+        to install the public keys for the vyos user.
+        """
+        output = ssh_connection(
+            "show configuration | grep 'authentication public-keys' || echo 'No SSH keys'"
+        )
+
+        if "No SSH keys" in output:
+            pytest.skip("Context does not have SSH_PUBLIC_KEY configured")
+
+        # Should have public-keys configuration
+        assert "authentication public-keys" in output
+        # Should have key type and key data
+        assert "type" in output
+        assert "key" in output
+
+    def test_ssh_keys_in_authorized_keys_file(self, ssh_connection: Callable[[str], str]) -> None:
+        """Verify SSH public keys are installed in authorized_keys file.
+
+        This is the critical E2E test - it validates that keys specified in
+        context are actually installed and usable for authentication.
+        """
+        # Check if SSH keys are actually configured in VyOS
+        # Note: VyOS always creates authorized_keys with header, so we check config instead
+        check_output = ssh_connection(
+            "show configuration commands | grep 'authentication public-keys' || echo 'No SSH keys'"
+        )
+
+        if "No SSH keys" in check_output:
+            pytest.skip("Context does not have SSH_PUBLIC_KEY configured")
+
+        # Read the authorized_keys file
+        output = ssh_connection("cat /home/vyos/.ssh/authorized_keys")
+
+        # Should contain at least one SSH key
+        # Valid SSH keys start with ssh-rsa, ssh-ed25519, ecdsa-sha2-nistp256, etc.
+        assert re.search(r"ssh-(?:rsa|ed25519|dss|ecdsa)", output), (
+            "Should contain valid SSH key type"
+        )
+
+        # Should contain base64-encoded key data
+        # SSH keys have base64 data that's typically quite long
+        assert re.search(r"[A-Za-z0-9+/]{64,}", output), "Should contain base64-encoded key data"
+
+    def test_multiple_ssh_keys_if_configured(self, ssh_connection: Callable[[str], str]) -> None:
+        """Verify multiple SSH keys are handled correctly if configured.
+
+        Tests that newline-separated keys in SSH_PUBLIC_KEY result in
+        multiple entries in authorized_keys.
+        """
+        # Check if SSH keys are actually configured in VyOS
+        check_output = ssh_connection(
+            "show configuration commands | grep 'authentication public-keys' || echo 'No SSH keys'"
+        )
+
+        if "No SSH keys" in check_output:
+            pytest.skip("Context does not have SSH_PUBLIC_KEY configured")
+
+        # Read authorized_keys
+        output = ssh_connection("cat /home/vyos/.ssh/authorized_keys")
+
+        # Count number of key lines (each valid key starts with ssh-)
+        key_lines = [line for line in output.split("\n") if line.strip().startswith("ssh-")]
+
+        # If we have multiple keys, verify they're all present
+        # The ssh-keys.env fixture has 2 keys (one RSA, one ED25519)
+        # Other fixtures may have 0 or 1 key
+        if len(key_lines) >= 2:
+            # Verify we have both RSA and ED25519 keys
+            key_types = [line.split()[0] for line in key_lines]
+            assert "ssh-rsa" in key_types and "ssh-ed25519" in key_types, (
+                "Should have expected key types"
+            )
+
+    def test_ssh_key_format_preserved(self, ssh_connection: Callable[[str], str]) -> None:
+        """Verify SSH key format is not mangled during injection.
+
+        This test validates that the key data and comments are preserved
+        correctly during the parsing and installation process.
+        """
+        # Check if SSH keys are actually configured in VyOS
+        check_output = ssh_connection(
+            "show configuration commands | grep 'authentication public-keys' || echo 'No SSH keys'"
+        )
+
+        if "No SSH keys" in check_output:
+            pytest.skip("Context does not have SSH_PUBLIC_KEY configured")
+
+        # Read authorized_keys
+        output = ssh_connection("cat /home/vyos/.ssh/authorized_keys")
+
+        # Each line should follow the standard SSH key format:
+        # <type> <base64-data> [comment]
+        for line in output.split("\n"):
+            if not line.strip() or line.startswith("#"):
+                continue
+
+            parts = line.split(None, 2)
+            # Should have at least type and key data
+            assert len(parts) >= 2, f"SSH key line malformed: {line}"
+
+            # First part should be a valid key type
+            assert parts[0].startswith("ssh-"), f"Invalid key type: {parts[0]}"
+
+            # Second part should be base64 data (no spaces, only valid base64 chars)
+            assert re.match(r"^[A-Za-z0-9+/]+=*$", parts[1]), f"Invalid base64 key data: {parts[1]}"
+
+    def test_ssh_service_enabled(self, ssh_connection: Callable[[str], str]) -> None:
+        """Verify SSH service is enabled when SSH keys are configured.
+
+        The SshKeyGenerator should enable SSH service on port 22 when
+        installing public keys.
+        """
+        # Check if SSH keys are actually configured in VyOS
+        check_output = ssh_connection(
+            "show configuration commands | grep 'authentication public-keys' || echo 'No SSH keys'"
+        )
+
+        if "No SSH keys" in check_output:
+            pytest.skip("Context does not have SSH_PUBLIC_KEY configured")
+
+        output = ssh_connection(
+            "show configuration commands | grep 'service ssh' || echo 'No SSH service'"
+        )
+
+        # Should have SSH service configured
+        assert "service ssh" in output
+
+        # Should be on port 22 (standard SSH port)
+        port_output = ssh_connection(
+            "show configuration commands | grep 'service ssh port' || echo 'default'"
+        )
+        # Either explicitly set to 22 or using default
+        assert "22" in port_output or "default" in port_output

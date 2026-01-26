@@ -1,5 +1,7 @@
 """System configuration generators (hostname, SSH keys)."""
 
+import re
+
 from vyos_onecontext.generators.base import BaseGenerator
 
 
@@ -41,7 +43,7 @@ class SshKeyGenerator(BaseGenerator):
         """Generate SSH public key configuration commands.
 
         Parses the SSH key format (type key comment) and generates VyOS commands
-        to configure it for the vyos user.
+        to configure it for the vyos user. Supports multiple newline-separated keys.
 
         Returns:
             List with SSH key commands if key is set, empty list otherwise
@@ -49,29 +51,63 @@ class SshKeyGenerator(BaseGenerator):
         if self.ssh_public_key is None:
             return []
 
-        # Parse SSH key format: "type key comment"
-        # Example: "ssh-rsa AAAAB3NzaC1yc2E... user@host"
-        parts = self.ssh_public_key.strip().split(None, 2)
+        commands = []
+        key_configs = []
+        key_counter = 1  # Track processed keys to generate unique IDs
+        seen_key_ids: set[str] = set()  # Track used key IDs to avoid duplicates
 
-        if len(parts) < 2:
-            # Invalid key format - skip configuration
-            return []
+        # Split on newlines to handle multiple keys
+        for key_line in self.ssh_public_key.strip().split("\n"):
+            key_line = key_line.strip()
+            if not key_line:
+                continue
 
-        key_type = parts[0]
-        key_data = parts[1]
+            # Parse SSH key format: "type key comment"
+            # Example: "ssh-rsa AAAAB3NzaC1yc2E... user@host"
+            parts = key_line.split(None, 2)
 
-        # Use comment as identifier if available, otherwise use "key1"
-        key_id = parts[2] if len(parts) >= 3 else "key1"
-        # Sanitize key_id for use as VyOS identifier
-        # VyOS only accepts alphanumeric characters and underscores
-        # Strip surrounding quotes (single or double) that may be in the comment
-        key_id = key_id.strip("\"'")
-        key_id = key_id.replace("@", "_at_").replace(" ", "_").replace(".", "_")
+            if len(parts) < 2:
+                # Invalid key format - skip this key
+                continue
 
-        return [
-            # Enable SSH service (required since base config is wiped)
-            "set service ssh port 22",
+            key_type = parts[0]
+            key_data = parts[1]
+
+            # Use comment as identifier if available, otherwise use "keyN"
+            if len(parts) >= 3:
+                key_id = parts[2]
+            else:
+                key_id = f"key{key_counter}"
+                key_counter += 1  # Only increment when counter is used
+
+            # Sanitize key_id for use as VyOS identifier
+            # VyOS only accepts alphanumeric characters and underscores
+            # Strip surrounding quotes (single or double) that may be in the comment
+            key_id = key_id.strip("\"'")
+            # Replace @ with _at_ for better readability
+            key_id = key_id.replace("@", "_at_")
+            # Replace all other non-alphanumeric characters (except underscores) with underscores
+            key_id = re.sub(r"[^a-zA-Z0-9_]", "_", key_id)
+
+            # Handle duplicate key IDs by appending a suffix
+            base_key_id = key_id
+            dup_counter = 2
+            while key_id in seen_key_ids:
+                key_id = f"{base_key_id}_{dup_counter}"
+                dup_counter += 1
+            seen_key_ids.add(key_id)
+
             # Configure the public key for authentication
-            f"set system login user vyos authentication public-keys {key_id} key {key_data}",
-            f"set system login user vyos authentication public-keys {key_id} type {key_type}",
-        ]
+            key_configs.append(
+                f"set system login user vyos authentication public-keys {key_id} key {key_data}"
+            )
+            key_configs.append(
+                f"set system login user vyos authentication public-keys {key_id} type {key_type}"
+            )
+
+        # Only enable SSH service if we have at least one valid key
+        if key_configs:
+            commands.append("set service ssh port 22")
+            commands.extend(key_configs)
+
+        return commands
