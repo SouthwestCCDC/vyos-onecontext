@@ -531,12 +531,22 @@ case "$CONTEXT_NAME" in
             VALIDATION_FAILED=1
         fi
 
-        # Should NOT have route commands (invalid section skipped)
-        if grep -q "VYOS_CMD:.*set protocols static route" "$SERIAL_LOG"; then
-            echo "[FAIL] Static route commands should not be generated (invalid JSON)"
+        # Should NOT have route commands from ROUTES_JSON (invalid section skipped)
+        # Note: Default gateway route (0.0.0.0/0) is valid and should be present
+        # Check specifically for the route that would come from invalid ROUTES_JSON
+        if grep -q "VYOS_CMD:.*set protocols static route 10.0.0.0/8" "$SERIAL_LOG"; then
+            echo "[FAIL] Static route 10.0.0.0/8 should not be generated (invalid ROUTES_JSON)"
             VALIDATION_FAILED=1
         else
-            echo "[PASS] Static route commands correctly skipped (invalid JSON)"
+            echo "[PASS] Static routes from ROUTES_JSON correctly skipped (invalid JSON)"
+        fi
+
+        # Default gateway route should still be present (from ETH0_GATEWAY)
+        if grep -q "VYOS_CMD:.*set protocols static route 0.0.0.0/0 next-hop 192.168.122.1" "$SERIAL_LOG"; then
+            echo "[PASS] Default gateway route present (from ETH0_GATEWAY, valid)"
+        else
+            echo "[FAIL] Default gateway route not present (should be configured from ETH0_GATEWAY)"
+            VALIDATION_FAILED=1
         fi
         ;;
     missing-required-fields)
@@ -609,12 +619,30 @@ case "$CONTEXT_NAME" in
             VALIDATION_FAILED=1
         fi
 
-        # Should NOT have route or OSPF commands (both invalid)
-        if grep -q "VYOS_CMD:.*set protocols static route" "$SERIAL_LOG"; then
-            echo "[FAIL] Static route commands should not be generated (malformed JSON)"
+        # Should NOT have routes from ROUTES_JSON (malformed JSON)
+        # Note: Default gateway route (0.0.0.0/0) is valid and should be present
+        # Check specifically for routes that would come from invalid ROUTES_JSON
+        ROUTES_FROM_JSON_FOUND=0
+        if grep -q "VYOS_CMD:.*set protocols static route 10.0.0.0/8" "$SERIAL_LOG"; then
+            echo "[FAIL] Static route 10.0.0.0/8 should not be generated (malformed ROUTES_JSON)"
             VALIDATION_FAILED=1
+            ROUTES_FROM_JSON_FOUND=1
+        fi
+        if grep -q "VYOS_CMD:.*set protocols static route 172.16.0.0/12" "$SERIAL_LOG"; then
+            echo "[FAIL] Static route 172.16.0.0/12 should not be generated (malformed ROUTES_JSON)"
+            VALIDATION_FAILED=1
+            ROUTES_FROM_JSON_FOUND=1
+        fi
+        if [ $ROUTES_FROM_JSON_FOUND -eq 0 ]; then
+            echo "[PASS] Static routes from ROUTES_JSON correctly skipped (malformed JSON)"
+        fi
+
+        # Default gateway route should still be present (from ETH0_GATEWAY)
+        if grep -q "VYOS_CMD:.*set protocols static route 0.0.0.0/0 next-hop 192.168.122.1" "$SERIAL_LOG"; then
+            echo "[PASS] Default gateway route present (from ETH0_GATEWAY, valid)"
         else
-            echo "[PASS] Static route commands correctly skipped (malformed JSON)"
+            echo "[FAIL] Default gateway route not present (should be configured from ETH0_GATEWAY)"
+            VALIDATION_FAILED=1
         fi
 
         if grep -q "VYOS_CMD:.*set protocols ospf" "$SERIAL_LOG"; then
