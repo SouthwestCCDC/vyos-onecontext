@@ -54,6 +54,7 @@ class SshKeyGenerator(BaseGenerator):
         commands = []
         key_configs = []
         key_counter = 1  # Track processed keys to generate unique IDs
+        seen_key_ids: set[str] = set()  # Track used key IDs to avoid duplicates
 
         # Split on newlines to handle multiple keys
         for key_line in self.ssh_public_key.strip().split("\n"):
@@ -87,6 +88,14 @@ class SshKeyGenerator(BaseGenerator):
             key_id = key_id.replace("@", "_at_")
             # Replace all other non-alphanumeric characters (except underscores) with underscores
             key_id = re.sub(r"[^a-zA-Z0-9_]", "_", key_id)
+
+            # Handle duplicate key IDs by appending a suffix
+            base_key_id = key_id
+            dup_counter = 2
+            while key_id in seen_key_ids:
+                key_id = f"{base_key_id}_{dup_counter}"
+                dup_counter += 1
+            seen_key_ids.add(key_id)
 
             # Configure the public key for authentication
             key_configs.append(

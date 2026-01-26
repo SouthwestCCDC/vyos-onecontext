@@ -227,6 +227,30 @@ class TestSshKeyGenerator:
         ssh_service_commands = [cmd for cmd in commands if "set service ssh" in cmd]
         assert len(ssh_service_commands) == 1, "SSH service should be enabled exactly once"
 
+    def test_generate_duplicate_key_ids_get_suffix(self):
+        """Test that duplicate key IDs get unique suffixes to avoid overwrites."""
+        # Two keys with same comment (will have same key_id after sanitization)
+        keys = (
+            "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC1... same-key\n"
+            "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI2... same-key\n"
+            "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC3... same-key"
+        )
+        gen = SshKeyGenerator(keys)
+        commands = gen.generate()
+
+        # Should have: 1 SSH service + 3 keys * 2 commands = 7 total
+        assert len(commands) == 7
+
+        # First key uses "same_key", subsequent get "_2", "_3" suffixes
+        assert any("public-keys same_key key" in cmd for cmd in commands)
+        assert any("public-keys same_key_2 key" in cmd for cmd in commands)
+        assert any("public-keys same_key_3 key" in cmd for cmd in commands)
+
+        # All three should have type commands too
+        assert any("public-keys same_key type" in cmd for cmd in commands)
+        assert any("public-keys same_key_2 type" in cmd for cmd in commands)
+        assert any("public-keys same_key_3 type" in cmd for cmd in commands)
+
 
 class TestInterfaceGenerator:
     """Tests for interface configuration generator."""
