@@ -177,13 +177,14 @@ class TestSSHKeyInjection:
         This is the critical E2E test - it validates that keys specified in
         context are actually installed and usable for authentication.
         """
-        # Check if authorized_keys file exists
-        output = ssh_connection(
-            "test -f /home/vyos/.ssh/authorized_keys && echo 'EXISTS' || echo 'MISSING'"
+        # Check if SSH keys are actually configured in VyOS
+        # Note: VyOS always creates authorized_keys with header, so we check config instead
+        check_output = ssh_connection(
+            "show configuration commands | grep 'authentication public-keys' || echo 'No SSH keys'"
         )
 
-        if "MISSING" in output:
-            pytest.skip("Context does not have SSH_PUBLIC_KEY configured (no authorized_keys file)")
+        if "No SSH keys" in check_output:
+            pytest.skip("Context does not have SSH_PUBLIC_KEY configured")
 
         # Read the authorized_keys file
         output = ssh_connection("cat /home/vyos/.ssh/authorized_keys")
@@ -204,12 +205,12 @@ class TestSSHKeyInjection:
         Tests that newline-separated keys in SSH_PUBLIC_KEY result in
         multiple entries in authorized_keys.
         """
-        # Check if authorized_keys exists first
+        # Check if SSH keys are actually configured in VyOS
         check_output = ssh_connection(
-            "test -f /home/vyos/.ssh/authorized_keys && echo 'EXISTS' || echo 'MISSING'"
+            "show configuration commands | grep 'authentication public-keys' || echo 'No SSH keys'"
         )
 
-        if "MISSING" in check_output:
+        if "No SSH keys" in check_output:
             pytest.skip("Context does not have SSH_PUBLIC_KEY configured")
 
         # Read authorized_keys
@@ -234,12 +235,12 @@ class TestSSHKeyInjection:
         This test validates that the key data and comments are preserved
         correctly during the parsing and installation process.
         """
-        # Check if authorized_keys exists
+        # Check if SSH keys are actually configured in VyOS
         check_output = ssh_connection(
-            "test -f /home/vyos/.ssh/authorized_keys && echo 'EXISTS' || echo 'MISSING'"
+            "show configuration commands | grep 'authentication public-keys' || echo 'No SSH keys'"
         )
 
-        if "MISSING" in check_output:
+        if "No SSH keys" in check_output:
             pytest.skip("Context does not have SSH_PUBLIC_KEY configured")
 
         # Read authorized_keys
@@ -268,12 +269,12 @@ class TestSSHKeyInjection:
         The SshKeyGenerator should enable SSH service on port 22 when
         installing public keys.
         """
-        # Check if SSH keys are configured first
+        # Check if SSH keys are actually configured in VyOS
         check_output = ssh_connection(
-            "test -f /home/vyos/.ssh/authorized_keys && echo 'EXISTS' || echo 'MISSING'"
+            "show configuration commands | grep 'authentication public-keys' || echo 'No SSH keys'"
         )
 
-        if "MISSING" in check_output:
+        if "No SSH keys" in check_output:
             pytest.skip("Context does not have SSH_PUBLIC_KEY configured")
 
         output = ssh_connection(
