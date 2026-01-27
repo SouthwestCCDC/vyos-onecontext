@@ -33,7 +33,7 @@ Also read `../copilot-instructions.md` for VyOS Sagitta syntax and project conve
 
 1. **Understand**: Read the issue/PR and relevant existing code
 2. **Implement**: Make incremental changes, commit frequently
-3. **Test**: Run `just check` (pytest + ruff + mypy)
+3. **Test**: Run `just check` (ruff + mypy + pytest)
 4. **Push**: Create PR or push to existing branch
 5. **Respond**: Address any review comments
 

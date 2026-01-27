@@ -30,7 +30,7 @@ Use this checklist when reviewing PRs or pre-commit changes.
 
 ## AI Disclosure
 
-- [ ] Commits have `Co-authored-by: Claude {Model} <noreply@anthropic.com>`
+- [ ] AI-generated commits have `Co-authored-by:` line (see `commit-conventions.md`)
 - [ ] PR description mentions AI assistance if applicable
 
 ## Assessment Categories
