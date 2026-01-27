@@ -7,7 +7,7 @@ type(area): brief description
 
 Addresses #ISSUE_NUMBER
 
-Co-authored-by: {AI Tool/Model} <noreply@anthropic.com>
+Co-authored-by: {AI Tool/Model} <{AI email}>
 ```
 
 ## Types
@@ -36,8 +36,13 @@ Co-authored-by: {AI Tool/Model} <noreply@anthropic.com>
 All AI-generated commits MUST include the co-author trailer:
 
 ```
-Co-authored-by: {AI Tool/Model} <noreply@anthropic.com>
+Co-authored-by: {AI Tool/Model} <{AI email}>
 ```
+
+Use tool-appropriate email domains:
+- Claude (any model): `<noreply@anthropic.com>`
+- GitHub Copilot: `<noreply@github.com>`
+- Other tools: Use appropriate domain or `<{AI email}>` as placeholder
 
 Examples: `Claude Sonnet 4.5`, `GitHub Copilot`, `Claude Opus 4.5`, etc.
 
@@ -62,7 +67,7 @@ context fields are absent.
 
 Addresses #23
 
-Co-authored-by: Claude Sonnet 4.5 <noreply@anthropic.com>
+Co-authored-by: GitHub Copilot <noreply@github.com>
 ```
 
 ---
