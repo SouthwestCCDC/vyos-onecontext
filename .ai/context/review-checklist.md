@@ -30,7 +30,7 @@ Use this checklist when reviewing PRs or pre-commit changes.
 
 ## AI Disclosure
 
-- [ ] Commits have `Co-Authored-By: Claude {Model} <noreply@anthropic.com>`
+- [ ] Commits have `Co-authored-by: Claude {Model} <noreply@anthropic.com>`
 - [ ] PR description mentions AI assistance if applicable
 
 ## Assessment Categories
@@ -40,3 +40,6 @@ Use this checklist when reviewing PRs or pre-commit changes.
 | **Ready to merge** | All checks pass, no blocking issues |
 | **Needs fixes** | Issues found that must be addressed |
 | **Needs discussion** | Architectural or scope questions to resolve |
+
+---
+*Generated with Claude Code assistance.*

@@ -28,7 +28,7 @@ Every addressed comment needs an inline reply with AI disclosure:
 gh api repos/SouthwestCCDC/vyos-onecontext/pulls/{N}/comments/{comment_id}/replies \
   -f body="Fixed in {SHA}. {brief explanation}
 
-(AI-generated via Claude Code w/ {Model})"
+(AI-generated via {Tool} w/ {Model})"
 ```
 
 ## Comment Categories
@@ -55,7 +55,10 @@ gh issue create --repo SouthwestCCDC/vyos-onecontext \
 
 Original comment: https://github.com/SouthwestCCDC/vyos-onecontext/pull/{N}#discussion_r{comment_id}
 
-(AI-generated via Claude Code w/ {Model})"
+(AI-generated via {Tool} w/ {Model})"
 ```
 
 Then reply to the original comment with the issue link.
+
+---
+*Generated with Claude Code assistance.*

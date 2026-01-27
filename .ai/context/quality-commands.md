@@ -6,7 +6,7 @@ Quality checks use `uv run` and `just` for consistent Python environment.
 
 | Command | Purpose |
 |---------|---------|
-| `just check` | Run all quality checks (pytest + ruff + mypy) |
+| `just check` | Run all quality checks (ruff check + mypy + pytest) |
 | `uv run pytest tests/ -v --tb=short` | Run tests |
 | `uv run ruff check src/ tests/` | Lint Python code |
 | `uv run ruff format src/ tests/` | Format Python code |
@@ -20,7 +20,7 @@ Before pushing any changes:
 just check
 ```
 
-This runs pytest, ruff check, ruff format, and mypy. All must pass before creating or updating a PR.
+This runs ruff check, mypy, and pytest. All must pass before creating or updating a PR.
 
 ## Individual Commands
 
@@ -43,3 +43,6 @@ After pushing, verify CI passes:
 ```bash
 gh pr checks {N} --repo SouthwestCCDC/vyos-onecontext
 ```
+
+---
+*Generated with Claude Code assistance.*

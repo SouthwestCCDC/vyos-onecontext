@@ -42,3 +42,6 @@ The timestamp ensures uniqueness when revisiting the same issue.
 2. **Work** entirely within the worktree
 3. **Push** branch and create PR
 4. **Delete** after PR is merged: `git worktree remove {path}`
+
+---
+*Generated with Claude Code assistance.*

@@ -7,7 +7,7 @@ type(area): brief description
 
 Addresses #ISSUE_NUMBER
 
-Co-Authored-By: Claude {Model} <noreply@anthropic.com>
+Co-authored-by: {AI Tool/Model} <noreply@anthropic.com>
 ```
 
 ## Types
@@ -36,10 +36,10 @@ Co-Authored-By: Claude {Model} <noreply@anthropic.com>
 All AI-generated commits MUST include the co-author trailer:
 
 ```
-Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
+Co-authored-by: {AI Tool/Model} <noreply@anthropic.com>
 ```
 
-Use the actual model (Sonnet 4.5, Opus 4.5, Haiku, etc.).
+Examples: `Claude Sonnet 4.5`, `GitHub Copilot`, `Claude Opus 4.5`, etc.
 
 ## Examples
 
@@ -51,7 +51,7 @@ VyOS DHCP server configuration.
 
 Addresses #15
 
-Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
+Co-authored-by: Claude Sonnet 4.5 <noreply@anthropic.com>
 ```
 
 ```
@@ -62,5 +62,8 @@ context fields are absent.
 
 Addresses #23
 
-Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
+Co-authored-by: Claude Sonnet 4.5 <noreply@anthropic.com>
 ```
+
+---
+*Generated with Claude Code assistance.*

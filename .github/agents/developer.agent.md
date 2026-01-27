@@ -22,7 +22,7 @@ Before starting, read these guidelines:
 - [Commit Conventions](../../.ai/context/commit-conventions.md) - Message format and AI disclosure
 - [PR Comment Handling](../../.ai/context/pr-comment-handling.md) - Responding to review feedback
 
-Also read `.github/copilot-instructions.md` for VyOS Sagitta syntax and project conventions.
+Also read `../copilot-instructions.md` for VyOS Sagitta syntax and project conventions.
 
 ## Key References
 
@@ -46,3 +46,6 @@ Also read `.github/copilot-instructions.md` for VyOS Sagitta syntax and project 
 ## Output
 
 End with a summary of what was accomplished, PR number/URL, CI status, and any follow-up needed.
+
+---
+*Generated with Claude Code assistance.*

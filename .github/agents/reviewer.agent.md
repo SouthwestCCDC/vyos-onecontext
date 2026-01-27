@@ -20,7 +20,7 @@ Before reviewing, read these guidelines:
 - [Review Checklist](../../.ai/context/review-checklist.md) - What to check
 - [PR Comment Handling](../../.ai/context/pr-comment-handling.md) - Comment categories and responses
 
-Also read `.github/copilot-instructions.md` for VyOS Sagitta syntax rules.
+Also read `../copilot-instructions.md` for VyOS Sagitta syntax rules.
 
 ## Mode 1: PR Review
 
@@ -63,3 +63,6 @@ Approve / Request changes / Needs discussion
 Analyze incoming comments and categorize them as A (Fix), B (Tech Debt), C (Larger Issue), or D (Disagree).
 
 Include `comment_id` in output so developer agents can reply inline.
+
+---
+*Generated with Claude Code assistance.*
