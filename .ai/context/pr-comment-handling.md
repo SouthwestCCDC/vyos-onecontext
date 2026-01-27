@@ -1,5 +1,19 @@
 # PR Comment Handling
 
+## Prerequisites
+
+These instructions use the [GitHub CLI (`gh`)](https://cli.github.com/). Install and authenticate:
+
+```bash
+# Install (macOS)
+brew install gh
+
+# Authenticate
+gh auth login
+```
+
+**Without `gh` CLI**: Use the GitHub web UI instead. Navigate to the PR's "Files changed" tab to view and reply to comments, or the "Conversation" tab to create issues.
+
 ## Proactive Check After Push
 
 After pushing changes to a PR, check for review comments:
@@ -28,7 +42,7 @@ Every addressed comment needs an inline reply with AI disclosure:
 gh api repos/SouthwestCCDC/vyos-onecontext/pulls/{N}/comments/{comment_id}/replies \
   -f body="Fixed in {SHA}. {brief explanation}
 
-(AI-generated via {Tool} w/ {Model})"
+(AI-generated via {AI Tool} w/ {Model})"
 ```
 
 ## Comment Categories
@@ -55,7 +69,7 @@ gh issue create --repo SouthwestCCDC/vyos-onecontext \
 
 Original comment: https://github.com/SouthwestCCDC/vyos-onecontext/pull/{N}#discussion_r{comment_id}
 
-(AI-generated via {Tool} w/ {Model})"
+(AI-generated via {AI Tool} w/ {Model})"
 ```
 
 Then reply to the original comment with the issue link.
