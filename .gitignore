@@ -55,3 +55,6 @@ tests/integration/*.log
 packer/output/
 packer/*.qcow2
 packer/packer_cache/
+
+# AI agent scratch notes (not committed)
+.ai/scratch/
