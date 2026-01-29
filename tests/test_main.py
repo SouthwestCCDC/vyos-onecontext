@@ -447,6 +447,321 @@ class TestApplyConfiguration:
             assert result == EXIT_CONFIG_ERROR
 
 
+class TestSessionLifecycleOrdering:
+    """Tests for VyOS session lifecycle method ordering."""
+
+    @patch("vyos_onecontext.__main__.VyOSConfigSession")
+    @patch("vyos_onecontext.__main__.generate_config")
+    @patch("vyos_onecontext.__main__.parse_context")
+    def test_lifecycle_ordering_stateless_mode(
+        self,
+        mock_parse: MagicMock,
+        mock_generate: MagicMock,
+        mock_session_class: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """Test lifecycle ordering in stateless mode: begin -> run_commands -> commit -> end."""
+        context_path = tmp_path / "context.sh"
+        context_path.write_text('HOSTNAME="test-router"')
+
+        from vyos_onecontext.models import OnecontextMode
+
+        mock_config = MagicMock()
+        mock_config.onecontext_mode = OnecontextMode.STATELESS
+        mock_config.start_script = None
+        mock_parse.return_value = mock_config
+        mock_generate.return_value = ["set system host-name test-router"]
+
+        # Create a mock session that tracks method call order
+        mock_session = MagicMock()
+        mock_session_class.return_value = mock_session
+
+        with patch("vyos_onecontext.__main__.FREEZE_MARKER_PATH", str(tmp_path / "frozen")):
+            result = apply_configuration(str(context_path))
+
+        assert result == EXIT_SUCCESS
+
+        # Verify the exact order of calls
+        # Each call is a tuple of (method_name, args, kwargs)
+        expected_calls = [
+            ("verify_group", (), {}),
+            ("begin", (), {}),
+            ("run_commands", (["set system host-name test-router"],), {}),
+            ("commit", (), {}),
+            ("end", (), {}),
+        ]
+
+        actual_calls = [tuple(call) for call in mock_session.method_calls]
+
+        assert actual_calls == expected_calls, (
+            f"Expected session methods in order: {expected_calls}, "
+            f"but got: {actual_calls}"
+        )
+
+    @patch("vyos_onecontext.__main__.VyOSConfigSession")
+    @patch("vyos_onecontext.__main__.generate_config")
+    @patch("vyos_onecontext.__main__.parse_context")
+    def test_lifecycle_ordering_save_mode(
+        self,
+        mock_parse: MagicMock,
+        mock_generate: MagicMock,
+        mock_session_class: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """Test lifecycle ordering in SAVE mode: begin -> run_commands -> commit -> save -> end."""
+        context_path = tmp_path / "context.sh"
+        context_path.write_text('HOSTNAME="test-router"')
+
+        from vyos_onecontext.models import OnecontextMode
+
+        mock_config = MagicMock()
+        mock_config.onecontext_mode = OnecontextMode.SAVE
+        mock_config.start_script = None
+        mock_parse.return_value = mock_config
+        mock_generate.return_value = ["set system host-name test-router"]
+
+        # Create a mock session that tracks method call order
+        mock_session = MagicMock()
+        mock_session_class.return_value = mock_session
+
+        with patch("vyos_onecontext.__main__.FREEZE_MARKER_PATH", str(tmp_path / "frozen")):
+            result = apply_configuration(str(context_path))
+
+        assert result == EXIT_SUCCESS
+
+        # Verify the exact order of calls
+        expected_calls = [
+            ("verify_group", (), {}),
+            ("begin", (), {}),
+            ("run_commands", (["set system host-name test-router"],), {}),
+            ("commit", (), {}),
+            ("save", (), {}),
+            ("end", (), {}),
+        ]
+
+        actual_calls = [tuple(call) for call in mock_session.method_calls]
+
+        assert actual_calls == expected_calls, (
+            f"Expected session methods in order: {expected_calls}, "
+            f"but got: {actual_calls}"
+        )
+
+    @patch("vyos_onecontext.__main__.create_freeze_marker")
+    @patch("vyos_onecontext.__main__.VyOSConfigSession")
+    @patch("vyos_onecontext.__main__.generate_config")
+    @patch("vyos_onecontext.__main__.parse_context")
+    def test_lifecycle_ordering_freeze_mode(
+        self,
+        mock_parse: MagicMock,
+        mock_generate: MagicMock,
+        mock_session_class: MagicMock,
+        mock_freeze: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """Test lifecycle in FREEZE mode: begin -> run_commands -> commit -> save -> end."""
+        context_path = tmp_path / "context.sh"
+        context_path.write_text('HOSTNAME="test-router"')
+
+        from vyos_onecontext.models import OnecontextMode
+
+        mock_config = MagicMock()
+        mock_config.onecontext_mode = OnecontextMode.FREEZE
+        mock_config.start_script = None
+        mock_parse.return_value = mock_config
+        mock_generate.return_value = ["set system host-name test-router"]
+
+        # Create a mock session that tracks method call order
+        mock_session = MagicMock()
+        mock_session_class.return_value = mock_session
+
+        with patch("vyos_onecontext.__main__.FREEZE_MARKER_PATH", str(tmp_path / "frozen")):
+            result = apply_configuration(str(context_path))
+
+        assert result == EXIT_SUCCESS
+
+        # Verify the exact order of calls
+        expected_calls = [
+            ("verify_group", (), {}),
+            ("begin", (), {}),
+            ("run_commands", (["set system host-name test-router"],), {}),
+            ("commit", (), {}),
+            ("save", (), {}),
+            ("end", (), {}),
+        ]
+
+        actual_calls = [tuple(call) for call in mock_session.method_calls]
+
+        assert actual_calls == expected_calls, (
+            f"Expected session methods in order: {expected_calls}, "
+            f"but got: {actual_calls}"
+        )
+
+        # Verify freeze marker is created after save but before end
+        # We can't use method_calls for this since it's a separate function,
+        # but we can verify it was called
+        mock_freeze.assert_called_once()
+
+    @patch("vyos_onecontext.__main__.VyOSConfigSession")
+    @patch("vyos_onecontext.__main__.generate_config")
+    @patch("vyos_onecontext.__main__.parse_context")
+    def test_lifecycle_ordering_on_commit_error(
+        self,
+        mock_parse: MagicMock,
+        mock_generate: MagicMock,
+        mock_session_class: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """Test that end() is called even when commit() fails."""
+        from vyos_onecontext.wrapper import VyOSConfigError
+
+        context_path = tmp_path / "context.sh"
+        context_path.write_text('HOSTNAME="test-router"')
+
+        from vyos_onecontext.models import OnecontextMode
+
+        mock_config = MagicMock()
+        mock_config.onecontext_mode = OnecontextMode.STATELESS
+        mock_config.start_script = None
+        mock_parse.return_value = mock_config
+        mock_generate.return_value = ["set system host-name test-router"]
+
+        # Create a mock session that raises error on commit
+        mock_session = MagicMock()
+        mock_session.commit.side_effect = VyOSConfigError("Commit failed")
+        mock_session_class.return_value = mock_session
+
+        with patch("vyos_onecontext.__main__.FREEZE_MARKER_PATH", str(tmp_path / "frozen")):
+            result = apply_configuration(str(context_path))
+
+        assert result == EXIT_CONFIG_ERROR
+
+        # Verify end() was still called despite the error
+        mock_session.end.assert_called_once()
+
+        # Verify the order: verify_group, begin, run_commands, commit (failed), end
+        expected_calls = [
+            ("verify_group", (), {}),
+            ("begin", (), {}),
+            ("run_commands", (["set system host-name test-router"],), {}),
+            ("commit", (), {}),
+            ("end", (), {}),
+        ]
+
+        actual_calls = [tuple(call) for call in mock_session.method_calls]
+
+        assert actual_calls == expected_calls, (
+            f"Expected session methods in order (with commit failing): {expected_calls}, "
+            f"but got: {actual_calls}"
+        )
+
+    @patch("vyos_onecontext.__main__.VyOSConfigSession")
+    @patch("vyos_onecontext.__main__.generate_config")
+    @patch("vyos_onecontext.__main__.parse_context")
+    def test_lifecycle_ordering_on_run_commands_error(
+        self,
+        mock_parse: MagicMock,
+        mock_generate: MagicMock,
+        mock_session_class: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """Test that end() is called even when run_commands() fails."""
+        from vyos_onecontext.wrapper import VyOSConfigError
+
+        context_path = tmp_path / "context.sh"
+        context_path.write_text('HOSTNAME="test-router"')
+
+        from vyos_onecontext.models import OnecontextMode
+
+        mock_config = MagicMock()
+        mock_config.onecontext_mode = OnecontextMode.STATELESS
+        mock_config.start_script = None
+        mock_parse.return_value = mock_config
+        mock_generate.return_value = ["set system host-name test-router"]
+
+        # Create a mock session that raises error on run_commands
+        mock_session = MagicMock()
+        mock_session.run_commands.side_effect = VyOSConfigError("Command failed")
+        mock_session_class.return_value = mock_session
+
+        with patch("vyos_onecontext.__main__.FREEZE_MARKER_PATH", str(tmp_path / "frozen")):
+            result = apply_configuration(str(context_path))
+
+        assert result == EXIT_CONFIG_ERROR
+
+        # Verify end() was still called despite the error
+        mock_session.end.assert_called_once()
+
+        # Verify the order: verify_group, begin, run_commands (failed), end
+        # commit should not be called if run_commands fails
+        expected_calls = [
+            ("verify_group", (), {}),
+            ("begin", (), {}),
+            ("run_commands", (["set system host-name test-router"],), {}),
+            ("end", (), {}),
+        ]
+
+        actual_calls = [tuple(call) for call in mock_session.method_calls]
+
+        assert actual_calls == expected_calls, (
+            f"Expected session methods in order (with run_commands failing): {expected_calls}, "
+            f"but got: {actual_calls}"
+        )
+
+    @patch("vyos_onecontext.__main__.VyOSConfigSession")
+    @patch("vyos_onecontext.__main__.generate_config")
+    @patch("vyos_onecontext.__main__.parse_context")
+    def test_lifecycle_ordering_on_save_error(
+        self,
+        mock_parse: MagicMock,
+        mock_generate: MagicMock,
+        mock_session_class: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """Test that end() is called even when save() fails in SAVE mode."""
+        from vyos_onecontext.wrapper import VyOSConfigError
+
+        context_path = tmp_path / "context.sh"
+        context_path.write_text('HOSTNAME="test-router"')
+
+        from vyos_onecontext.models import OnecontextMode
+
+        mock_config = MagicMock()
+        mock_config.onecontext_mode = OnecontextMode.SAVE
+        mock_config.start_script = None
+        mock_parse.return_value = mock_config
+        mock_generate.return_value = ["set system host-name test-router"]
+
+        # Create a mock session that raises error on save
+        mock_session = MagicMock()
+        mock_session.save.side_effect = VyOSConfigError("Save failed")
+        mock_session_class.return_value = mock_session
+
+        with patch("vyos_onecontext.__main__.FREEZE_MARKER_PATH", str(tmp_path / "frozen")):
+            result = apply_configuration(str(context_path))
+
+        assert result == EXIT_CONFIG_ERROR
+
+        # Verify end() was still called despite the error
+        mock_session.end.assert_called_once()
+
+        # Verify the order: verify_group, begin, run_commands, commit, save (failed), end
+        expected_calls = [
+            ("verify_group", (), {}),
+            ("begin", (), {}),
+            ("run_commands", (["set system host-name test-router"],), {}),
+            ("commit", (), {}),
+            ("save", (), {}),
+            ("end", (), {}),
+        ]
+
+        actual_calls = [tuple(call) for call in mock_session.method_calls]
+
+        assert actual_calls == expected_calls, (
+            f"Expected session methods in order (with save failing): {expected_calls}, "
+            f"but got: {actual_calls}"
+        )
+
+
 class TestMain:
     """Tests for main entry point."""
 
