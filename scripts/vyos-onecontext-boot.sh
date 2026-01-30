@@ -101,16 +101,7 @@ main() {
     OUTPUT_FILE=$(mktemp)
     trap 'rm -f "$OUTPUT_FILE"' EXIT
 
-    # Diagnostic mode for integration testing - captures detailed VyOS output
-    # Can be disabled by setting VYOS_DIAGNOSTIC_MODE=0 in context
-    VYOS_DIAGNOSTIC_MODE="${VYOS_DIAGNOSTIC_MODE:-1}"
-    export VYOS_DIAGNOSTIC_MODE
-
-    if [ "$VYOS_DIAGNOSTIC_MODE" = "1" ]; then
-        log_info "Diagnostic capture enabled (VYOS_DIAGNOSTIC_MODE=1)"
-    fi
-
-    # Run the Python module with debug setting
+    # Run the Python module
     if "$VENV_PATH/bin/python" -m vyos_onecontext "$CONTEXT_PATH" >"$OUTPUT_FILE" 2>&1; then
         log_info "Contextualization completed successfully"
         # Log all Python output at INFO level for serial log visibility (enables test validation)

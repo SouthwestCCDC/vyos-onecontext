@@ -482,7 +482,7 @@ def check_route_exists(
     # Example interface: "S>* 172.16.0.0/12 [1/0] is directly connected, eth0"
 
     route_pattern = re.compile(
-        r"(?:via\s+([\d.]+)|is\s+directly\s+connected),\s+(\w+)"
+        r"(?:via\s+([\d.]+)|is\s+directly\s+connected),\s+([\w.-]+)"
     )
     match = route_pattern.search(output)
 
