@@ -148,14 +148,17 @@ def get_file_content_at_ref(file_path: str, git_ref: str) -> str:
         sys.exit(1)
 
 
-def get_newly_added_fixtures(base_ref: str, head_ref: str) -> set[str]:
+def get_newly_added_fixtures(
+    base_ref: str, head_ref: str
+) -> tuple[set[str], set[str]]:
     """
     Detect fixtures newly added to TEST_SCENARIOS.
 
     Compares TEST_SCENARIOS array between base and head refs.
 
     Returns:
-        Set of newly-added fixture names.
+        Tuple of (newly-added fixture names, all head fixtures).
+        The all_head_fixtures set can be reused to avoid duplicate git show calls.
     """
     test_script = "tests/integration/run-all-tests.sh"
 
@@ -169,7 +172,7 @@ def get_newly_added_fixtures(base_ref: str, head_ref: str) -> set[str]:
     # New fixtures are in head but not in base
     new_fixtures = head_fixtures - base_fixtures
 
-    return new_fixtures
+    return new_fixtures, head_fixtures
 
 
 def get_all_mapped_fixtures(mapping: dict[str, Any]) -> set[str]:
@@ -278,8 +281,9 @@ def main() -> None:
     # Get changed files
     changed_files = get_changed_files(args.base_ref, args.head_ref)
 
-    # Detect newly-added fixtures
-    new_fixtures = get_newly_added_fixtures(args.base_ref, args.head_ref)
+    # Detect newly-added fixtures (returns new fixtures and all head fixtures)
+    # We reuse all_fixtures from head to avoid duplicate git show calls
+    new_fixtures, all_fixtures = get_newly_added_fixtures(args.base_ref, args.head_ref)
 
     if new_fixtures:
         print("#", file=sys.stderr)
@@ -309,11 +313,7 @@ def main() -> None:
     fixtures.update(new_fixtures)
 
     # Check for unmapped fixtures and warn
-    # Get all fixtures from current HEAD
-    test_script_content = get_file_content_at_ref(
-        "tests/integration/run-all-tests.sh", args.head_ref
-    )
-    all_fixtures = extract_test_scenarios(test_script_content)
+    # Reuse all_fixtures from get_newly_added_fixtures() to avoid duplicate git show
     mapped_fixtures = get_all_mapped_fixtures(mapping)
     warn_unmapped_fixtures(all_fixtures, mapped_fixtures)
 
