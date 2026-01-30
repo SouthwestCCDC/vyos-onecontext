@@ -455,7 +455,7 @@ def check_dhcp_server_running(
 
     # Check if DHCP server is listening on any interfaces
     # Look for "DHCP server listening on:" or "Pool:" in output
-    if "listening on:" in output.lower() or "Pool:" in output:
+    if "listening on:" in output.lower() or "pool:" in output.lower():
         return ValidationResult(
             passed=True,
             message="DHCP server is running",
