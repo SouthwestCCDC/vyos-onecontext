@@ -1201,7 +1201,10 @@ def check_vrf_interface(
 
     # Check if our interface appears in the interfaces list
     # Interfaces are indented and each on their own line
-    if interface in interfaces_text:
+    # Use regex to match whole interface name on its own line to avoid false positives
+    # (e.g., "eth0" should not match "eth00")
+    interface_line_pattern = re.compile(rf"^\s*{re.escape(interface)}\s*$", re.MULTILINE)
+    if interface_line_pattern.search(interfaces_text):
         return ValidationResult(
             passed=True,
             message=f"Interface {interface} is bound to VRF '{vrf_name}'",
@@ -1264,7 +1267,7 @@ def check_service_vrf(
             message=f"Service '{service}' is bound to VRF '{vrf_name}'",
             raw_output=output,
         )
-    elif not output.strip() or output.strip() == "":
+    elif not output.strip():
         return ValidationResult(
             passed=False,
             message=f"Service '{service}' has no VRF binding configured",
