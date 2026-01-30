@@ -1148,7 +1148,7 @@ def check_vrf_interface(
     """Verify an interface is bound to a VRF.
 
     This function checks whether a specific interface is assigned to the
-    specified VRF by examining either the VRF details or interface configuration.
+    specified VRF by examining the VRF details via 'show vrf name <vrf>'.
 
     VyOS Output Format:
         show vrf name mgmt
@@ -1158,10 +1158,10 @@ def check_vrf_interface(
               Interfaces:
                 eth0
 
-        Alternatively, check interface config:
-            show interfaces ethernet eth0
-            Returns output containing:
-                vrf mgmt
+    Note: An alternative approach would be to query the interface directly
+    via 'show interfaces ethernet <interface>' and check for VRF membership
+    in the output. This is not currently implemented but could be added
+    if needed for cases where VRF details are unavailable.
 
     Args:
         ssh: SSH connection callable from ssh_connection fixture
