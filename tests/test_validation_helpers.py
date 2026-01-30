@@ -705,7 +705,7 @@ class TestCheckRouteExists:
         assert "interface eth0" in result.message
         assert "172.16.0.0/12" in result.message
         # Should not mention "via" for interface routes
-        assert "via" not in result.message.lower() or "via" in result.raw_output
+        assert "via" not in result.message.lower()
 
     def test_route_not_found(self) -> None:
         """Test when route does not exist in routing table."""
