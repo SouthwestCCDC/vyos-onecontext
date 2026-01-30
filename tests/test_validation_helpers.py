@@ -249,12 +249,21 @@ class TestCheckHostname:
         assert result.passed is True
 
     def test_hostname_with_underscores(self) -> None:
-        """Test hostname validation with underscores."""
+        """Test hostname validation rejects underscores (RFC 1123 compliance).
+
+        The project enforces RFC 1123 hostnames which do not allow underscores.
+        The validation helper should fail because it truncates at the underscore,
+        resulting in a mismatch.
+        """
         mock_ssh = Mock(return_value="host-name 'test_router'\n")
 
         result = check_hostname(mock_ssh, "test_router")
 
-        assert result.passed is True
+        # Should fail because regex matches only 'test' (truncating at underscore)
+        assert result.passed is False
+        assert "mismatch" in result.message.lower()
+        assert "test_router" in result.message  # expected
+        assert "test" in result.message  # actual (truncated)
 
 
 class TestCheckSshKeyConfigured:
@@ -276,7 +285,8 @@ class TestCheckSshKeyConfigured:
         assert result.passed is True
         assert "SSH public key(s) found" in result.message
         mock_ssh.assert_called_once_with(
-            "show configuration commands | grep 'authentication public-keys' || echo ''"
+            "show configuration commands | grep "
+            "'set system login user vyos authentication public-keys' || echo ''"
         )
 
     def test_ssh_key_not_configured(self) -> None:
