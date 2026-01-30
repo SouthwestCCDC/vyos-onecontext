@@ -308,12 +308,10 @@ def check_ssh_key_configured(
     at least one key exists in the configuration.
 
     VyOS Output Format:
-        show configuration | grep 'public-keys'
-        Returns output like:
-                public-keys test-key-1 {
-                    key AAAAB3Nza...
-                    type ssh-rsa
-                }
+        show configuration commands | grep 'authentication public-keys'
+        Returns flat set commands like:
+            set system login user vyos authentication public-keys 'User1' key "AAAAB3Nz..."
+            set system login user vyos authentication public-keys 'User1' type ssh-rsa
 
     Args:
         ssh: SSH connection callable from ssh_connection fixture
@@ -322,7 +320,7 @@ def check_ssh_key_configured(
         ValidationResult indicating whether SSH keys are configured
     """
     try:
-        output = ssh("show configuration | grep 'public-keys' || echo ''")
+        output = ssh("show configuration commands | grep 'authentication public-keys' || echo ''")
     except Exception as e:
         return ValidationResult(
             passed=False,
@@ -330,28 +328,37 @@ def check_ssh_key_configured(
             raw_output="",
         )
 
-    # Check if output contains "public-keys"
+    # Check if output contains "authentication public-keys"
     # Empty output or no match means no keys configured
-    if "public-keys" in output:
-        # Additional validation: should have key type and key data
-        has_key_data = "key" in output and "type" in output
-
-        if has_key_data:
-            return ValidationResult(
-                passed=True,
-                message="SSH public key(s) found in configuration",
-                raw_output=output,
-            )
-        else:
-            return ValidationResult(
-                passed=False,
-                message="SSH public-keys stanza found but missing key data or type",
-                raw_output=output,
-            )
-    else:
+    if "authentication public-keys" not in output:
         return ValidationResult(
             passed=False,
             message="No SSH public keys configured",
+            raw_output=output,
+        )
+
+    # Parse flat set commands to verify both key and type are present
+    # Example lines:
+    #   set system login user vyos authentication public-keys 'keyname' key "AAAAB3..."
+    #   set system login user vyos authentication public-keys 'keyname' type ssh-rsa
+    has_key_data = re.search(r"authentication public-keys .+ key ", output)
+    has_type = re.search(r"authentication public-keys .+ type ", output)
+
+    if has_key_data and has_type:
+        return ValidationResult(
+            passed=True,
+            message="SSH public key(s) found in configuration",
+            raw_output=output,
+        )
+    else:
+        missing_parts = []
+        if not has_key_data:
+            missing_parts.append("key data")
+        if not has_type:
+            missing_parts.append("type")
+        return ValidationResult(
+            passed=False,
+            message=f"SSH public-keys found but missing {' and '.join(missing_parts)}",
             raw_output=output,
         )
 
