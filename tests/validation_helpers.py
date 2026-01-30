@@ -212,29 +212,29 @@ def check_interface_ip(
 
     # Look for "inet <ip>/<cidr>" pattern in output
     # Example: "inet 192.168.122.10/24 brd ..."
-    # Limit octets to 1-3 digits to prevent matching invalid IPs like 999.999.999.999
-    ip_pattern = re.compile(r"inet\s+(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/\d+")
-    match = ip_pattern.search(output)
+    # Use findall to collect all IPs (interfaces can have multiple IPs)
+    ip_pattern = re.compile(r"inet\s+(\d+\.\d+\.\d+\.\d+)/\d+")
+    ip_matches = ip_pattern.findall(output)
 
-    if not match:
+    if not ip_matches:
         return ValidationResult(
             passed=False,
             message=f"No IP address found on interface {interface}",
             raw_output=output,
         )
 
-    actual_ip = match.group(1)
-
-    if actual_ip == expected_ip:
+    # Check if expected IP is in the set of found IPs
+    if expected_ip in ip_matches:
         return ValidationResult(
             passed=True,
             message=f"Interface {interface} has expected IP {expected_ip}",
             raw_output=output,
         )
     else:
+        found_ips = ", ".join(ip_matches)
         return ValidationResult(
             passed=False,
-            message=f"IP mismatch on {interface}: expected {expected_ip}, got {actual_ip}",
+            message=f"IP mismatch on {interface}: expected {expected_ip}, found {found_ips}",
             raw_output=output,
         )
 
@@ -261,7 +261,7 @@ def check_hostname(
         ValidationResult indicating whether hostname matches and diagnostic info
     """
     try:
-        output = ssh("show configuration | grep host-name")
+        output = ssh("show configuration | grep host-name || echo ''")
     except Exception as e:
         return ValidationResult(
             passed=False,

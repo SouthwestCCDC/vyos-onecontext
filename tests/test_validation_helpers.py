@@ -136,7 +136,7 @@ class TestCheckInterfaceIp:
         """Test when interface has multiple IPs and first one matches.
 
         Note: VyOS can have multiple IPs on one interface (secondary IPs).
-        This helper checks if the expected IP is present, matching the first found.
+        This helper checks if the expected IP is present in any position.
         """
         mock_ssh = Mock(
             return_value=(
@@ -151,6 +151,38 @@ class TestCheckInterfaceIp:
         result = check_interface_ip(mock_ssh, "eth0", "192.168.1.1")
         assert result.passed is True
 
+    def test_interface_multiple_ips_second_match(self) -> None:
+        """Test when interface has multiple IPs and secondary one matches."""
+        mock_ssh = Mock(
+            return_value=(
+                "eth0@NONE: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500\n"
+                "    link/ether 52:54:00:12:34:56 brd ff:ff:ff:ff:ff:ff\n"
+                "    inet 192.168.1.1/24 brd 192.168.1.255 scope global eth0\n"
+                "    inet 192.168.1.2/24 brd 192.168.1.255 scope global secondary eth0\n"
+            )
+        )
+
+        # Check for secondary IP
+        result = check_interface_ip(mock_ssh, "eth0", "192.168.1.2")
+        assert result.passed is True
+
+    def test_interface_multiple_ips_none_match(self) -> None:
+        """Test when interface has multiple IPs but none match expected."""
+        mock_ssh = Mock(
+            return_value=(
+                "eth0@NONE: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500\n"
+                "    link/ether 52:54:00:12:34:56 brd ff:ff:ff:ff:ff:ff\n"
+                "    inet 192.168.1.1/24 brd 192.168.1.255 scope global eth0\n"
+                "    inet 192.168.1.2/24 brd 192.168.1.255 scope global secondary eth0\n"
+            )
+        )
+
+        # Check for IP not in the list
+        result = check_interface_ip(mock_ssh, "eth0", "192.168.1.99")
+        assert result.passed is False
+        assert "192.168.1.1" in result.message  # Should show all found IPs
+        assert "192.168.1.2" in result.message
+
 
 class TestCheckHostname:
     """Test check_hostname helper function."""
@@ -164,7 +196,7 @@ class TestCheckHostname:
         assert result.passed is True
         assert "matches" in result.message.lower()
         assert "test-simple" in result.message
-        mock_ssh.assert_called_once_with("show configuration | grep host-name")
+        mock_ssh.assert_called_once_with("show configuration | grep host-name || echo ''")
 
     def test_hostname_matches_without_quotes(self) -> None:
         """Test when hostname matches (no quotes in config)."""
