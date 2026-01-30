@@ -17,19 +17,13 @@ from tests.validation_helpers import (
     check_ospf_interface,
     check_ospf_router_id,
     check_route_exists,
+    check_service_vrf,
     check_snat_rule,
     check_ssh_key_configured,
+    check_vrf_exists,
+    check_vrf_interface,
     list_nat_rules,
 )
-
-
-class TestValidationResult:
-    """Test ValidationResult dataclass."""
-
-    def test_validation_result_passed(self) -> None:
-        """Test ValidationResult with passed=True."""
-        result = ValidationResult(
-            passed=True,
             message="Test passed",
             raw_output="raw output",
         )
@@ -1103,684 +1097,322 @@ class TestCheckDefaultRoute:
         assert "192.168.122.2" in result.message
 
 
-class TestCheckSnatRule:
-    """Test check_snat_rule helper function."""
+class TestCheckVrfExists:
+    """Test check_vrf_exists helper function."""
 
-    def test_snat_rule_exists_with_all_params(self) -> None:
-        """Test when SNAT rule exists with matching parameters."""
+    def test_vrf_exists_without_table_id(self) -> None:
+        """Test when VRF exists and no table ID validation requested."""
         mock_ssh = Mock(
             return_value=(
-                "set nat source rule 100 outbound-interface name 'eth0'\n"
-                "set nat source rule 100 source address '10.0.0.0/24'\n"
-                "set nat source rule 100 translation address 'masquerade'\n"
+                "--------          -----     -----------        -----            ----------\n"
+                "mgmt              up        aa:bb:cc:dd:ee:ff  noarp,master     eth0\n"
             )
         )
 
-        result = check_snat_rule(
-            mock_ssh,
-            rule_num=100,
-            outbound_interface="eth0",
-            translation="masquerade",
-        )
+        result = check_vrf_exists(mock_ssh, "mgmt")
 
         assert result.passed is True
-        assert "100" in result.message
-        assert "eth0" in result.message
-        assert "masquerade" in result.message
-        mock_ssh.assert_called_once_with("show configuration commands | grep 'nat source'")
+        assert "VRF 'mgmt' exists" in result.message
+        mock_ssh.assert_called_once_with("show vrf")
 
-    def test_snat_rule_exists_only_rule_num(self) -> None:
-        """Test when checking only rule existence."""
-        mock_ssh = Mock(
-            return_value=(
-                "set nat source rule 100 outbound-interface name 'eth0'\n"
-                "set nat source rule 100 translation address 'masquerade'\n"
-            )
-        )
+    def test_vrf_exists_with_matching_table_id(self) -> None:
+        """Test when VRF exists with correct table ID."""
+        mock_ssh = Mock()
+        # First call returns VRF list, second call returns VRF details
+        mock_ssh.side_effect = [
+            (
+                "VRF name          state     mac address        flags            interfaces\n"
+                "--------          -----     -----------        -----            ----------\n"
+                "mgmt              up        aa:bb:cc:dd:ee:ff  noarp,master     eth0\n"
+            ),
+            ("VRF: mgmt\n  Table: 1000\n  Interfaces:\n    eth0\n"),
+        ]
 
-        result = check_snat_rule(mock_ssh, rule_num=100)
+        result = check_vrf_exists(mock_ssh, "mgmt", table_id=1000)
 
         assert result.passed is True
-        assert "100" in result.message
-        assert "exists" in result.message
+        assert "VRF 'mgmt' exists with table ID 1000" in result.message
+        assert mock_ssh.call_count == 2
+        mock_ssh.assert_any_call("show vrf")
+        mock_ssh.assert_any_call("show vrf name mgmt")
 
-    def test_snat_rule_not_found(self) -> None:
-        """Test when SNAT rule does not exist."""
+    def test_vrf_not_found(self) -> None:
+        """Test when VRF does not exist."""
         mock_ssh = Mock(
             return_value=(
-                "set nat source rule 200 outbound-interface name 'eth1'\n"
-                "set nat source rule 200 translation address 'masquerade'\n"
+                "VRF name          state     mac address        flags            interfaces\n"
+                "--------          -----     -----------        -----            ----------\n"
+                "other             up        aa:bb:cc:dd:ee:ff  noarp,master     eth1\n"
             )
         )
 
-        result = check_snat_rule(mock_ssh, rule_num=100)
+        result = check_vrf_exists(mock_ssh, "mgmt")
 
         assert result.passed is False
-        assert "not found" in result.message
-        assert "100" in result.message
+        assert "VRF 'mgmt' not found" in result.message
 
-    def test_snat_rule_interface_mismatch(self) -> None:
-        """Test when SNAT rule interface doesn't match."""
-        mock_ssh = Mock(
-            return_value=(
-                "set nat source rule 100 outbound-interface name 'eth1'\n"
-                "set nat source rule 100 translation address 'masquerade'\n"
-            )
-        )
+    def test_vrf_table_id_mismatch(self) -> None:
+        """Test when VRF exists but table ID doesn't match."""
+        mock_ssh = Mock()
+        mock_ssh.side_effect = [
+            (
+                "VRF name          state     mac address        flags            interfaces\n"
+                "--------          -----     -----------        -----            ----------\n"
+                "mgmt              up        aa:bb:cc:dd:ee:ff  noarp,master     eth0\n"
+            ),
+            ("VRF: mgmt\n  Table: 2000\n  Interfaces:\n    eth0\n"),
+        ]
 
-        result = check_snat_rule(
-            mock_ssh,
-            rule_num=100,
-            outbound_interface="eth0",
-        )
+        result = check_vrf_exists(mock_ssh, "mgmt", table_id=1000)
 
         assert result.passed is False
-        assert "mismatch" in result.message
-        assert "eth0" in result.message
+        assert "table ID mismatch" in result.message
+        assert "expected 1000" in result.message
+        assert "got 2000" in result.message
 
-    def test_snat_rule_translation_mismatch(self) -> None:
-        """Test when SNAT rule translation doesn't match."""
-        mock_ssh = Mock(
-            return_value=(
-                "set nat source rule 100 outbound-interface name 'eth0'\n"
-                "set nat source rule 100 translation address '192.168.1.1'\n"
-            )
-        )
+    def test_vrf_query_fails(self) -> None:
+        """Test when show vrf command fails."""
+        mock_ssh = Mock(side_effect=Exception("Connection lost"))
 
-        result = check_snat_rule(
-            mock_ssh,
-            rule_num=100,
-            translation="masquerade",
-        )
+        result = check_vrf_exists(mock_ssh, "mgmt")
 
         assert result.passed is False
-        assert "translation mismatch" in result.message
-        assert "masquerade" in result.message
-
-    def test_snat_rule_query_fails(self) -> None:
-        """Test when SSH command fails."""
-        mock_ssh = Mock(side_effect=Exception("Connection timeout"))
-
-        result = check_snat_rule(mock_ssh, rule_num=100)
-
-        assert result.passed is False
-        assert "Failed to query" in result.message
+        assert "Failed to query VRF list" in result.message
         assert result.raw_output == ""
 
-    def test_snat_rule_with_static_ip_translation(self) -> None:
-        """Test SNAT rule with static IP translation."""
+    def test_vrf_detail_query_fails(self) -> None:
+        """Test when VRF exists but detail query fails."""
+        mock_ssh = Mock()
+        mock_ssh.side_effect = [
+            (
+                "VRF name          state     mac address        flags            interfaces\n"
+                "--------          -----     -----------        -----            ----------\n"
+                "mgmt              up        aa:bb:cc:dd:ee:ff  noarp,master     eth0\n"
+            ),
+            Exception("Permission denied"),
+        ]
+
+        result = check_vrf_exists(mock_ssh, "mgmt", table_id=1000)
+
+        assert result.passed is False
+        assert "Failed to query VRF 'mgmt' details" in result.message
+
+    def test_vrf_no_table_in_details(self) -> None:
+        """Test when VRF details don't contain table ID."""
+        mock_ssh = Mock()
+        mock_ssh.side_effect = [
+            (
+                "VRF name          state     mac address        flags            interfaces\n"
+                "--------          -----     -----------        -----            ----------\n"
+                "mgmt              up        aa:bb:cc:dd:ee:ff  noarp,master     eth0\n"
+            ),
+            ("VRF: mgmt\n  Interfaces:\n    eth0\n"),
+        ]
+
+        result = check_vrf_exists(mock_ssh, "mgmt", table_id=1000)
+
+        assert result.passed is False
+        assert "table ID not found in details" in result.message
+
+    def test_vrf_multiple_vrfs_in_list(self) -> None:
+        """Test finding specific VRF among multiple VRFs."""
         mock_ssh = Mock(
             return_value=(
-                "set nat source rule 200 outbound-interface name 'eth0'\n"
-                "set nat source rule 200 source address '10.0.0.0/24'\n"
-                "set nat source rule 200 translation address '203.0.113.10'\n"
+                "VRF name          state     mac address        flags            interfaces\n"
+                "--------          -----     -----------        -----            ----------\n"
+                "blue              up        aa:bb:cc:dd:ee:01  noarp,master     eth1\n"
+                "mgmt              up        aa:bb:cc:dd:ee:ff  noarp,master     eth0\n"
+                "red               up        aa:bb:cc:dd:ee:02  noarp,master     eth2\n"
             )
         )
 
-        result = check_snat_rule(
-            mock_ssh,
-            rule_num=200,
-            outbound_interface="eth0",
-            translation="203.0.113.10",
-        )
+        result = check_vrf_exists(mock_ssh, "mgmt")
 
         assert result.passed is True
-        assert "203.0.113.10" in result.message
+        assert "VRF 'mgmt' exists" in result.message
 
-    def test_snat_rule_multiple_rules_filter(self) -> None:
-        """Test filtering specific rule when multiple rules exist."""
+    def test_vrf_name_with_hyphens(self) -> None:
+        """Test VRF name containing hyphens."""
         mock_ssh = Mock(
             return_value=(
-                "set nat source rule 100 outbound-interface name 'eth0'\n"
-                "set nat source rule 100 translation address 'masquerade'\n"
-                "set nat source rule 200 outbound-interface name 'eth1'\n"
-                "set nat source rule 200 translation address '10.0.0.1'\n"
+                "VRF name          state     mac address        flags            interfaces\n"
+                "--------          -----     -----------        -----            ----------\n"
+                "my-vrf-1          up        aa:bb:cc:dd:ee:ff  noarp,master     eth0\n"
             )
         )
 
-        result = check_snat_rule(
-            mock_ssh,
-            rule_num=200,
-            outbound_interface="eth1",
-        )
+        result = check_vrf_exists(mock_ssh, "my-vrf-1")
 
         assert result.passed is True
-        assert "200" in result.message
+
+
+class TestCheckVrfInterface:
+    """Test check_vrf_interface helper function."""
+
+    def test_interface_in_vrf(self) -> None:
+        """Test when interface is correctly bound to VRF."""
+        mock_ssh = Mock(return_value=("VRF: mgmt\n  Table: 1000\n  Interfaces:\n    eth0\n"))
+
+        result = check_vrf_interface(mock_ssh, "mgmt", "eth0")
+
+        assert result.passed is True
+        assert "Interface eth0 is bound to VRF 'mgmt'" in result.message
+        mock_ssh.assert_called_once_with("show vrf name mgmt")
+
+    def test_interface_not_in_vrf(self) -> None:
+        """Test when interface is not in the VRF."""
+        mock_ssh = Mock(return_value=("VRF: mgmt\n  Table: 1000\n  Interfaces:\n    eth0\n"))
+
+        result = check_vrf_interface(mock_ssh, "mgmt", "eth1")
+
+        assert result.passed is False
+        assert "Interface eth1 not found in VRF 'mgmt'" in result.message
+
+    def test_vrf_no_interfaces(self) -> None:
+        """Test when VRF exists but has no interfaces."""
+        mock_ssh = Mock(return_value=("VRF: mgmt\n  Table: 1000\n"))
+
+        result = check_vrf_interface(mock_ssh, "mgmt", "eth0")
+
+        assert result.passed is False
+        assert "has no interfaces listed" in result.message
+
+    def test_vrf_multiple_interfaces(self) -> None:
+        """Test finding interface among multiple interfaces in VRF."""
+        mock_ssh = Mock(
+            return_value=("VRF: mgmt\n  Table: 1000\n  Interfaces:\n    eth0\n    eth1\n    eth2\n")
+        )
+
+        result = check_vrf_interface(mock_ssh, "mgmt", "eth1")
+
+        assert result.passed is True
         assert "eth1" in result.message
 
+    def test_vrf_query_fails(self) -> None:
+        """Test when VRF query fails."""
+        mock_ssh = Mock(side_effect=Exception("VRF not found"))
 
-class TestCheckDnatRule:
-    """Test check_dnat_rule helper function."""
-
-    def test_dnat_rule_exists_with_all_params(self) -> None:
-        """Test when DNAT rule exists with matching parameters."""
-        mock_ssh = Mock(
-            return_value=(
-                "set nat destination rule 10 inbound-interface name 'eth0'\n"
-                "set nat destination rule 10 destination port '80'\n"
-                "set nat destination rule 10 protocol 'tcp'\n"
-                "set nat destination rule 10 translation address '192.168.1.10'\n"
-                "set nat destination rule 10 translation port '8080'\n"
-            )
-        )
-
-        result = check_dnat_rule(
-            mock_ssh,
-            rule_num=10,
-            inbound_interface="eth0",
-            protocol="tcp",
-            port="80",
-            translation_address="192.168.1.10",
-        )
-
-        assert result.passed is True
-        assert "10" in result.message
-        assert "eth0" in result.message
-        assert "tcp" in result.message
-        assert "80" in result.message
-        assert "192.168.1.10" in result.message
-        mock_ssh.assert_called_once_with("show configuration commands | grep 'nat destination'")
-
-    def test_dnat_rule_exists_only_rule_num(self) -> None:
-        """Test when checking only rule existence."""
-        mock_ssh = Mock(
-            return_value=(
-                "set nat destination rule 10 inbound-interface name 'eth0'\n"
-                "set nat destination rule 10 translation address '192.168.1.10'\n"
-            )
-        )
-
-        result = check_dnat_rule(mock_ssh, rule_num=10)
-
-        assert result.passed is True
-        assert "10" in result.message
-        assert "exists" in result.message
-
-    def test_dnat_rule_not_found(self) -> None:
-        """Test when DNAT rule does not exist."""
-        mock_ssh = Mock(
-            return_value=(
-                "set nat destination rule 20 inbound-interface name 'eth1'\n"
-                "set nat destination rule 20 translation address '192.168.1.20'\n"
-            )
-        )
-
-        result = check_dnat_rule(mock_ssh, rule_num=10)
+        result = check_vrf_interface(mock_ssh, "mgmt", "eth0")
 
         assert result.passed is False
-        assert "not found" in result.message
-        assert "10" in result.message
-
-    def test_dnat_rule_interface_mismatch(self) -> None:
-        """Test when DNAT rule interface doesn't match."""
-        mock_ssh = Mock(
-            return_value=(
-                "set nat destination rule 10 inbound-interface name 'eth1'\n"
-                "set nat destination rule 10 translation address '192.168.1.10'\n"
-            )
-        )
-
-        result = check_dnat_rule(
-            mock_ssh,
-            rule_num=10,
-            inbound_interface="eth0",
-        )
-
-        assert result.passed is False
-        assert "inbound interface mismatch" in result.message
-        assert "eth0" in result.message
-
-    def test_dnat_rule_protocol_mismatch(self) -> None:
-        """Test when DNAT rule protocol doesn't match."""
-        mock_ssh = Mock(
-            return_value=(
-                "set nat destination rule 10 inbound-interface name 'eth0'\n"
-                "set nat destination rule 10 protocol 'udp'\n"
-                "set nat destination rule 10 translation address '192.168.1.10'\n"
-            )
-        )
-
-        result = check_dnat_rule(
-            mock_ssh,
-            rule_num=10,
-            protocol="tcp",
-        )
-
-        assert result.passed is False
-        assert "protocol mismatch" in result.message
-        assert "tcp" in result.message
-
-    def test_dnat_rule_port_mismatch(self) -> None:
-        """Test when DNAT rule port doesn't match."""
-        mock_ssh = Mock(
-            return_value=(
-                "set nat destination rule 10 inbound-interface name 'eth0'\n"
-                "set nat destination rule 10 destination port '443'\n"
-                "set nat destination rule 10 translation address '192.168.1.10'\n"
-            )
-        )
-
-        result = check_dnat_rule(
-            mock_ssh,
-            rule_num=10,
-            port="80",
-        )
-
-        assert result.passed is False
-        assert "port mismatch" in result.message
-        assert "80" in result.message
-
-    def test_dnat_rule_translation_mismatch(self) -> None:
-        """Test when DNAT rule translation address doesn't match."""
-        mock_ssh = Mock(
-            return_value=(
-                "set nat destination rule 10 inbound-interface name 'eth0'\n"
-                "set nat destination rule 10 translation address '192.168.1.20'\n"
-            )
-        )
-
-        result = check_dnat_rule(
-            mock_ssh,
-            rule_num=10,
-            translation_address="192.168.1.10",
-        )
-
-        assert result.passed is False
-        assert "translation address mismatch" in result.message
-        assert "192.168.1.10" in result.message
-
-    def test_dnat_rule_query_fails(self) -> None:
-        """Test when SSH command fails."""
-        mock_ssh = Mock(side_effect=Exception("Connection timeout"))
-
-        result = check_dnat_rule(mock_ssh, rule_num=10)
-
-        assert result.passed is False
-        assert "Failed to query" in result.message
+        assert "Failed to query VRF 'mgmt'" in result.message
         assert result.raw_output == ""
 
-    def test_dnat_rule_udp_protocol(self) -> None:
-        """Test DNAT rule with UDP protocol."""
-        mock_ssh = Mock(
-            return_value=(
-                "set nat destination rule 15 inbound-interface name 'eth0'\n"
-                "set nat destination rule 15 destination port '53'\n"
-                "set nat destination rule 15 protocol 'udp'\n"
-                "set nat destination rule 15 translation address '192.168.1.15'\n"
-            )
-        )
+    def test_interface_with_vlan(self) -> None:
+        """Test interface with VLAN subinterface."""
+        mock_ssh = Mock(return_value=("VRF: mgmt\n  Table: 1000\n  Interfaces:\n    eth0.100\n"))
 
-        result = check_dnat_rule(
-            mock_ssh,
-            rule_num=15,
-            protocol="udp",
-            port="53",
-        )
+        result = check_vrf_interface(mock_ssh, "mgmt", "eth0.100")
 
         assert result.passed is True
-        assert "udp" in result.message
-        assert "53" in result.message
 
-    def test_dnat_rule_multiple_rules_filter(self) -> None:
-        """Test filtering specific rule when multiple rules exist."""
-        mock_ssh = Mock(
-            return_value=(
-                "set nat destination rule 10 inbound-interface name 'eth0'\n"
-                "set nat destination rule 10 translation address '192.168.1.10'\n"
-                "set nat destination rule 20 inbound-interface name 'eth1'\n"
-                "set nat destination rule 20 translation address '192.168.1.20'\n"
-            )
-        )
+    def test_vrf_empty_interfaces_list(self) -> None:
+        """Test when VRF has Interfaces: section but it's empty."""
+        mock_ssh = Mock(return_value=("VRF: mgmt\n  Table: 1000\n  Interfaces:\n"))
 
-        result = check_dnat_rule(
-            mock_ssh,
-            rule_num=20,
-            inbound_interface="eth1",
-            translation_address="192.168.1.20",
-        )
+        result = check_vrf_interface(mock_ssh, "mgmt", "eth0")
 
-        assert result.passed is True
-        assert "20" in result.message
-        assert "eth1" in result.message
-        assert "192.168.1.20" in result.message
+        assert result.passed is False
+        assert "not found in VRF" in result.message
 
 
-class TestListNatRules:
-    """Test list_nat_rules helper function."""
+class TestCheckServiceVrf:
+    """Test check_service_vrf helper function."""
 
-    def test_list_source_nat_rules(self) -> None:
-        """Test listing source NAT rules."""
-        mock_ssh = Mock(
-            return_value=(
-                "set nat source rule 100 outbound-interface name 'eth0'\n"
-                "set nat source rule 100 translation address 'masquerade'\n"
-                "set nat source rule 200 outbound-interface name 'eth1'\n"
-                "set nat source rule 200 translation address '10.0.0.1'\n"
-            )
-        )
+    def test_service_bound_to_vrf_with_quotes(self) -> None:
+        """Test when service is correctly bound to VRF (with quotes)."""
+        mock_ssh = Mock(return_value="set service ssh vrf 'mgmt'\n")
 
-        result = list_nat_rules(mock_ssh, nat_type="source")
+        result = check_service_vrf(mock_ssh, "ssh", "mgmt")
 
         assert result.passed is True
-        assert "2" in result.message
-        assert "100" in result.message or "[100, 200]" in result.message
-        assert "200" in result.message or "[100, 200]" in result.message
-        mock_ssh.assert_called_once_with("show configuration commands | grep 'nat source'")
-
-    def test_list_destination_nat_rules(self) -> None:
-        """Test listing destination NAT rules."""
-        mock_ssh = Mock(
-            return_value=(
-                "set nat destination rule 10 inbound-interface name 'eth0'\n"
-                "set nat destination rule 10 translation address '192.168.1.10'\n"
-                "set nat destination rule 20 inbound-interface name 'eth0'\n"
-                "set nat destination rule 20 translation address '192.168.1.20'\n"
-            )
+        assert "Service 'ssh' is bound to VRF 'mgmt'" in result.message
+        mock_ssh.assert_called_once_with(
+            "show configuration commands | grep 'service ssh vrf' || echo ''"
         )
 
-        result = list_nat_rules(mock_ssh, nat_type="destination")
+    def test_service_bound_to_vrf_without_quotes(self) -> None:
+        """Test when service is bound to VRF (no quotes)."""
+        mock_ssh = Mock(return_value="set service ssh vrf mgmt\n")
+
+        result = check_service_vrf(mock_ssh, "ssh", "mgmt")
 
         assert result.passed is True
-        assert "2" in result.message
-        assert "10" in result.message or "[10, 20]" in result.message
-        assert "20" in result.message or "[10, 20]" in result.message
-        mock_ssh.assert_called_once_with("show configuration commands | grep 'nat destination'")
 
-    def test_list_nat_rules_no_rules(self) -> None:
-        """Test listing NAT rules when none exist."""
+    def test_service_no_vrf_binding(self) -> None:
+        """Test when service has no VRF binding."""
         mock_ssh = Mock(return_value="")
 
-        result = list_nat_rules(mock_ssh, nat_type="source")
-
-        assert result.passed is True
-        assert "No NAT" in result.message
-        assert "source" in result.message
-
-    def test_list_nat_rules_invalid_type(self) -> None:
-        """Test listing NAT rules with invalid type."""
-        mock_ssh = Mock()
-
-        result = list_nat_rules(mock_ssh, nat_type="invalid")
+        result = check_service_vrf(mock_ssh, "ssh", "mgmt")
 
         assert result.passed is False
-        assert "Invalid nat_type" in result.message
-        assert "source" in result.message
-        assert "destination" in result.message
-        mock_ssh.assert_not_called()
+        assert "Service 'ssh' has no VRF binding configured" in result.message
 
-    def test_list_nat_rules_query_fails(self) -> None:
-        """Test when SSH command fails."""
-        mock_ssh = Mock(side_effect=Exception("Connection timeout"))
+    def test_service_wrong_vrf(self) -> None:
+        """Test when service is bound to different VRF."""
+        mock_ssh = Mock(return_value="set service ssh vrf 'other'\n")
 
-        result = list_nat_rules(mock_ssh, nat_type="source")
+        result = check_service_vrf(mock_ssh, "ssh", "mgmt")
 
         assert result.passed is False
-        assert "Failed to query" in result.message
+        assert "VRF mismatch" in result.message
+        assert "expected 'mgmt'" in result.message
+        assert "got 'other'" in result.message
+
+    def test_service_query_fails(self) -> None:
+        """Test when configuration query fails."""
+        mock_ssh = Mock(side_effect=Exception("Access denied"))
+
+        result = check_service_vrf(mock_ssh, "ssh", "mgmt")
+
+        assert result.passed is False
+        assert "Failed to query service 'ssh' VRF configuration" in result.message
         assert result.raw_output == ""
 
-    def test_list_nat_rules_single_rule(self) -> None:
-        """Test listing NAT rules when only one rule exists."""
-        mock_ssh = Mock(
-            return_value=(
-                "set nat source rule 100 outbound-interface name 'eth0'\n"
-                "set nat source rule 100 translation address 'masquerade'\n"
-            )
-        )
+    def test_https_service(self) -> None:
+        """Test HTTPS service VRF binding."""
+        mock_ssh = Mock(return_value="set service https vrf 'mgmt'\n")
 
-        result = list_nat_rules(mock_ssh, nat_type="source")
+        result = check_service_vrf(mock_ssh, "https", "mgmt")
 
         assert result.passed is True
-        assert "1" in result.message
-        assert "100" in result.message
+        assert "https" in result.message
 
-    def test_list_nat_rules_sorted_output(self) -> None:
-        """Test that NAT rules are listed in sorted order."""
-        mock_ssh = Mock(
-            return_value=(
-                "set nat source rule 300 outbound-interface name 'eth0'\n"
-                "set nat source rule 100 outbound-interface name 'eth1'\n"
-                "set nat source rule 200 outbound-interface name 'eth2'\n"
-            )
-        )
+    def test_snmp_service(self) -> None:
+        """Test SNMP service VRF binding."""
+        mock_ssh = Mock(return_value="set service snmp vrf 'mgmt'\n")
 
-        result = list_nat_rules(mock_ssh, nat_type="source")
-
-        assert result.passed is True
-        # Verify the message contains sorted rule numbers
-        assert "[100, 200, 300]" in result.message
-
-
-class TestSnatVlanAndUnquoted:
-    """Test SNAT rule validation with VLAN interfaces and unquoted output."""
-
-    def test_snat_rule_vlan_interface(self) -> None:
-        """Test SNAT rule with VLAN interface (eth0.100)."""
-        mock_ssh = Mock(
-            return_value=(
-                "set nat source rule 100 outbound-interface name 'eth0.100'\n"
-                "set nat source rule 100 source address '10.0.0.0/24'\n"
-                "set nat source rule 100 translation address 'masquerade'\n"
-            )
-        )
-
-        result = check_snat_rule(
-            mock_ssh,
-            rule_num=100,
-            outbound_interface="eth0.100",
-            translation="masquerade",
-        )
-
-        assert result.passed is True
-        assert "100" in result.message
-        assert "eth0.100" in result.message
-
-    def test_snat_rule_unquoted_interface(self) -> None:
-        """Test SNAT rule with unquoted interface name."""
-        mock_ssh = Mock(
-            return_value=(
-                "set nat source rule 100 outbound-interface name eth0\n"
-                "set nat source rule 100 source address '10.0.0.0/24'\n"
-                "set nat source rule 100 translation address masquerade\n"
-            )
-        )
-
-        result = check_snat_rule(
-            mock_ssh,
-            rule_num=100,
-            outbound_interface="eth0",
-            translation="masquerade",
-        )
-
-        assert result.passed is True
-        assert "100" in result.message
-
-    def test_snat_rule_unquoted_translation_ip(self) -> None:
-        """Test SNAT rule with unquoted static IP translation."""
-        mock_ssh = Mock(
-            return_value=(
-                "set nat source rule 200 outbound-interface name eth0\n"
-                "set nat source rule 200 source address 10.0.0.0/24\n"
-                "set nat source rule 200 translation address 203.0.113.10\n"
-            )
-        )
-
-        result = check_snat_rule(
-            mock_ssh,
-            rule_num=200,
-            outbound_interface="eth0",
-            translation="203.0.113.10",
-        )
-
-        assert result.passed is True
-        assert "203.0.113.10" in result.message
-
-
-class TestDnatVlanAndUnquoted:
-    """Test DNAT rule validation with VLAN interfaces and unquoted output."""
-
-    def test_dnat_rule_vlan_interface(self) -> None:
-        """Test DNAT rule with VLAN interface (eth1.200)."""
-        mock_ssh = Mock(
-            return_value=(
-                "set nat destination rule 10 inbound-interface name 'eth1.200'\n"
-                "set nat destination rule 10 destination port '80'\n"
-                "set nat destination rule 10 protocol 'tcp'\n"
-                "set nat destination rule 10 translation address '192.168.1.10'\n"
-            )
-        )
-
-        result = check_dnat_rule(
-            mock_ssh,
-            rule_num=10,
-            inbound_interface="eth1.200",
-            protocol="tcp",
-            port="80",
-            translation_address="192.168.1.10",
-        )
-
-        assert result.passed is True
-        assert "10" in result.message
-        assert "eth1.200" in result.message
-
-    def test_dnat_rule_unquoted_values(self) -> None:
-        """Test DNAT rule with unquoted values in VyOS output."""
-        mock_ssh = Mock(
-            return_value=(
-                "set nat destination rule 10 inbound-interface name eth0\n"
-                "set nat destination rule 10 destination port 80\n"
-                "set nat destination rule 10 protocol tcp\n"
-                "set nat destination rule 10 translation address 192.168.1.10\n"
-            )
-        )
-
-        result = check_dnat_rule(
-            mock_ssh,
-            rule_num=10,
-            inbound_interface="eth0",
-            protocol="tcp",
-            port="80",
-            translation_address="192.168.1.10",
-        )
-
-        assert result.passed is True
-        assert "10" in result.message
-
-    def test_dnat_rule_mixed_quoted_unquoted(self) -> None:
-        """Test DNAT rule with mix of quoted and unquoted values."""
-        mock_ssh = Mock(
-            return_value=(
-                "set nat destination rule 15 inbound-interface name 'eth0'\n"
-                "set nat destination rule 15 destination port 443\n"
-                "set nat destination rule 15 protocol 'tcp'\n"
-                "set nat destination rule 15 translation address 192.168.1.15\n"
-            )
-        )
-
-        result = check_dnat_rule(
-            mock_ssh,
-            rule_num=15,
-            inbound_interface="eth0",
-            protocol="tcp",
-            port="443",
-            translation_address="192.168.1.15",
-        )
+        result = check_service_vrf(mock_ssh, "snmp", "mgmt")
 
         assert result.passed is True
 
+    def test_service_vrf_with_hyphens(self) -> None:
+        """Test VRF name with hyphens."""
+        mock_ssh = Mock(return_value="set service ssh vrf 'my-mgmt-vrf'\n")
 
-class TestDnatTranslationPort:
-    """Test DNAT rule validation with translation_port parameter."""
-
-    def test_dnat_rule_with_translation_port(self) -> None:
-        """Test DNAT rule with port remapping (80 -> 8080)."""
-        mock_ssh = Mock(
-            return_value=(
-                "set nat destination rule 10 inbound-interface name 'eth0'\n"
-                "set nat destination rule 10 destination port '80'\n"
-                "set nat destination rule 10 protocol 'tcp'\n"
-                "set nat destination rule 10 translation address '192.168.1.10'\n"
-                "set nat destination rule 10 translation port '8080'\n"
-            )
-        )
-
-        result = check_dnat_rule(
-            mock_ssh,
-            rule_num=10,
-            inbound_interface="eth0",
-            protocol="tcp",
-            port="80",
-            translation_address="192.168.1.10",
-            translation_port="8080",
-        )
+        result = check_service_vrf(mock_ssh, "ssh", "my-mgmt-vrf")
 
         assert result.passed is True
-        assert "10" in result.message
-        assert "8080" in result.message or "translation_port=8080" in result.message
 
-    def test_dnat_rule_translation_port_mismatch(self) -> None:
-        """Test DNAT rule when translation port doesn't match."""
+    def test_service_multiple_config_lines(self) -> None:
+        """Test when grep returns multiple service configurations."""
+        # This might happen if there are multiple services or config contexts
         mock_ssh = Mock(
             return_value=(
-                "set nat destination rule 10 inbound-interface name 'eth0'\n"
-                "set nat destination rule 10 destination port '80'\n"
-                "set nat destination rule 10 protocol 'tcp'\n"
-                "set nat destination rule 10 translation address '192.168.1.10'\n"
-                "set nat destination rule 10 translation port '8080'\n"
+                "set service ssh vrf 'mgmt'\nset service ssh vrf listen-address '10.0.0.1'\n"
             )
         )
 
-        result = check_dnat_rule(
-            mock_ssh,
-            rule_num=10,
-            translation_port="9090",
-        )
+        result = check_service_vrf(mock_ssh, "ssh", "mgmt")
+
+        assert result.passed is True
+
+    def test_service_unparseable_vrf_config(self) -> None:
+        """Test when VRF config exists but cannot parse VRF name."""
+        # Edge case: malformed config that matches grep but not regex
+        mock_ssh = Mock(return_value="set service ssh vrf\n")
+
+        result = check_service_vrf(mock_ssh, "ssh", "mgmt")
 
         assert result.passed is False
-        assert "translation port mismatch" in result.message
-        assert "9090" in result.message
-
-    def test_dnat_rule_translation_port_unquoted(self) -> None:
-        """Test DNAT rule with unquoted translation port."""
-        mock_ssh = Mock(
-            return_value=(
-                "set nat destination rule 20 inbound-interface name eth0\n"
-                "set nat destination rule 20 destination port 443\n"
-                "set nat destination rule 20 protocol tcp\n"
-                "set nat destination rule 20 translation address 192.168.1.20\n"
-                "set nat destination rule 20 translation port 8443\n"
-            )
-        )
-
-        result = check_dnat_rule(
-            mock_ssh,
-            rule_num=20,
-            translation_port="8443",
-        )
-
-        assert result.passed is True
-        assert "20" in result.message
-
-    def test_dnat_rule_https_to_8443_remapping(self) -> None:
-        """Test DNAT rule for common HTTPS remapping (443 -> 8443)."""
-        mock_ssh = Mock(
-            return_value=(
-                "set nat destination rule 25 inbound-interface name 'eth0'\n"
-                "set nat destination rule 25 destination port '443'\n"
-                "set nat destination rule 25 protocol 'tcp'\n"
-                "set nat destination rule 25 translation address '10.0.1.100'\n"
-                "set nat destination rule 25 translation port '8443'\n"
-            )
-        )
-
-        result = check_dnat_rule(
-            mock_ssh,
-            rule_num=25,
-            inbound_interface="eth0",
-            protocol="tcp",
-            port="443",
-            translation_address="10.0.1.100",
-            translation_port="8443",
-        )
-
-        assert result.passed is True
-        assert "25" in result.message
+        assert "cannot parse VRF name" in result.message

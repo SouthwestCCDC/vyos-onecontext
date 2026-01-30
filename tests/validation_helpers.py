@@ -19,6 +19,7 @@ VyOS Command Output Formats:
 - show ip route: Returns routing table with protocol codes and next-hop info
 - show configuration commands | grep 'nat source': Returns NAT source set commands
 - show configuration commands | grep 'nat destination': Returns NAT dest set commands
+- show vrf: Shows VRF list and details
 """
 
 
@@ -1036,3 +1037,260 @@ def list_nat_rules(
         message=f"Found {len(rule_numbers)} NAT {nat_type} rule(s): {rule_numbers}",
         raw_output=output,
     )
+
+
+def check_vrf_exists(
+    ssh: Callable[[str], str],
+    vrf_name: str,
+    table_id: int | None = None,
+) -> ValidationResult:
+    """Verify a VRF exists with optional table ID validation.
+
+    This function checks whether a VRF is configured in VyOS and optionally
+    validates that it has the expected routing table ID.
+
+    VyOS Output Format:
+        show vrf
+        Returns output like:
+            VRF name          state     mac address        flags                     interfaces
+            --------          -----     -----------        -----                     ----------
+            mgmt              up        aa:bb:cc:dd:ee:ff  noarp,master,up,lower_up  eth0
+
+        Or with more detail:
+            show vrf name mgmt
+            Returns:
+                VRF: mgmt
+                  Table: 1000
+                  Interfaces:
+                    eth0
+
+    Args:
+        ssh: SSH connection callable from ssh_connection fixture
+        vrf_name: Name of the VRF to check (e.g., "mgmt")
+        table_id: Optional routing table ID to validate (e.g., 1000)
+
+    Returns:
+        ValidationResult indicating whether VRF exists and matches table ID if specified
+    """
+    try:
+        # First check if VRF exists in the VRF list
+        output = ssh("show vrf")
+    except Exception as e:
+        return ValidationResult(
+            passed=False,
+            message=f"Failed to query VRF list: {e}",
+            raw_output="",
+        )
+
+    # Look for VRF name in the output
+    # VRF names appear at the start of lines (after header)
+    vrf_pattern = re.compile(rf"^{re.escape(vrf_name)}\s+", re.MULTILINE)
+    if not vrf_pattern.search(output):
+        return ValidationResult(
+            passed=False,
+            message=f"VRF '{vrf_name}' not found in VRF list",
+            raw_output=output,
+        )
+
+    # If table_id validation is requested, get detailed VRF info
+    if table_id is not None:
+        try:
+            detail_output = ssh(f"show vrf name {vrf_name}")
+        except Exception as e:
+            return ValidationResult(
+                passed=False,
+                message=f"Failed to query VRF '{vrf_name}' details: {e}",
+                raw_output=output,
+            )
+
+        # Look for "Table: <id>" in the detailed output
+        table_pattern = re.compile(r"Table:\s+(\d+)")
+        table_match = table_pattern.search(detail_output)
+
+        if not table_match:
+            return ValidationResult(
+                passed=False,
+                message=f"VRF '{vrf_name}' exists but table ID not found in details",
+                raw_output=f"{output}\n\n{detail_output}",
+            )
+
+        actual_table_id = int(table_match.group(1))
+
+        if actual_table_id != table_id:
+            return ValidationResult(
+                passed=False,
+                message=(
+                    f"VRF '{vrf_name}' table ID mismatch: "
+                    f"expected {table_id}, got {actual_table_id}"
+                ),
+                raw_output=f"{output}\n\n{detail_output}",
+            )
+
+        return ValidationResult(
+            passed=True,
+            message=f"VRF '{vrf_name}' exists with table ID {table_id}",
+            raw_output=f"{output}\n\n{detail_output}",
+        )
+
+    # No table_id validation requested, just confirm VRF exists
+    return ValidationResult(
+        passed=True,
+        message=f"VRF '{vrf_name}' exists",
+        raw_output=output,
+    )
+
+
+def check_vrf_interface(
+    ssh: Callable[[str], str],
+    vrf_name: str,
+    interface: str,
+) -> ValidationResult:
+    """Verify an interface is bound to a VRF.
+
+    This function checks whether a specific interface is assigned to the
+    specified VRF by examining either the VRF details or interface configuration.
+
+    VyOS Output Format:
+        show vrf name mgmt
+        Returns:
+            VRF: mgmt
+              Table: 1000
+              Interfaces:
+                eth0
+
+        Alternatively, check interface config:
+            show interfaces ethernet eth0
+            Returns output containing:
+                vrf mgmt
+
+    Args:
+        ssh: SSH connection callable from ssh_connection fixture
+        vrf_name: Name of the VRF (e.g., "mgmt")
+        interface: Interface name (e.g., "eth0")
+
+    Returns:
+        ValidationResult indicating whether interface is bound to VRF
+    """
+    try:
+        # Check VRF details for the interface
+        output = ssh(f"show vrf name {vrf_name}")
+    except Exception as e:
+        return ValidationResult(
+            passed=False,
+            message=f"Failed to query VRF '{vrf_name}': {e}",
+            raw_output="",
+        )
+
+    # Look for the interface in the VRF's interface list
+    # Format: interface names appear under "Interfaces:" section
+    # Check if interface appears after "Interfaces:" line
+    interfaces_section_pattern = re.compile(
+        r"Interfaces:\s*\n((?:\s+\S+\s*\n)*)",
+        re.MULTILINE,
+    )
+    interfaces_match = interfaces_section_pattern.search(output)
+
+    if not interfaces_match:
+        return ValidationResult(
+            passed=False,
+            message=f"VRF '{vrf_name}' exists but has no interfaces listed",
+            raw_output=output,
+        )
+
+    interfaces_text = interfaces_match.group(1)
+
+    # Check if our interface appears in the interfaces list
+    # Interfaces are indented and each on their own line
+    if interface in interfaces_text:
+        return ValidationResult(
+            passed=True,
+            message=f"Interface {interface} is bound to VRF '{vrf_name}'",
+            raw_output=output,
+        )
+    else:
+        return ValidationResult(
+            passed=False,
+            message=f"Interface {interface} not found in VRF '{vrf_name}'",
+            raw_output=output,
+        )
+
+
+def check_service_vrf(
+    ssh: Callable[[str], str],
+    service: str,
+    vrf_name: str,
+) -> ValidationResult:
+    """Verify a service is bound to a VRF.
+
+    This function checks whether a VyOS service (like SSH) is configured
+    to run within a specific VRF by examining the service configuration.
+
+    VyOS Output Format:
+        show configuration commands | grep "service ssh vrf"
+        Returns:
+            set service ssh vrf 'mgmt'
+
+        Or for other services:
+            set service https vrf 'mgmt'
+
+    Args:
+        ssh: SSH connection callable from ssh_connection fixture
+        service: Service name (e.g., "ssh", "https", "snmp")
+        vrf_name: VRF name the service should be bound to (e.g., "mgmt")
+
+    Returns:
+        ValidationResult indicating whether service is bound to VRF
+    """
+    try:
+        # Query configuration for service VRF binding
+        # Use || echo '' to avoid error if no match found
+        output = ssh(f"show configuration commands | grep 'service {service} vrf' || echo ''")
+    except Exception as e:
+        return ValidationResult(
+            passed=False,
+            message=f"Failed to query service '{service}' VRF configuration: {e}",
+            raw_output="",
+        )
+
+    # Look for "set service <service> vrf '<vrf_name>'" or "set service <service> vrf <vrf_name>"
+    vrf_pattern = re.compile(
+        rf"set\s+service\s+{re.escape(service)}\s+vrf\s+['\"]?{re.escape(vrf_name)}['\"]?",
+    )
+    match = vrf_pattern.search(output)
+
+    if match:
+        return ValidationResult(
+            passed=True,
+            message=f"Service '{service}' is bound to VRF '{vrf_name}'",
+            raw_output=output,
+        )
+    elif not output.strip() or output.strip() == "":
+        return ValidationResult(
+            passed=False,
+            message=f"Service '{service}' has no VRF binding configured",
+            raw_output=output,
+        )
+    else:
+        # Service has a VRF binding, but it's not the expected one
+        # Try to extract what VRF it's bound to
+        any_vrf_pattern = re.compile(
+            rf"set\s+service\s+{re.escape(service)}\s+vrf\s+['\"]?(\S+?)['\"]?(?:\s|$)",
+        )
+        any_match = any_vrf_pattern.search(output)
+
+        if any_match:
+            actual_vrf = any_match.group(1).strip("'\"")
+            return ValidationResult(
+                passed=False,
+                message=(
+                    f"Service '{service}' VRF mismatch: "
+                    f"expected '{vrf_name}', got '{actual_vrf}'"
+                ),
+                raw_output=output,
+            )
+        else:
+            return ValidationResult(
+                passed=False,
+                message=f"Service '{service}' VRF configuration found but cannot parse VRF name",
+                raw_output=output,
+            )
