@@ -101,13 +101,13 @@ main() {
     OUTPUT_FILE=$(mktemp)
     trap 'rm -f "$OUTPUT_FILE"' EXIT
 
-    # Debug mode for integration testing - captures detailed VyOS errors
-    # Can be disabled by setting VYOS_DEBUG_ERRORS=0 in context
-    VYOS_DEBUG_ERRORS="${VYOS_DEBUG_ERRORS:-1}"
-    export VYOS_DEBUG_ERRORS
+    # Diagnostic mode for integration testing - captures detailed VyOS output
+    # Can be disabled by setting VYOS_DIAGNOSTIC_MODE=0 in context
+    VYOS_DIAGNOSTIC_MODE="${VYOS_DIAGNOSTIC_MODE:-1}"
+    export VYOS_DIAGNOSTIC_MODE
 
-    if [ "$VYOS_DEBUG_ERRORS" = "1" ]; then
-        log_info "Debug error capture enabled (VYOS_DEBUG_ERRORS=1)"
+    if [ "$VYOS_DIAGNOSTIC_MODE" = "1" ]; then
+        log_info "Diagnostic capture enabled (VYOS_DIAGNOSTIC_MODE=1)"
     fi
 
     # Run the Python module with debug setting
