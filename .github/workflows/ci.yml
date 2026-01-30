@@ -23,7 +23,7 @@ jobs:
         uses: extractions/setup-just@v2
 
       - name: Install dependencies
-        run: uv sync --extra dev
+        run: uv sync --group dev
 
       - name: Run checks
         run: just check
@@ -62,7 +62,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y qemu-system-x86 genisoimage packer sshpass
           # Install Python dependencies for pytest integration tests
-          uv sync --extra dev
+          uv sync --group dev
 
       - name: Download base VyOS image
         run: |
