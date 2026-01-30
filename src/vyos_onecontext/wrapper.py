@@ -138,6 +138,16 @@ class VyOSConfigSession:
 
         if result.returncode != 0:
             error_msg = result.stderr.strip() or result.stdout.strip() or "Unknown error"
+
+            # Diagnostic mode: collect additional information when enabled
+            if os.environ.get("VYOS_DEBUG_ERRORS"):
+                try:
+                    diag = self._collect_diagnostics(cmd)
+                    error_msg = f"{error_msg}\n\nDiagnostics:\n{diag}"
+                except Exception as e:
+                    # Don't let diagnostic collection mask the original error
+                    logger.warning("Failed to collect diagnostics: %s", e)
+
             raise VyOSConfigError(
                 f"VyOS wrapper command failed: {' '.join(args)}\n"
                 f"Exit code: {result.returncode}\n"
@@ -145,6 +155,73 @@ class VyOSConfigSession:
             )
 
         return result
+
+    def _collect_diagnostics(self, cmd: list[str]) -> str:
+        """Collect diagnostic information when errors occur.
+
+        Only called when VYOS_DEBUG_ERRORS environment variable is set.
+        Each diagnostic attempt is wrapped in try/except to avoid masking
+        the original error.
+
+        Args:
+            cmd: The command that failed.
+
+        Returns:
+            Formatted diagnostic information string.
+        """
+        diag_parts = []
+
+        # Log the full command
+        diag_parts.append(f"Command: {' '.join(cmd)}")
+
+        # Try to get session status
+        try:
+            status_result = subprocess.run(
+                [self.wrapper_path, "show", "configuration"],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=5,
+            )
+            if status_result.returncode == 0:
+                diag_parts.append(f"Current config session status:\n{status_result.stdout}")
+            else:
+                diag_parts.append(
+                    f"Config status check failed (exit {status_result.returncode})"
+                )
+        except Exception as e:
+            diag_parts.append(f"Could not get config status: {e}")
+
+        # Try to get session changes if in session
+        if self._in_session:
+            try:
+                compare_result = subprocess.run(
+                    [self.wrapper_path, "compare"],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=5,
+                )
+                if compare_result.returncode == 0 and compare_result.stdout.strip():
+                    diag_parts.append(f"Pending changes:\n{compare_result.stdout}")
+            except Exception as e:
+                diag_parts.append(f"Could not get pending changes: {e}")
+
+        # Check for system logs that might provide context
+        try:
+            log_result = subprocess.run(
+                ["journalctl", "-u", "vyos-router", "-n", "20", "--no-pager"],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=5,
+            )
+            if log_result.returncode == 0 and log_result.stdout.strip():
+                diag_parts.append(f"Recent VyOS logs:\n{log_result.stdout}")
+        except Exception as e:
+            diag_parts.append(f"Could not get system logs: {e}")
+
+        return "\n".join(diag_parts)
 
     def begin(self) -> None:
         """Begin a configuration session.
