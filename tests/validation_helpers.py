@@ -17,7 +17,10 @@ VyOS Command Output Formats:
 - show ip ospf: Shows OSPF instance status including router ID
 - show configuration commands | grep ospf: Shows OSPF config commands
 - show ip route: Returns routing table with protocol codes and next-hop info
+- show nat source rules: Returns NAT source rules with numbers and details
+- show nat destination rules: Returns NAT destination rules with numbers and details
 """
+
 
 import ipaddress
 import re
@@ -734,3 +737,282 @@ def check_default_route(
             message="Default route exists",
             raw_output=output,
         )
+
+
+def check_snat_rule(
+    ssh: Callable[[str], str],
+    rule_num: int,
+    outbound_interface: str | None = None,
+    translation: str | None = None,
+) -> ValidationResult:
+    """Verify a source NAT rule exists with expected parameters.
+
+    This function checks the VyOS configuration for a specific SNAT rule
+    and validates its outbound interface and translation address if provided.
+
+    VyOS Output Format:
+        show configuration commands | grep "nat source"
+        Returns output like:
+            set nat source rule 100 outbound-interface name 'eth0'
+            set nat source rule 100 source address '10.0.0.0/24'
+            set nat source rule 100 translation address 'masquerade'
+
+    Args:
+        ssh: SSH connection callable from ssh_connection fixture
+        rule_num: NAT rule number to check
+        outbound_interface: Expected outbound interface (optional)
+        translation: Expected translation address or 'masquerade' (optional)
+
+    Returns:
+        ValidationResult indicating whether SNAT rule matches expectations
+    """
+    try:
+        output = ssh("show configuration commands | grep 'nat source'")
+    except Exception as e:
+        return ValidationResult(
+            passed=False,
+            message=f"Failed to query NAT source rules: {e}",
+            raw_output="",
+        )
+
+    # Filter lines for the specific rule number
+    rule_pattern = re.compile(rf"set nat source rule {rule_num}\s+(.+)")
+    rule_lines = [line for line in output.splitlines() if rule_pattern.match(line)]
+
+    if not rule_lines:
+        return ValidationResult(
+            passed=False,
+            message=f"SNAT rule {rule_num} not found in configuration",
+            raw_output=output,
+        )
+
+    # Join all rule lines for this rule number
+    rule_config = "\n".join(rule_lines)
+
+    # Check outbound interface if specified
+    if outbound_interface is not None:
+        escaped_iface = re.escape(outbound_interface)
+        interface_pattern = re.compile(
+            rf"set nat source rule {rule_num} outbound-interface name '{escaped_iface}'"
+        )
+        if not interface_pattern.search(rule_config):
+            return ValidationResult(
+                passed=False,
+                message=(
+                    f"SNAT rule {rule_num} outbound interface mismatch: "
+                    f"expected '{outbound_interface}'"
+                ),
+                raw_output=rule_config,
+            )
+
+    # Check translation if specified
+    if translation is not None:
+        translation_pattern = re.compile(
+            rf"set nat source rule {rule_num} translation address '{re.escape(translation)}'"
+        )
+        if not translation_pattern.search(rule_config):
+            return ValidationResult(
+                passed=False,
+                message=f"SNAT rule {rule_num} translation mismatch: expected '{translation}'",
+                raw_output=rule_config,
+            )
+
+    # All checks passed
+    checks = []
+    if outbound_interface is not None:
+        checks.append(f"outbound-interface={outbound_interface}")
+    if translation is not None:
+        checks.append(f"translation={translation}")
+
+    check_str = ", ".join(checks) if checks else "exists"
+    return ValidationResult(
+        passed=True,
+        message=f"SNAT rule {rule_num} validated: {check_str}",
+        raw_output=rule_config,
+    )
+
+
+def check_dnat_rule(
+    ssh: Callable[[str], str],
+    rule_num: int,
+    inbound_interface: str | None = None,
+    protocol: str | None = None,
+    port: str | None = None,
+    translation_address: str | None = None,
+) -> ValidationResult:
+    """Verify a destination NAT rule exists with expected parameters.
+
+    This function checks the VyOS configuration for a specific DNAT rule
+    and validates its parameters if provided.
+
+    VyOS Output Format:
+        show configuration commands | grep "nat destination"
+        Returns output like:
+            set nat destination rule 10 inbound-interface name 'eth0'
+            set nat destination rule 10 destination port '80'
+            set nat destination rule 10 protocol 'tcp'
+            set nat destination rule 10 translation address '192.168.1.10'
+            set nat destination rule 10 translation port '8080'
+
+    Args:
+        ssh: SSH connection callable from ssh_connection fixture
+        rule_num: NAT rule number to check
+        inbound_interface: Expected inbound interface (optional)
+        protocol: Expected protocol (tcp/udp) (optional)
+        port: Expected destination port (optional)
+        translation_address: Expected translation IP address (optional)
+
+    Returns:
+        ValidationResult indicating whether DNAT rule matches expectations
+    """
+    try:
+        output = ssh("show configuration commands | grep 'nat destination'")
+    except Exception as e:
+        return ValidationResult(
+            passed=False,
+            message=f"Failed to query NAT destination rules: {e}",
+            raw_output="",
+        )
+
+    # Filter lines for the specific rule number
+    rule_pattern = re.compile(rf"set nat destination rule {rule_num}\s+(.+)")
+    rule_lines = [line for line in output.splitlines() if rule_pattern.match(line)]
+
+    if not rule_lines:
+        return ValidationResult(
+            passed=False,
+            message=f"DNAT rule {rule_num} not found in configuration",
+            raw_output=output,
+        )
+
+    # Join all rule lines for this rule number
+    rule_config = "\n".join(rule_lines)
+
+    # Check inbound interface if specified
+    if inbound_interface is not None:
+        escaped_iface = re.escape(inbound_interface)
+        interface_pattern = re.compile(
+            rf"set nat destination rule {rule_num} inbound-interface name '{escaped_iface}'"
+        )
+        if not interface_pattern.search(rule_config):
+            return ValidationResult(
+                passed=False,
+                message=(
+                    f"DNAT rule {rule_num} inbound interface mismatch: "
+                    f"expected '{inbound_interface}'"
+                ),
+                raw_output=rule_config,
+            )
+
+    # Check protocol if specified
+    if protocol is not None:
+        protocol_pattern = re.compile(
+            rf"set nat destination rule {rule_num} protocol '{re.escape(protocol)}'"
+        )
+        if not protocol_pattern.search(rule_config):
+            return ValidationResult(
+                passed=False,
+                message=f"DNAT rule {rule_num} protocol mismatch: expected '{protocol}'",
+                raw_output=rule_config,
+            )
+
+    # Check port if specified
+    if port is not None:
+        port_pattern = re.compile(
+            rf"set nat destination rule {rule_num} destination port '{re.escape(port)}'"
+        )
+        if not port_pattern.search(rule_config):
+            return ValidationResult(
+                passed=False,
+                message=f"DNAT rule {rule_num} port mismatch: expected '{port}'",
+                raw_output=rule_config,
+            )
+
+    # Check translation address if specified
+    if translation_address is not None:
+        escaped_addr = re.escape(translation_address)
+        translation_pattern = re.compile(
+            rf"set nat destination rule {rule_num} translation address '{escaped_addr}'"
+        )
+        if not translation_pattern.search(rule_config):
+            return ValidationResult(
+                passed=False,
+                message=(
+                    f"DNAT rule {rule_num} translation address mismatch: "
+                    f"expected '{translation_address}'"
+                ),
+                raw_output=rule_config,
+            )
+
+    # All checks passed
+    checks = []
+    if inbound_interface is not None:
+        checks.append(f"inbound-interface={inbound_interface}")
+    if protocol is not None:
+        checks.append(f"protocol={protocol}")
+    if port is not None:
+        checks.append(f"port={port}")
+    if translation_address is not None:
+        checks.append(f"translation={translation_address}")
+
+    check_str = ", ".join(checks) if checks else "exists"
+    return ValidationResult(
+        passed=True,
+        message=f"DNAT rule {rule_num} validated: {check_str}",
+        raw_output=rule_config,
+    )
+
+
+def list_nat_rules(
+    ssh: Callable[[str], str],
+    nat_type: str,
+) -> ValidationResult:
+    """List all NAT rules of the specified type.
+
+    This function retrieves all NAT rules for a given type (source or destination)
+    from the VyOS configuration. Useful for debugging and verifying rule sets.
+
+    VyOS Output Format:
+        show configuration commands | grep "nat source"
+        or
+        show configuration commands | grep "nat destination"
+
+    Args:
+        ssh: SSH connection callable from ssh_connection fixture
+        nat_type: Type of NAT rules to list ("source" or "destination")
+
+    Returns:
+        ValidationResult with all NAT rules of the specified type
+    """
+    if nat_type not in ("source", "destination"):
+        return ValidationResult(
+            passed=False,
+            message=f"Invalid nat_type '{nat_type}': must be 'source' or 'destination'",
+            raw_output="",
+        )
+
+    try:
+        output = ssh(f"show configuration commands | grep 'nat {nat_type}'")
+    except Exception as e:
+        return ValidationResult(
+            passed=False,
+            message=f"Failed to query NAT {nat_type} rules: {e}",
+            raw_output="",
+        )
+
+    # Extract rule numbers from the output
+    rule_pattern = re.compile(rf"set nat {nat_type} rule (\d+)")
+    rule_numbers = sorted({int(m.group(1)) for m in rule_pattern.finditer(output)})
+
+    if not rule_numbers:
+        return ValidationResult(
+            passed=True,
+            message=f"No NAT {nat_type} rules configured",
+            raw_output=output,
+        )
+
+    return ValidationResult(
+        passed=True,
+        message=f"Found {len(rule_numbers)} NAT {nat_type} rule(s): {rule_numbers}",
+        raw_output=output,
+    )

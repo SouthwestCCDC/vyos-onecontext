@@ -10,13 +10,16 @@ from unittest.mock import Mock
 from tests.validation_helpers import (
     ValidationResult,
     check_default_route,
+    check_dnat_rule,
     check_hostname,
     check_interface_ip,
     check_ospf_enabled,
     check_ospf_interface,
     check_ospf_router_id,
     check_route_exists,
+    check_snat_rule,
     check_ssh_key_configured,
+    list_nat_rules,
 )
 
 
@@ -1098,3 +1101,450 @@ class TestCheckDefaultRoute:
         assert "gateway mismatch" in result.message
         assert "192.168.122.1" in result.message
         assert "192.168.122.2" in result.message
+
+
+class TestCheckSnatRule:
+    """Test check_snat_rule helper function."""
+
+    def test_snat_rule_exists_with_all_params(self) -> None:
+        """Test when SNAT rule exists with matching parameters."""
+        mock_ssh = Mock(
+            return_value=(
+                "set nat source rule 100 outbound-interface name 'eth0'\n"
+                "set nat source rule 100 source address '10.0.0.0/24'\n"
+                "set nat source rule 100 translation address 'masquerade'\n"
+            )
+        )
+
+        result = check_snat_rule(
+            mock_ssh,
+            rule_num=100,
+            outbound_interface="eth0",
+            translation="masquerade",
+        )
+
+        assert result.passed is True
+        assert "100" in result.message
+        assert "eth0" in result.message
+        assert "masquerade" in result.message
+        mock_ssh.assert_called_once_with("show configuration commands | grep 'nat source'")
+
+    def test_snat_rule_exists_only_rule_num(self) -> None:
+        """Test when checking only rule existence."""
+        mock_ssh = Mock(
+            return_value=(
+                "set nat source rule 100 outbound-interface name 'eth0'\n"
+                "set nat source rule 100 translation address 'masquerade'\n"
+            )
+        )
+
+        result = check_snat_rule(mock_ssh, rule_num=100)
+
+        assert result.passed is True
+        assert "100" in result.message
+        assert "exists" in result.message
+
+    def test_snat_rule_not_found(self) -> None:
+        """Test when SNAT rule does not exist."""
+        mock_ssh = Mock(
+            return_value=(
+                "set nat source rule 200 outbound-interface name 'eth1'\n"
+                "set nat source rule 200 translation address 'masquerade'\n"
+            )
+        )
+
+        result = check_snat_rule(mock_ssh, rule_num=100)
+
+        assert result.passed is False
+        assert "not found" in result.message
+        assert "100" in result.message
+
+    def test_snat_rule_interface_mismatch(self) -> None:
+        """Test when SNAT rule interface doesn't match."""
+        mock_ssh = Mock(
+            return_value=(
+                "set nat source rule 100 outbound-interface name 'eth1'\n"
+                "set nat source rule 100 translation address 'masquerade'\n"
+            )
+        )
+
+        result = check_snat_rule(
+            mock_ssh,
+            rule_num=100,
+            outbound_interface="eth0",
+        )
+
+        assert result.passed is False
+        assert "mismatch" in result.message
+        assert "eth0" in result.message
+
+    def test_snat_rule_translation_mismatch(self) -> None:
+        """Test when SNAT rule translation doesn't match."""
+        mock_ssh = Mock(
+            return_value=(
+                "set nat source rule 100 outbound-interface name 'eth0'\n"
+                "set nat source rule 100 translation address '192.168.1.1'\n"
+            )
+        )
+
+        result = check_snat_rule(
+            mock_ssh,
+            rule_num=100,
+            translation="masquerade",
+        )
+
+        assert result.passed is False
+        assert "translation mismatch" in result.message
+        assert "masquerade" in result.message
+
+    def test_snat_rule_query_fails(self) -> None:
+        """Test when SSH command fails."""
+        mock_ssh = Mock(side_effect=Exception("Connection timeout"))
+
+        result = check_snat_rule(mock_ssh, rule_num=100)
+
+        assert result.passed is False
+        assert "Failed to query" in result.message
+        assert result.raw_output == ""
+
+    def test_snat_rule_with_static_ip_translation(self) -> None:
+        """Test SNAT rule with static IP translation."""
+        mock_ssh = Mock(
+            return_value=(
+                "set nat source rule 200 outbound-interface name 'eth0'\n"
+                "set nat source rule 200 source address '10.0.0.0/24'\n"
+                "set nat source rule 200 translation address '203.0.113.10'\n"
+            )
+        )
+
+        result = check_snat_rule(
+            mock_ssh,
+            rule_num=200,
+            outbound_interface="eth0",
+            translation="203.0.113.10",
+        )
+
+        assert result.passed is True
+        assert "203.0.113.10" in result.message
+
+    def test_snat_rule_multiple_rules_filter(self) -> None:
+        """Test filtering specific rule when multiple rules exist."""
+        mock_ssh = Mock(
+            return_value=(
+                "set nat source rule 100 outbound-interface name 'eth0'\n"
+                "set nat source rule 100 translation address 'masquerade'\n"
+                "set nat source rule 200 outbound-interface name 'eth1'\n"
+                "set nat source rule 200 translation address '10.0.0.1'\n"
+            )
+        )
+
+        result = check_snat_rule(
+            mock_ssh,
+            rule_num=200,
+            outbound_interface="eth1",
+        )
+
+        assert result.passed is True
+        assert "200" in result.message
+        assert "eth1" in result.message
+
+
+class TestCheckDnatRule:
+    """Test check_dnat_rule helper function."""
+
+    def test_dnat_rule_exists_with_all_params(self) -> None:
+        """Test when DNAT rule exists with matching parameters."""
+        mock_ssh = Mock(
+            return_value=(
+                "set nat destination rule 10 inbound-interface name 'eth0'\n"
+                "set nat destination rule 10 destination port '80'\n"
+                "set nat destination rule 10 protocol 'tcp'\n"
+                "set nat destination rule 10 translation address '192.168.1.10'\n"
+                "set nat destination rule 10 translation port '8080'\n"
+            )
+        )
+
+        result = check_dnat_rule(
+            mock_ssh,
+            rule_num=10,
+            inbound_interface="eth0",
+            protocol="tcp",
+            port="80",
+            translation_address="192.168.1.10",
+        )
+
+        assert result.passed is True
+        assert "10" in result.message
+        assert "eth0" in result.message
+        assert "tcp" in result.message
+        assert "80" in result.message
+        assert "192.168.1.10" in result.message
+        mock_ssh.assert_called_once_with("show configuration commands | grep 'nat destination'")
+
+    def test_dnat_rule_exists_only_rule_num(self) -> None:
+        """Test when checking only rule existence."""
+        mock_ssh = Mock(
+            return_value=(
+                "set nat destination rule 10 inbound-interface name 'eth0'\n"
+                "set nat destination rule 10 translation address '192.168.1.10'\n"
+            )
+        )
+
+        result = check_dnat_rule(mock_ssh, rule_num=10)
+
+        assert result.passed is True
+        assert "10" in result.message
+        assert "exists" in result.message
+
+    def test_dnat_rule_not_found(self) -> None:
+        """Test when DNAT rule does not exist."""
+        mock_ssh = Mock(
+            return_value=(
+                "set nat destination rule 20 inbound-interface name 'eth1'\n"
+                "set nat destination rule 20 translation address '192.168.1.20'\n"
+            )
+        )
+
+        result = check_dnat_rule(mock_ssh, rule_num=10)
+
+        assert result.passed is False
+        assert "not found" in result.message
+        assert "10" in result.message
+
+    def test_dnat_rule_interface_mismatch(self) -> None:
+        """Test when DNAT rule interface doesn't match."""
+        mock_ssh = Mock(
+            return_value=(
+                "set nat destination rule 10 inbound-interface name 'eth1'\n"
+                "set nat destination rule 10 translation address '192.168.1.10'\n"
+            )
+        )
+
+        result = check_dnat_rule(
+            mock_ssh,
+            rule_num=10,
+            inbound_interface="eth0",
+        )
+
+        assert result.passed is False
+        assert "inbound interface mismatch" in result.message
+        assert "eth0" in result.message
+
+    def test_dnat_rule_protocol_mismatch(self) -> None:
+        """Test when DNAT rule protocol doesn't match."""
+        mock_ssh = Mock(
+            return_value=(
+                "set nat destination rule 10 inbound-interface name 'eth0'\n"
+                "set nat destination rule 10 protocol 'udp'\n"
+                "set nat destination rule 10 translation address '192.168.1.10'\n"
+            )
+        )
+
+        result = check_dnat_rule(
+            mock_ssh,
+            rule_num=10,
+            protocol="tcp",
+        )
+
+        assert result.passed is False
+        assert "protocol mismatch" in result.message
+        assert "tcp" in result.message
+
+    def test_dnat_rule_port_mismatch(self) -> None:
+        """Test when DNAT rule port doesn't match."""
+        mock_ssh = Mock(
+            return_value=(
+                "set nat destination rule 10 inbound-interface name 'eth0'\n"
+                "set nat destination rule 10 destination port '443'\n"
+                "set nat destination rule 10 translation address '192.168.1.10'\n"
+            )
+        )
+
+        result = check_dnat_rule(
+            mock_ssh,
+            rule_num=10,
+            port="80",
+        )
+
+        assert result.passed is False
+        assert "port mismatch" in result.message
+        assert "80" in result.message
+
+    def test_dnat_rule_translation_mismatch(self) -> None:
+        """Test when DNAT rule translation address doesn't match."""
+        mock_ssh = Mock(
+            return_value=(
+                "set nat destination rule 10 inbound-interface name 'eth0'\n"
+                "set nat destination rule 10 translation address '192.168.1.20'\n"
+            )
+        )
+
+        result = check_dnat_rule(
+            mock_ssh,
+            rule_num=10,
+            translation_address="192.168.1.10",
+        )
+
+        assert result.passed is False
+        assert "translation address mismatch" in result.message
+        assert "192.168.1.10" in result.message
+
+    def test_dnat_rule_query_fails(self) -> None:
+        """Test when SSH command fails."""
+        mock_ssh = Mock(side_effect=Exception("Connection timeout"))
+
+        result = check_dnat_rule(mock_ssh, rule_num=10)
+
+        assert result.passed is False
+        assert "Failed to query" in result.message
+        assert result.raw_output == ""
+
+    def test_dnat_rule_udp_protocol(self) -> None:
+        """Test DNAT rule with UDP protocol."""
+        mock_ssh = Mock(
+            return_value=(
+                "set nat destination rule 15 inbound-interface name 'eth0'\n"
+                "set nat destination rule 15 destination port '53'\n"
+                "set nat destination rule 15 protocol 'udp'\n"
+                "set nat destination rule 15 translation address '192.168.1.15'\n"
+            )
+        )
+
+        result = check_dnat_rule(
+            mock_ssh,
+            rule_num=15,
+            protocol="udp",
+            port="53",
+        )
+
+        assert result.passed is True
+        assert "udp" in result.message
+        assert "53" in result.message
+
+    def test_dnat_rule_multiple_rules_filter(self) -> None:
+        """Test filtering specific rule when multiple rules exist."""
+        mock_ssh = Mock(
+            return_value=(
+                "set nat destination rule 10 inbound-interface name 'eth0'\n"
+                "set nat destination rule 10 translation address '192.168.1.10'\n"
+                "set nat destination rule 20 inbound-interface name 'eth1'\n"
+                "set nat destination rule 20 translation address '192.168.1.20'\n"
+            )
+        )
+
+        result = check_dnat_rule(
+            mock_ssh,
+            rule_num=20,
+            inbound_interface="eth1",
+            translation_address="192.168.1.20",
+        )
+
+        assert result.passed is True
+        assert "20" in result.message
+        assert "eth1" in result.message
+        assert "192.168.1.20" in result.message
+
+
+class TestListNatRules:
+    """Test list_nat_rules helper function."""
+
+    def test_list_source_nat_rules(self) -> None:
+        """Test listing source NAT rules."""
+        mock_ssh = Mock(
+            return_value=(
+                "set nat source rule 100 outbound-interface name 'eth0'\n"
+                "set nat source rule 100 translation address 'masquerade'\n"
+                "set nat source rule 200 outbound-interface name 'eth1'\n"
+                "set nat source rule 200 translation address '10.0.0.1'\n"
+            )
+        )
+
+        result = list_nat_rules(mock_ssh, nat_type="source")
+
+        assert result.passed is True
+        assert "2" in result.message
+        assert "100" in result.message or "[100, 200]" in result.message
+        assert "200" in result.message or "[100, 200]" in result.message
+        mock_ssh.assert_called_once_with("show configuration commands | grep 'nat source'")
+
+    def test_list_destination_nat_rules(self) -> None:
+        """Test listing destination NAT rules."""
+        mock_ssh = Mock(
+            return_value=(
+                "set nat destination rule 10 inbound-interface name 'eth0'\n"
+                "set nat destination rule 10 translation address '192.168.1.10'\n"
+                "set nat destination rule 20 inbound-interface name 'eth0'\n"
+                "set nat destination rule 20 translation address '192.168.1.20'\n"
+            )
+        )
+
+        result = list_nat_rules(mock_ssh, nat_type="destination")
+
+        assert result.passed is True
+        assert "2" in result.message
+        assert "10" in result.message or "[10, 20]" in result.message
+        assert "20" in result.message or "[10, 20]" in result.message
+        mock_ssh.assert_called_once_with("show configuration commands | grep 'nat destination'")
+
+    def test_list_nat_rules_no_rules(self) -> None:
+        """Test listing NAT rules when none exist."""
+        mock_ssh = Mock(return_value="")
+
+        result = list_nat_rules(mock_ssh, nat_type="source")
+
+        assert result.passed is True
+        assert "No NAT" in result.message
+        assert "source" in result.message
+
+    def test_list_nat_rules_invalid_type(self) -> None:
+        """Test listing NAT rules with invalid type."""
+        mock_ssh = Mock()
+
+        result = list_nat_rules(mock_ssh, nat_type="invalid")
+
+        assert result.passed is False
+        assert "Invalid nat_type" in result.message
+        assert "source" in result.message
+        assert "destination" in result.message
+        mock_ssh.assert_not_called()
+
+    def test_list_nat_rules_query_fails(self) -> None:
+        """Test when SSH command fails."""
+        mock_ssh = Mock(side_effect=Exception("Connection timeout"))
+
+        result = list_nat_rules(mock_ssh, nat_type="source")
+
+        assert result.passed is False
+        assert "Failed to query" in result.message
+        assert result.raw_output == ""
+
+    def test_list_nat_rules_single_rule(self) -> None:
+        """Test listing NAT rules when only one rule exists."""
+        mock_ssh = Mock(
+            return_value=(
+                "set nat source rule 100 outbound-interface name 'eth0'\n"
+                "set nat source rule 100 translation address 'masquerade'\n"
+            )
+        )
+
+        result = list_nat_rules(mock_ssh, nat_type="source")
+
+        assert result.passed is True
+        assert "1" in result.message
+        assert "100" in result.message
+
+    def test_list_nat_rules_sorted_output(self) -> None:
+        """Test that NAT rules are listed in sorted order."""
+        mock_ssh = Mock(
+            return_value=(
+                "set nat source rule 300 outbound-interface name 'eth0'\n"
+                "set nat source rule 100 outbound-interface name 'eth1'\n"
+                "set nat source rule 200 outbound-interface name 'eth2'\n"
+            )
+        )
+
+        result = list_nat_rules(mock_ssh, nat_type="source")
+
+        assert result.passed is True
+        # Verify the message contains sorted rule numbers
+        assert "[100, 200, 300]" in result.message
