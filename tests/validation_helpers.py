@@ -13,7 +13,8 @@ Each helper function:
 VyOS Command Output Formats:
 - show interfaces: Contains "link/ether", "inet" lines with IP addresses
 - show configuration | grep host-name: Returns "host-name 'hostname'"
-- show configuration | grep public-keys: Returns public-keys stanzas if configured
+- show configuration commands | grep 'set system login user vyos authentication public-keys':
+  Returns public-keys stanzas if configured
 - show ip ospf: Shows OSPF instance status including router ID
 - show configuration commands | grep ospf: Shows OSPF config commands
 - show service dhcp-server: Shows DHCP server status and lease information

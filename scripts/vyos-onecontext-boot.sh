@@ -101,7 +101,6 @@ main() {
     OUTPUT_FILE=$(mktemp)
     trap 'rm -f "$OUTPUT_FILE"' EXIT
 
-    # Run the Python module
     if "$VENV_PATH/bin/python" -m vyos_onecontext "$CONTEXT_PATH" >"$OUTPUT_FILE" 2>&1; then
         log_info "Contextualization completed successfully"
         # Log all Python output at INFO level for serial log visibility (enables test validation)
