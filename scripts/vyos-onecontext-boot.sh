@@ -101,6 +101,16 @@ main() {
     OUTPUT_FILE=$(mktemp)
     trap 'rm -f "$OUTPUT_FILE"' EXIT
 
+    # Debug mode for integration testing - captures detailed VyOS errors
+    # Can be disabled by setting VYOS_DEBUG_ERRORS=0 in context
+    VYOS_DEBUG_ERRORS="${VYOS_DEBUG_ERRORS:-1}"
+    export VYOS_DEBUG_ERRORS
+
+    if [ "$VYOS_DEBUG_ERRORS" = "1" ]; then
+        log_info "Debug error capture enabled (VYOS_DEBUG_ERRORS=1)"
+    fi
+
+    # Run the Python module with debug setting
     if "$VENV_PATH/bin/python" -m vyos_onecontext "$CONTEXT_PATH" >"$OUTPUT_FILE" 2>&1; then
         log_info "Contextualization completed successfully"
         # Log all Python output at INFO level for serial log visibility (enables test validation)
