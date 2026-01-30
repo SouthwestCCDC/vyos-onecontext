@@ -140,7 +140,7 @@ class VyOSConfigSession:
             error_msg = result.stderr.strip() or result.stdout.strip() or "Unknown error"
 
             # Diagnostic mode: collect additional information when enabled
-            if os.environ.get("VYOS_DEBUG_ERRORS"):
+            if os.environ.get("VYOS_DIAGNOSTIC_MODE"):
                 try:
                     diag = self._collect_diagnostics(cmd)
                     error_msg = f"{error_msg}\n\nDiagnostics:\n{diag}"
@@ -159,7 +159,7 @@ class VyOSConfigSession:
     def _collect_diagnostics(self, cmd: list[str]) -> str:
         """Collect diagnostic information when errors occur.
 
-        Only called when VYOS_DEBUG_ERRORS environment variable is set.
+        Only called when VYOS_DIAGNOSTIC_MODE environment variable is set.
         Each diagnostic attempt is wrapped in try/except to avoid masking
         the original error.
 
