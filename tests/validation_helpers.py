@@ -124,7 +124,7 @@ def check_hostname(
         ValidationResult indicating whether hostname matches and diagnostic info
     """
     try:
-        output = ssh("show configuration | grep host-name")
+        output = ssh("show configuration | grep host-name || true")
     except Exception as e:
         return ValidationResult(
             passed=False,
@@ -505,7 +505,7 @@ def check_dhcp_pool(
         ValidationResult indicating whether DHCP pool exists and matches expectations
     """
     try:
-        output = ssh("show configuration commands | grep dhcp-server")
+        output = ssh("show configuration commands | grep dhcp-server || true")
     except Exception as e:
         return ValidationResult(
             passed=False,
@@ -580,7 +580,7 @@ def check_dhcp_options(
         ValidationResult indicating whether DHCP options match expectations
     """
     try:
-        output = ssh("show configuration commands | grep dhcp-server")
+        output = ssh("show configuration commands | grep dhcp-server || true")
     except Exception as e:
         return ValidationResult(
             passed=False,
