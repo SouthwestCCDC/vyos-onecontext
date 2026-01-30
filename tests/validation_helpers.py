@@ -271,8 +271,7 @@ def check_hostname(
 
     # Look for "host-name 'hostname'" or "host-name hostname" pattern
     # VyOS config can use single quotes or no quotes
-    # Allow underscores in hostnames to match existing behavior and tests
-    hostname_pattern = re.compile(r"host-name\s+['\"]?([a-zA-Z0-9_-]+)['\"]?")
+    hostname_pattern = re.compile(r"host-name\s+['\"]?([a-zA-Z0-9-]+)['\"]?")
     match = hostname_pattern.search(output)
 
     if not match:
@@ -308,7 +307,7 @@ def check_ssh_key_configured(
     at least one key exists in the configuration.
 
     VyOS Output Format:
-        show configuration commands | grep 'authentication public-keys'
+        show configuration commands | grep 'set system login user vyos authentication public-keys'
         Returns flat set commands like:
             set system login user vyos authentication public-keys 'User1' key "AAAAB3Nz..."
             set system login user vyos authentication public-keys 'User1' type ssh-rsa
@@ -320,7 +319,10 @@ def check_ssh_key_configured(
         ValidationResult indicating whether SSH keys are configured
     """
     try:
-        output = ssh("show configuration commands | grep 'authentication public-keys' || echo ''")
+        output = ssh(
+            "show configuration commands | grep "
+            "'set system login user vyos authentication public-keys' || echo ''"
+        )
     except Exception as e:
         return ValidationResult(
             passed=False,
