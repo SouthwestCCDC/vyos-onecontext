@@ -15,7 +15,6 @@ VyOS Command Output Formats:
 - show configuration | grep host-name: Returns "host-name 'hostname'"
 - show configuration | grep public-keys: Returns public-keys stanzas if configured
 - show ip ospf: Shows OSPF instance status including router ID
-- show ip ospf interface: Shows interface-level OSPF configuration
 - show configuration commands | grep ospf: Shows OSPF config commands
 """
 
