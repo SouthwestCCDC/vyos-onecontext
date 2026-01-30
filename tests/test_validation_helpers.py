@@ -134,7 +134,7 @@ class TestCheckInterfaceIp:
         """Test when interface has multiple IPs and first one matches.
 
         Note: VyOS can have multiple IPs on one interface (secondary IPs).
-        This helper checks if the expected IP is present, matching the first found.
+        This helper checks if the expected IP is present in the list.
         """
         mock_ssh = Mock(
             return_value=(
@@ -147,6 +147,21 @@ class TestCheckInterfaceIp:
 
         # Check for first IP
         result = check_interface_ip(mock_ssh, "eth0", "192.168.1.1")
+        assert result.passed is True
+
+    def test_interface_multiple_ips_second_match(self) -> None:
+        """Test when interface has multiple IPs and second one matches."""
+        mock_ssh = Mock(
+            return_value=(
+                "eth0@NONE: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500\n"
+                "    link/ether 52:54:00:12:34:56 brd ff:ff:ff:ff:ff:ff\n"
+                "    inet 192.168.1.1/24 brd 192.168.1.255 scope global eth0\n"
+                "    inet 192.168.1.2/24 brd 192.168.1.255 scope global secondary eth0\n"
+            )
+        )
+
+        # Check for second IP
+        result = check_interface_ip(mock_ssh, "eth0", "192.168.1.2")
         assert result.passed is True
 
 
@@ -235,10 +250,9 @@ class TestCheckSshKeyConfigured:
         """Test when SSH public keys are configured."""
         mock_ssh = Mock(
             return_value=(
-                "    public-keys test-key-1 {\n"
-                "        key AAAAB3NzaC1yc2EAAAADAQABAAABAQC...\n"
-                "        type ssh-rsa\n"
-                "    }\n"
+                "set system login user vyos authentication public-keys test-key-1 "
+                "key 'AAAAB3NzaC1yc2EAAAADAQABAAABAQC...'\n"
+                "set system login user vyos authentication public-keys test-key-1 type 'ssh-rsa'\n"
             )
         )
 
@@ -246,7 +260,10 @@ class TestCheckSshKeyConfigured:
 
         assert result.passed is True
         assert "SSH public key(s) found" in result.message
-        mock_ssh.assert_called_once_with("show configuration | grep 'public-keys' || echo ''")
+        mock_ssh.assert_called_once_with(
+            "show configuration commands | "
+            "grep 'set system login user vyos authentication public-keys' || echo ''"
+        )
 
     def test_ssh_key_not_configured(self) -> None:
         """Test when no SSH keys are configured."""
@@ -261,14 +278,13 @@ class TestCheckSshKeyConfigured:
         """Test when multiple SSH keys are configured."""
         mock_ssh = Mock(
             return_value=(
-                "    public-keys test-key-1 {\n"
-                "        key AAAAB3NzaC1yc2EAAAADAQABAAABAQC...\n"
-                "        type ssh-rsa\n"
-                "    }\n"
-                "    public-keys test-key-2 {\n"
-                "        key AAAAC3NzaC1lZDI1NTE5AAAAIN...\n"
-                "        type ssh-ed25519\n"
-                "    }\n"
+                "set system login user vyos authentication public-keys test-key-1 "
+                "key 'AAAAB3NzaC1yc2EAAAADAQABAAABAQC...'\n"
+                "set system login user vyos authentication public-keys test-key-1 type 'ssh-rsa'\n"
+                "set system login user vyos authentication public-keys test-key-2 "
+                "key 'AAAAC3NzaC1lZDI1NTE5AAAAIN...'\n"
+                "set system login user vyos authentication public-keys test-key-2 "
+                "type 'ssh-ed25519'\n"
             )
         )
 
@@ -280,7 +296,9 @@ class TestCheckSshKeyConfigured:
     def test_ssh_key_malformed_config(self) -> None:
         """Test when public-keys stanza exists but is incomplete."""
         # Stanza found but missing key data or type
-        mock_ssh = Mock(return_value="    public-keys test-key-1 {\n    }\n")
+        mock_ssh = Mock(
+            return_value="set system login user vyos authentication public-keys test-key-1\n"
+        )
 
         result = check_ssh_key_configured(mock_ssh)
 
@@ -301,10 +319,10 @@ class TestCheckSshKeyConfigured:
         """Test with ed25519 key type."""
         mock_ssh = Mock(
             return_value=(
-                "    public-keys test-ed25519 {\n"
-                "        key AAAAC3NzaC1lZDI1NTE5AAAAIN...\n"
-                "        type ssh-ed25519\n"
-                "    }\n"
+                "set system login user vyos authentication public-keys test-ed25519 "
+                "key 'AAAAC3NzaC1lZDI1NTE5AAAAIN...'\n"
+                "set system login user vyos authentication public-keys test-ed25519 "
+                "type 'ssh-ed25519'\n"
             )
         )
 
@@ -316,10 +334,9 @@ class TestCheckSshKeyConfigured:
         """Test with RSA key type."""
         mock_ssh = Mock(
             return_value=(
-                "    public-keys test-rsa {\n"
-                "        key AAAAB3NzaC1yc2EAAAADAQABAAABAQC...\n"
-                "        type ssh-rsa\n"
-                "    }\n"
+                "set system login user vyos authentication public-keys test-rsa "
+                "key 'AAAAB3NzaC1yc2EAAAADAQABAAABAQC...'\n"
+                "set system login user vyos authentication public-keys test-rsa type 'ssh-rsa'\n"
             )
         )
 
@@ -331,18 +348,9 @@ class TestCheckSshKeyConfigured:
         """Test with full VyOS config output containing other settings."""
         mock_ssh = Mock(
             return_value=(
-                "system {\n"
-                "    login {\n"
-                "        user vyos {\n"
-                "            authentication {\n"
-                "                public-keys test-key {\n"
-                "                    key AAAAB3NzaC1yc2EAAAADAQABAAABAQC...\n"
-                "                    type ssh-rsa\n"
-                "                }\n"
-                "            }\n"
-                "        }\n"
-                "    }\n"
-                "}\n"
+                "set system login user vyos authentication public-keys test-key "
+                "key 'AAAAB3NzaC1yc2EAAAADAQABAAABAQC...'\n"
+                "set system login user vyos authentication public-keys test-key type 'ssh-rsa'\n"
             )
         )
 

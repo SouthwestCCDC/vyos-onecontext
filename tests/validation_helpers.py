@@ -76,19 +76,19 @@ def check_interface_ip(
 
     # Look for "inet <ip>/<cidr>" pattern in output
     # Example: "inet 192.168.122.10/24 brd ..."
+    # Use findall() to collect all IPs since interfaces can have multiple IPs
     ip_pattern = re.compile(r"inet\s+(\d+\.\d+\.\d+\.\d+)/\d+")
-    match = ip_pattern.search(output)
+    matches = ip_pattern.findall(output)
 
-    if not match:
+    if not matches:
         return ValidationResult(
             passed=False,
             message=f"No IP address found on interface {interface}",
             raw_output=output,
         )
 
-    actual_ip = match.group(1)
-
-    if actual_ip == expected_ip:
+    # Check if expected IP is in the list of found IPs
+    if expected_ip in matches:
         return ValidationResult(
             passed=True,
             message=f"Interface {interface} has expected IP {expected_ip}",
@@ -97,7 +97,7 @@ def check_interface_ip(
     else:
         return ValidationResult(
             passed=False,
-            message=f"IP mismatch on {interface}: expected {expected_ip}, got {actual_ip}",
+            message=f"IP mismatch on {interface}: expected {expected_ip}, got {', '.join(matches)}",
             raw_output=output,
         )
 
@@ -170,12 +170,10 @@ def check_ssh_key_configured(
     at least one key exists in the configuration.
 
     VyOS Output Format:
-        show configuration | grep 'public-keys'
+        show configuration commands | grep 'set system login user vyos authentication public-keys'
         Returns output like:
-                public-keys test-key-1 {
-                    key AAAAB3Nza...
-                    type ssh-rsa
-                }
+            set system login user vyos authentication public-keys test-key-1 key 'AAAAB3Nza...'
+            set system login user vyos authentication public-keys test-key-1 type 'ssh-rsa'
 
     Args:
         ssh: SSH connection callable from ssh_connection fixture
@@ -184,7 +182,10 @@ def check_ssh_key_configured(
         ValidationResult indicating whether SSH keys are configured
     """
     try:
-        output = ssh("show configuration | grep 'public-keys' || echo ''")
+        output = ssh(
+            "show configuration commands | "
+            "grep 'set system login user vyos authentication public-keys' || echo ''"
+        )
     except Exception as e:
         return ValidationResult(
             passed=False,
