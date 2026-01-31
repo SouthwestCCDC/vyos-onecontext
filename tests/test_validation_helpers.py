@@ -1515,4 +1515,289 @@ class TestCheckServiceVrf:
         result = check_service_vrf(mock_ssh, "ssh", "mgmt")
 
         assert result.passed is False
-        assert "cannot parse VRF name" in result.message
+        assert "translation port mismatch" in result.message
+        assert "9090" in result.message
+
+    def test_dnat_rule_translation_port_unquoted(self) -> None:
+        """Test DNAT rule with unquoted translation port."""
+        mock_ssh = Mock(
+            return_value=(
+                "set nat destination rule 20 inbound-interface name eth0\n"
+                "set nat destination rule 20 destination port 443\n"
+                "set nat destination rule 20 protocol tcp\n"
+                "set nat destination rule 20 translation address 192.168.1.20\n"
+                "set nat destination rule 20 translation port 8443\n"
+            )
+        )
+
+        result = check_dnat_rule(
+            mock_ssh,
+            rule_num=20,
+            translation_port="8443",
+        )
+
+        assert result.passed is True
+        assert "20" in result.message
+
+    def test_dnat_rule_https_to_8443_remapping(self) -> None:
+        """Test DNAT rule for common HTTPS remapping (443 -> 8443)."""
+        mock_ssh = Mock(
+            return_value=(
+                "set nat destination rule 25 inbound-interface name 'eth0'\n"
+                "set nat destination rule 25 destination port '443'\n"
+                "set nat destination rule 25 protocol 'tcp'\n"
+                "set nat destination rule 25 translation address '10.0.1.100'\n"
+                "set nat destination rule 25 translation port '8443'\n"
+            )
+        )
+
+        result = check_dnat_rule(
+            mock_ssh,
+            rule_num=25,
+            inbound_interface="eth0",
+            protocol="tcp",
+            port="443",
+            translation_address="10.0.1.100",
+            translation_port="8443",
+        )
+
+        assert result.passed is True
+        assert "25" in result.message
+
+
+class TestHostnameRFC1123Validation:
+    """Test hostname validation enforces RFC 1123 compliance.
+
+    These tests verify the adversarial review fix for explicit RFC 1123
+    validation that rejects underscores and enforces length limits.
+    """
+
+    def test_hostname_rejects_underscore_explicit(self) -> None:
+        """Test that hostnames with underscores are explicitly rejected.
+
+        RFC 1123 does not allow underscores in hostnames. The regex should
+        not match underscores, preventing false positives from truncation.
+        """
+        mock_ssh = Mock(return_value="host-name 'test_invalid'\n")
+
+        result = check_hostname(mock_ssh, "test_invalid")
+
+        # Should fail with mismatch (regex captures up to underscore)
+        assert result.passed is False
+        assert "mismatch" in result.message.lower()
+
+    def test_hostname_single_char_valid(self) -> None:
+        """Test single character hostname (edge case for RFC 1123)."""
+        mock_ssh = Mock(return_value="host-name 'a'\n")
+
+        result = check_hostname(mock_ssh, "a")
+
+        assert result.passed is True
+
+    def test_hostname_max_length_63_chars(self) -> None:
+        """Test hostname at RFC 1123 maximum length (63 characters)."""
+        # 63 chars: 'a' + 61 middle chars + 'z'
+        hostname_63 = "a" + "b" * 61 + "z"
+        mock_ssh = Mock(return_value=f"host-name '{hostname_63}'\n")
+
+        result = check_hostname(mock_ssh, hostname_63)
+
+        assert result.passed is True
+
+    def test_hostname_cannot_start_with_hyphen(self) -> None:
+        """Test that hostname starting with hyphen doesn't match RFC 1123."""
+        mock_ssh = Mock(return_value="host-name '-invalid'\n")
+
+        result = check_hostname(mock_ssh, "-invalid")
+
+        # Pattern requires alphanumeric start, so won't match
+        assert result.passed is False
+
+    def test_hostname_cannot_end_with_hyphen(self) -> None:
+        """Test that hostname ending with hyphen doesn't match RFC 1123."""
+        mock_ssh = Mock(return_value="host-name 'invalid-'\n")
+
+        result = check_hostname(mock_ssh, "invalid-")
+
+        # Pattern requires alphanumeric end, so won't match
+        assert result.passed is False
+
+    def test_hostname_hyphen_in_middle_valid(self) -> None:
+        """Test hostname with hyphens in middle positions (valid)."""
+        mock_ssh = Mock(return_value="host-name 'my-test-host-01'\n")
+
+        result = check_hostname(mock_ssh, "my-test-host-01")
+
+        assert result.passed is True
+
+
+class TestSshKeyQuoteHandling:
+    """Test SSH key validation handles quoted key names correctly.
+
+    These tests verify the adversarial review fix for balanced quote
+    matching that prevents unbalanced quotes from being accepted.
+    """
+
+    def test_ssh_key_single_quoted_name(self) -> None:
+        """Test SSH key with single-quoted key name."""
+        mock_ssh = Mock(
+            return_value=(
+                "set system login user vyos authentication public-keys "
+                "'my-key' key 'AAAAB3NzaC1...'\n"
+                "set system login user vyos authentication public-keys "
+                "'my-key' type 'ssh-rsa'\n"
+            )
+        )
+
+        result = check_ssh_key_configured(mock_ssh)
+
+        assert result.passed is True
+
+    def test_ssh_key_double_quoted_name(self) -> None:
+        """Test SSH key with double-quoted key name."""
+        mock_ssh = Mock(
+            return_value=(
+                'set system login user vyos authentication public-keys '
+                '"my-key" key "AAAAB3NzaC1..."\n'
+                'set system login user vyos authentication public-keys '
+                '"my-key" type "ssh-rsa"\n'
+            )
+        )
+
+        result = check_ssh_key_configured(mock_ssh)
+
+        assert result.passed is True
+
+    def test_ssh_key_unquoted_name(self) -> None:
+        """Test SSH key with unquoted key name (no spaces)."""
+        mock_ssh = Mock(
+            return_value=(
+                "set system login user vyos authentication public-keys "
+                "mykey key 'AAAAB3NzaC1...'\n"
+                "set system login user vyos authentication public-keys "
+                "mykey type 'ssh-rsa'\n"
+            )
+        )
+
+        result = check_ssh_key_configured(mock_ssh)
+
+        assert result.passed is True
+
+    def test_ssh_key_mixed_quote_styles(self) -> None:
+        """Test SSH key with mixed quote styles for name and values."""
+        mock_ssh = Mock(
+            return_value=(
+                "set system login user vyos authentication public-keys "
+                "'my-key' key \"AAAAB3NzaC1...\"\n"
+                "set system login user vyos authentication public-keys "
+                "'my-key' type \"ssh-rsa\"\n"
+            )
+        )
+
+        result = check_ssh_key_configured(mock_ssh)
+
+        assert result.passed is True
+
+    def test_ssh_key_name_with_hyphens_quoted(self) -> None:
+        """Test SSH key name containing hyphens (must be quoted)."""
+        mock_ssh = Mock(
+            return_value=(
+                "set system login user vyos authentication public-keys "
+                "'user-key-001' key 'AAAAB3NzaC1...'\n"
+                "set system login user vyos authentication public-keys "
+                "'user-key-001' type 'ssh-rsa'\n"
+            )
+        )
+
+        result = check_ssh_key_configured(mock_ssh)
+
+        assert result.passed is True
+
+
+class TestInterfaceIpOctetValidation:
+    """Test interface IP validation rejects invalid octets.
+
+    These tests verify the adversarial review fix for proper IP address
+    validation that rejects octets outside the 0-255 range.
+    """
+
+    def test_interface_ip_rejects_invalid_octet_999(self) -> None:
+        """Test that IP with octet value 999 is not matched."""
+        mock_ssh = Mock(
+            return_value=(
+                "eth0@NONE: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500\n"
+                "    link/ether 52:54:00:12:34:56 brd ff:ff:ff:ff:ff:ff\n"
+                "    inet 999.999.999.999/24 brd 192.168.122.255 scope global eth0\n"
+            )
+        )
+
+        result = check_interface_ip(mock_ssh, "eth0", "999.999.999.999")
+
+        # Pattern should not match invalid IP, so no IP found
+        assert result.passed is False
+        assert "No IP address found" in result.message
+
+    def test_interface_ip_accepts_valid_octet_255(self) -> None:
+        """Test that IP with maximum valid octet (255) is accepted."""
+        mock_ssh = Mock(
+            return_value=(
+                "eth0@NONE: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500\n"
+                "    link/ether 52:54:00:12:34:56 brd ff:ff:ff:ff:ff:ff\n"
+                "    inet 192.168.255.255/24 brd 192.168.255.255 scope global eth0\n"
+            )
+        )
+
+        result = check_interface_ip(mock_ssh, "eth0", "192.168.255.255")
+
+        assert result.passed is True
+
+    def test_interface_ip_accepts_valid_octet_0(self) -> None:
+        """Test that IP with minimum valid octet (0) is accepted."""
+        mock_ssh = Mock(
+            return_value=(
+                "eth0@NONE: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500\n"
+                "    link/ether 52:54:00:12:34:56 brd ff:ff:ff:ff:ff:ff\n"
+                "    inet 10.0.0.0/8 brd 10.255.255.255 scope global eth0\n"
+            )
+        )
+
+        result = check_interface_ip(mock_ssh, "eth0", "10.0.0.0")
+
+        assert result.passed is True
+
+    def test_interface_ip_rejects_octet_256(self) -> None:
+        """Test that IP with octet 256 (just outside range) is not matched."""
+        mock_ssh = Mock(
+            return_value=(
+                "eth0@NONE: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500\n"
+                "    link/ether 52:54:00:12:34:56 brd ff:ff:ff:ff:ff:ff\n"
+                "    inet 192.168.256.1/24 brd 192.168.255.255 scope global eth0\n"
+            )
+        )
+
+        result = check_interface_ip(mock_ssh, "eth0", "192.168.256.1")
+
+        assert result.passed is False
+        assert "No IP address found" in result.message
+
+    def test_interface_ip_mixed_valid_and_invalid(self) -> None:
+        """Test interface with both valid and invalid IP formats.
+
+        Only the valid IP should be extracted and matched.
+        """
+        mock_ssh = Mock(
+            return_value=(
+                "eth0@NONE: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500\n"
+                "    link/ether 52:54:00:12:34:56 brd ff:ff:ff:ff:ff:ff\n"
+                "    inet 192.168.1.10/24 brd 192.168.1.255 scope global eth0\n"
+                "    inet 999.999.999.999/24 scope global secondary eth0\n"
+            )
+        )
+
+        # Should find the valid IP
+        result = check_interface_ip(mock_ssh, "eth0", "192.168.1.10")
+        assert result.passed is True
+
+        # Should not find the invalid IP
+        result = check_interface_ip(mock_ssh, "eth0", "999.999.999.999")
+        assert result.passed is False
