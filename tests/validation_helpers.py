@@ -516,7 +516,7 @@ def check_dhcp_pool(
 
     # Check if the shared-network-name exists in configuration
     # Handle optional quotes around network_name (VyOS may quote values)
-    network_pattern = re.compile(rf"shared-network-name\s+'?{re.escape(network_name)}'?\s+")
+    network_pattern = re.compile(rf"shared-network-name\s+'?{re.escape(network_name)}'?\s+subnet")
     network_matches = network_pattern.search(output)
 
     if not network_matches:
@@ -596,7 +596,7 @@ def check_dhcp_options(
 
     # Check if the shared-network-name exists in configuration
     # Handle optional quotes around network_name (VyOS may quote values)
-    network_pattern = re.compile(rf"shared-network-name\s+'?{re.escape(network_name)}'?\s+")
+    network_pattern = re.compile(rf"shared-network-name\s+'?{re.escape(network_name)}'?\s+subnet")
     if not network_pattern.search(output):
         return ValidationResult(
             passed=False,

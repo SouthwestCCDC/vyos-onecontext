@@ -1025,3 +1025,108 @@ class TestCheckDhcpOptions:
         assert "default-router=10.1.1.1" in result.message
         # DNS should not be mentioned since we're skipping that check
         assert "dns=" not in result.message
+
+    def test_dhcp_pool_prefix_no_false_positive(self) -> None:
+        """Test that dhcp-eth1 does NOT match dhcp-eth10 (prefix matching bug).
+
+        This test verifies the regex fix that requires 'subnet' keyword after
+        network name, preventing false positives when network names are prefixes.
+        """
+        mock_ssh = Mock(
+            return_value=(
+                "set service dhcp-server shared-network-name dhcp-eth10 "
+                "subnet 10.10.1.0/24 range 0 start 10.10.1.100\n"
+                "set service dhcp-server shared-network-name dhcp-eth10 "
+                "subnet 10.10.1.0/24 default-router 10.10.1.1\n"
+            )
+        )
+
+        # Looking for dhcp-eth1 should NOT match dhcp-eth10
+        result = check_dhcp_pool(mock_ssh, "dhcp-eth1", None)
+
+        assert result.passed is False
+        assert "not found" in result.message
+        assert "dhcp-eth1" in result.message
+
+    def test_dhcp_pool_prefix_with_hyphen_no_false_positive(self) -> None:
+        """Test that dhcp-eth1 does NOT match dhcp-eth1-backup."""
+        mock_ssh = Mock(
+            return_value=(
+                "set service dhcp-server shared-network-name dhcp-eth1-backup "
+                "subnet 10.1.2.0/24 range 0 start 10.1.2.100\n"
+            )
+        )
+
+        # Looking for dhcp-eth1 should NOT match dhcp-eth1-backup
+        result = check_dhcp_pool(mock_ssh, "dhcp-eth1", None)
+
+        assert result.passed is False
+        assert "not found" in result.message
+
+    def test_dhcp_pool_network_name_with_dots(self) -> None:
+        """Test network names with dots (special regex characters)."""
+        mock_ssh = Mock(
+            return_value=(
+                "set service dhcp-server shared-network-name dhcp.vlan.100 "
+                "subnet 10.100.1.0/24 range 0 start 10.100.1.100\n"
+            )
+        )
+
+        result = check_dhcp_pool(mock_ssh, "dhcp.vlan.100", "10.100.1.0/24")
+
+        assert result.passed is True
+        assert "exists with subnet" in result.message
+
+    def test_dhcp_pool_network_name_with_underscores(self) -> None:
+        """Test network names with underscores."""
+        mock_ssh = Mock(
+            return_value=(
+                "set service dhcp-server shared-network-name dhcp_test_network "
+                "subnet 10.99.1.0/24 range 0 start 10.99.1.100\n"
+            )
+        )
+
+        result = check_dhcp_pool(mock_ssh, "dhcp_test_network", None)
+
+        assert result.passed is True
+        assert "exists" in result.message
+
+
+class TestCheckDhcpOptionsNetworkMatching:
+    """Test check_dhcp_options network name matching edge cases."""
+
+    def test_dhcp_options_prefix_no_false_positive(self) -> None:
+        """Test that dhcp-eth1 does NOT match dhcp-eth10 in check_dhcp_options."""
+        mock_ssh = Mock(
+            return_value=(
+                "set service dhcp-server shared-network-name dhcp-eth10 "
+                "subnet 10.10.1.0/24 default-router 10.10.1.1\n"
+            )
+        )
+
+        # Looking for dhcp-eth1 should NOT match dhcp-eth10
+        result = check_dhcp_options(mock_ssh, "dhcp-eth1", "10.1.1.1", None)
+
+        assert result.passed is False
+        assert "not found" in result.message
+        assert "dhcp-eth1" in result.message
+
+    def test_dhcp_options_exact_match_with_similar_names(self) -> None:
+        """Test exact network name matching when similar names exist."""
+        mock_ssh = Mock(
+            return_value=(
+                "set service dhcp-server shared-network-name dhcp-eth1 "
+                "subnet 10.1.1.0/24 default-router 10.1.1.1\n"
+                "set service dhcp-server shared-network-name dhcp-eth10 "
+                "subnet 10.10.1.0/24 default-router 10.10.1.1\n"
+                "set service dhcp-server shared-network-name dhcp-eth1-backup "
+                "subnet 10.1.2.0/24 default-router 10.1.2.1\n"
+            )
+        )
+
+        # Should match only dhcp-eth1, not dhcp-eth10 or dhcp-eth1-backup
+        result = check_dhcp_options(mock_ssh, "dhcp-eth1", "10.1.1.1", None)
+
+        assert result.passed is True
+        assert "dhcp-eth1" in result.message
+        assert "default-router=10.1.1.1" in result.message
