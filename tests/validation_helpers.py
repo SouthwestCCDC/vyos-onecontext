@@ -80,7 +80,8 @@ def check_interface_ip(
 
     # Look for "inet <ip>/<cidr>" pattern in output
     # Example: "inet 192.168.122.10/24 brd ..."
-    ip_pattern = re.compile(r"inet\s+(\d+\.\d+\.\d+\.\d+)/\d+")
+    # Limit octets to 1-3 digits to prevent matching invalid IPs like 999.999.999.999
+    ip_pattern = re.compile(r"inet\s+(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/\d+")
     match = ip_pattern.search(output)
 
     if not match:
@@ -138,7 +139,8 @@ def check_hostname(
 
     # Look for "host-name 'hostname'" or "host-name hostname" pattern
     # VyOS config can use single quotes or no quotes
-    hostname_pattern = re.compile(r"host-name\s+['\"]?([a-zA-Z0-9_-]+)['\"]?")
+    # Per RFC 952/1123, hostnames cannot contain underscores
+    hostname_pattern = re.compile(r"host-name\s+['\"]?([a-zA-Z0-9-]+)['\"]?")
     match = hostname_pattern.search(output)
 
     if not match:
@@ -1256,8 +1258,9 @@ def check_service_vrf(
         )
 
     # Look for "set service <service> vrf '<vrf_name>'" or "set service <service> vrf <vrf_name>"
+    # Match with proper quote pairing to avoid accepting mixed quotes like 'mgmt"
     vrf_pattern = re.compile(
-        rf"set\s+service\s+{re.escape(service)}\s+vrf\s+['\"]?{re.escape(vrf_name)}['\"]?",
+        rf"set\s+service\s+{re.escape(service)}\s+vrf\s+(?:'{re.escape(vrf_name)}'|\"{re.escape(vrf_name)}\"|{re.escape(vrf_name)}\b)",
     )
     match = vrf_pattern.search(output)
 

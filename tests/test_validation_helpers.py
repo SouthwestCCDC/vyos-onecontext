@@ -216,12 +216,16 @@ class TestCheckHostname:
         assert result.passed is True
 
     def test_hostname_with_underscores(self) -> None:
-        """Test hostname validation with underscores."""
+        """Test hostname validation rejects underscores (per RFC 952/1123)."""
         mock_ssh = Mock(return_value="host-name 'test_router'\n")
 
         result = check_hostname(mock_ssh, "test_router")
 
-        assert result.passed is True
+        # Hostname with underscore will match only the part before underscore
+        # This causes a mismatch: expected "test_router", got "test"
+        assert result.passed is False
+        assert "Hostname mismatch" in result.message
+        assert "expected test_router, got test" in result.message
 
 
 class TestCheckSshKeyConfigured:
