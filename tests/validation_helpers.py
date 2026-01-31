@@ -16,8 +16,8 @@ VyOS Command Output Formats:
 - show configuration | grep public-keys: Returns public-keys stanzas if configured
 - show ip ospf: Shows OSPF instance status including router ID
 - show configuration commands | grep ospf: Shows OSPF config commands
-- show nat source rules: Returns NAT source rules with numbers and details
-- show nat destination rules: Returns NAT destination rules with numbers and details
+- show configuration commands | grep 'nat source': Returns NAT source set commands
+- show configuration commands | grep 'nat destination': Returns NAT dest set commands
 """
 
 import re
