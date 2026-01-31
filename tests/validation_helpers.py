@@ -500,7 +500,13 @@ def check_route_exists(
     failures = []
 
     if via is not None and actual_via != via:
-        failures.append(f"gateway mismatch (expected {via}, got {actual_via})")
+        if actual_via is None:
+            failures.append(
+                f"expected gateway route via {via}, "
+                "but found interface route (directly connected)"
+            )
+        else:
+            failures.append(f"gateway mismatch (expected {via}, got {actual_via})")
 
     if interface is not None and actual_interface != interface:
         failures.append(
