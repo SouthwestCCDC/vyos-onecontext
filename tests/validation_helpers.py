@@ -28,6 +28,134 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass
 
+# Security validation functions to prevent command injection
+# These must be called before interpolating user inputs into shell commands
+
+
+def _validate_vrf_name(vrf_name: str) -> None:
+    """Validate VRF name to prevent command injection.
+
+    VRF names in VyOS must:
+    - Start with a letter
+    - Contain only alphanumeric characters, hyphens, and underscores
+    - Not be empty
+
+    Args:
+        vrf_name: VRF name to validate
+
+    Raises:
+        ValueError: If VRF name contains invalid characters or format
+    """
+    if not vrf_name:
+        raise ValueError("VRF name cannot be empty")
+
+    # VRF names must start with a letter and contain only safe characters
+    if not re.match(r"^[a-zA-Z][a-zA-Z0-9_-]*$", vrf_name):
+        raise ValueError(
+            f"Invalid VRF name '{vrf_name}': must start with a letter and "
+            "contain only alphanumeric characters, hyphens, and underscores"
+        )
+
+
+def _validate_interface_name(interface: str) -> None:
+    """Validate interface name to prevent command injection.
+
+    VyOS interface names follow patterns like:
+    - eth0, eth1 (ethernet)
+    - eth0.100 (VLAN subinterface)
+    - eth0@eth1 (macvlan)
+    - bond0, bond1 (bonding)
+    - br0, br1 (bridge)
+
+    Args:
+        interface: Interface name to validate
+
+    Raises:
+        ValueError: If interface name contains invalid characters or format
+    """
+    if not interface:
+        raise ValueError("Interface name cannot be empty")
+
+    # Interface names must start with a letter and may contain dots, @, colons, hyphens
+    if not re.match(r"^[a-zA-Z][a-zA-Z0-9._@:-]*$", interface):
+        raise ValueError(
+            f"Invalid interface name '{interface}': must start with a letter and "
+            "contain only alphanumeric characters and . _ @ : -"
+        )
+
+
+def _validate_service_name(service: str) -> None:
+    """Validate service name to prevent command injection.
+
+    Only allow known VyOS services to prevent injection attacks.
+
+    Args:
+        service: Service name to validate
+
+    Raises:
+        ValueError: If service name is not in the whitelist
+    """
+    # Whitelist of valid VyOS services that support VRF binding
+    VALID_SERVICES = {
+        "ssh",
+        "https",
+        "http",
+        "snmp",
+        "ntp",
+        "dns",
+        "dhcp-server",
+        "dhcpv6-server",
+        "router-advert",
+        "mdns",
+        "lldp",
+        "console-server",
+        "monitoring",
+        "ids",
+        "ipsec",
+        "nat",
+        "pppoe-server",
+        "pptp",
+        "sstp",
+        "tftp-server",
+        "suricata",
+        "telegraf",
+    }
+
+    if service not in VALID_SERVICES:
+        raise ValueError(
+            f"Invalid service name '{service}': must be one of {sorted(VALID_SERVICES)}"
+        )
+
+
+def _validate_ip_address(ip: str) -> None:
+    """Validate IPv4 address format and ranges.
+
+    Ensures IP address:
+    - Matches dotted decimal format
+    - All octets are in range 0-255
+
+    Args:
+        ip: IP address string to validate
+
+    Raises:
+        ValueError: If IP address format is invalid or octets out of range
+    """
+    if not ip:
+        raise ValueError("IP address cannot be empty")
+
+    # First check basic format with regex
+    if not re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", ip):
+        raise ValueError(f"Invalid IP address format: '{ip}'")
+
+    # Validate each octet is in range 0-255
+    octets = ip.split(".")
+    for i, octet in enumerate(octets):
+        value = int(octet)
+        if not 0 <= value <= 255:
+            raise ValueError(
+                f"Invalid IP address '{ip}': octet {i + 1} ({value}) out of range 0-255"
+            )
+
 
 @dataclass
 class ValidationResult:
@@ -69,6 +197,10 @@ def check_interface_ip(
     Returns:
         ValidationResult indicating whether IP matches and diagnostic info
     """
+    # Validate inputs to prevent command injection
+    _validate_interface_name(interface)
+    _validate_ip_address(expected_ip)
+
     try:
         output = ssh(f"show interfaces ethernet {interface}")
     except Exception as e:
@@ -374,6 +506,9 @@ def check_ospf_interface(
     Returns:
         ValidationResult indicating whether interface OSPF config is correct
     """
+    # Validate inputs to prevent command injection
+    _validate_interface_name(interface)
+
     try:
         output = ssh("show configuration commands | grep ospf || echo ''")
     except Exception as e:
@@ -1074,6 +1209,9 @@ def check_vrf_exists(
     Returns:
         ValidationResult indicating whether VRF exists and matches table ID if specified
     """
+    # Validate inputs to prevent command injection
+    _validate_vrf_name(vrf_name)
+
     try:
         # First check if VRF exists in the VRF list
         output = ssh("show vrf")
@@ -1173,6 +1311,10 @@ def check_vrf_interface(
     Returns:
         ValidationResult indicating whether interface is bound to VRF
     """
+    # Validate inputs to prevent command injection
+    _validate_vrf_name(vrf_name)
+    _validate_interface_name(interface)
+
     try:
         # Check VRF details for the interface
         output = ssh(f"show vrf name {vrf_name}")
@@ -1246,6 +1388,10 @@ def check_service_vrf(
     Returns:
         ValidationResult indicating whether service is bound to VRF
     """
+    # Validate inputs to prevent command injection
+    _validate_service_name(service)
+    _validate_vrf_name(vrf_name)
+
     try:
         # Query configuration for service VRF binding
         # Use || echo '' to avoid error if no match found
