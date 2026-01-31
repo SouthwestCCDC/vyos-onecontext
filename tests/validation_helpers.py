@@ -515,7 +515,8 @@ def check_dhcp_pool(
         )
 
     # Check if the shared-network-name exists in configuration
-    network_pattern = re.compile(rf"shared-network-name\s+{re.escape(network_name)}\s+")
+    # Handle optional quotes around network_name (VyOS may quote values)
+    network_pattern = re.compile(rf"shared-network-name\s+'?{re.escape(network_name)}'?\s+")
     network_matches = network_pattern.search(output)
 
     if not network_matches:
@@ -527,8 +528,9 @@ def check_dhcp_pool(
 
     # If subnet is provided, verify it matches
     if subnet is not None:
+        # Handle optional quotes around network_name and subnet
         subnet_pattern = re.compile(
-            rf"shared-network-name\s+{re.escape(network_name)}\s+subnet\s+{re.escape(subnet)}\s+"
+            rf"shared-network-name\s+'?{re.escape(network_name)}'?\s+subnet\s+'?{re.escape(subnet)}'?\s+"
         )
         subnet_matches = subnet_pattern.search(output)
 
@@ -593,7 +595,8 @@ def check_dhcp_options(
     failures = []
 
     # Check if the shared-network-name exists in configuration
-    network_pattern = re.compile(rf"shared-network-name\s+{re.escape(network_name)}\s+")
+    # Handle optional quotes around network_name (VyOS may quote values)
+    network_pattern = re.compile(rf"shared-network-name\s+'?{re.escape(network_name)}'?\s+")
     if not network_pattern.search(output):
         return ValidationResult(
             passed=False,
@@ -603,17 +606,20 @@ def check_dhcp_options(
 
     # Check default-router if provided
     if default_router is not None:
+        # Handle optional quotes around network_name, subnet, and default_router
         router_pattern = re.compile(
-            rf"shared-network-name\s+{re.escape(network_name)}\s+subnet\s+\S+\s+default-router\s+{re.escape(default_router)}"
+            rf"shared-network-name\s+'?{re.escape(network_name)}'?\s+subnet\s+\S+\s+default-router\s+'?{re.escape(default_router)}'?"
         )
         if not router_pattern.search(output):
             failures.append(f"default-router '{default_router}' not found")
 
     # Check DNS servers if provided
-    if dns_servers is not None:
+    # Note: Empty list ([]) means skip DNS check (same as None)
+    if dns_servers is not None and len(dns_servers) > 0:
         for dns in dns_servers:
+            # Handle optional quotes around network_name and dns server
             dns_pattern = re.compile(
-                rf"shared-network-name\s+{re.escape(network_name)}\s+subnet\s+\S+\s+name-server\s+{re.escape(dns)}"
+                rf"shared-network-name\s+'?{re.escape(network_name)}'?\s+subnet\s+\S+\s+name-server\s+'?{re.escape(dns)}'?"
             )
             if not dns_pattern.search(output):
                 failures.append(f"name-server '{dns}' not found")
@@ -629,7 +635,7 @@ def check_dhcp_options(
         options_checked = []
         if default_router is not None:
             options_checked.append(f"default-router={default_router}")
-        if dns_servers is not None:
+        if dns_servers is not None and len(dns_servers) > 0:
             options_checked.append(f"dns={','.join(dns_servers)}")
 
         if options_checked:

@@ -831,6 +831,22 @@ class TestCheckDhcpPool:
         assert "dhcp-eth2" in result.message
         assert "10.2.1.0/24" in result.message
 
+    def test_dhcp_pool_with_quoted_values(self) -> None:
+        """Test when VyOS outputs quoted values (real device behavior)."""
+        mock_ssh = Mock(
+            return_value=(
+                "set service dhcp-server shared-network-name 'dhcp-eth1' "
+                "subnet '10.1.1.0/24' range 0 start '10.1.1.100'\n"
+                "set service dhcp-server shared-network-name 'dhcp-eth1' "
+                "subnet '10.1.1.0/24' range 0 stop '10.1.1.200'\n"
+            )
+        )
+
+        result = check_dhcp_pool(mock_ssh, "dhcp-eth1", "10.1.1.0/24")
+
+        assert result.passed is True
+        assert "exists with subnet" in result.message
+
 
 class TestCheckDhcpOptions:
     """Test check_dhcp_options helper function."""
@@ -972,3 +988,40 @@ class TestCheckDhcpOptions:
 
         assert result.passed is True
         assert "dns=10.1.1.1" in result.message
+
+    def test_dhcp_options_with_quoted_values(self) -> None:
+        """Test when VyOS outputs quoted values (real device behavior)."""
+        mock_ssh = Mock(
+            return_value=(
+                "set service dhcp-server shared-network-name 'dhcp-eth1' "
+                "subnet '10.1.1.0/24' default-router '10.1.1.1'\n"
+                "set service dhcp-server shared-network-name 'dhcp-eth1' "
+                "subnet '10.1.1.0/24' name-server '10.63.4.101'\n"
+                "set service dhcp-server shared-network-name 'dhcp-eth1' "
+                "subnet '10.1.1.0/24' name-server '8.8.8.8'\n"
+            )
+        )
+
+        result = check_dhcp_options(mock_ssh, "dhcp-eth1", "10.1.1.1", ["10.63.4.101", "8.8.8.8"])
+
+        assert result.passed is True
+        assert "correct" in result.message
+
+    def test_dhcp_options_empty_dns_list(self) -> None:
+        """Test when dns_servers is empty list (should skip DNS check like None)."""
+        mock_ssh = Mock(
+            return_value=(
+                "set service dhcp-server shared-network-name 'dhcp-eth1' "
+                "subnet '10.1.1.0/24' default-router '10.1.1.1'\n"
+                "set service dhcp-server shared-network-name 'dhcp-eth1' "
+                "subnet '10.1.1.0/24' name-server '8.8.8.8'\n"
+            )
+        )
+
+        # Empty list should skip DNS check (same as None)
+        result = check_dhcp_options(mock_ssh, "dhcp-eth1", "10.1.1.1", [])
+
+        assert result.passed is True
+        assert "default-router=10.1.1.1" in result.message
+        # DNS should not be mentioned since we're skipping that check
+        assert "dns=" not in result.message
