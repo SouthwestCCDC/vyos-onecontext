@@ -340,28 +340,62 @@ def check_ssh_key_configured(
             raw_output=output,
         )
 
-    # Parse flat set commands to verify both key and type are present
+    # Parse flat set commands to verify both key and type are present for the same key name
     # Example lines:
     #   set system login user vyos authentication public-keys 'keyname' key "AAAAB3..."
     #   set system login user vyos authentication public-keys 'keyname' type ssh-rsa
-    has_key_data = re.search(r"authentication public-keys .+ key ", output)
-    has_type = re.search(r"authentication public-keys .+ type ", output)
 
-    if has_key_data and has_type:
+    # Extract key names and their properties
+    key_pattern = re.compile(
+        r"authentication public-keys\s+['\"]?([^'\"]+)['\"]?\s+(key|type)\s+"
+    )
+
+    # Group by key name to track which keys have both properties
+    key_data: dict[str, dict[str, bool]] = {}
+    for line in output.split("\n"):
+        match = key_pattern.search(line)
+        if match:
+            key_name = match.group(1)
+            property_type = match.group(2)
+
+            if key_name not in key_data:
+                key_data[key_name] = {"key": False, "type": False}
+
+            key_data[key_name][property_type] = True
+
+    # Check if at least one key has both key data and type
+    complete_keys = [
+        name for name, props in key_data.items()
+        if props["key"] and props["type"]
+    ]
+
+    if complete_keys:
         return ValidationResult(
             passed=True,
             message="SSH public key(s) found in configuration",
             raw_output=output,
         )
-    else:
-        missing_parts = []
-        if not has_key_data:
-            missing_parts.append("key data")
-        if not has_type:
-            missing_parts.append("type")
+    elif key_data:
+        # Keys exist but none are complete
+        incomplete_info = []
+        for name, props in key_data.items():
+            missing = []
+            if not props["key"]:
+                missing.append("key data")
+            if not props["type"]:
+                missing.append("type")
+            incomplete_info.append(f"{name} (missing {' and '.join(missing)})")
+
         return ValidationResult(
             passed=False,
-            message=f"SSH public-keys found but missing {' and '.join(missing_parts)}",
+            message=f"SSH public-keys found but incomplete: {', '.join(incomplete_info)}",
+            raw_output=output,
+        )
+    else:
+        # No keys found (shouldn't happen since we checked for "authentication public-keys" earlier)
+        return ValidationResult(
+            passed=False,
+            message="No SSH public keys configured",
             raw_output=output,
         )
 

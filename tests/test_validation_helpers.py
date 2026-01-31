@@ -412,6 +412,31 @@ class TestCheckSshKeyConfigured:
         assert result.passed is True
         assert "authentication public-keys" in result.raw_output
 
+    def test_ssh_key_cross_key_mismatch(self) -> None:
+        """Test that key data and type must belong to the same key name.
+
+        This is a critical test for a bug where the validator would incorrectly
+        pass if one key had key data and a different key had type, even though
+        no single key was complete.
+        """
+        mock_ssh = Mock(
+            return_value=(
+                "set system login user vyos authentication public-keys "
+                "'key1' key 'AAAAB3NzaC1yc2EAAAADAQABAAABAQC...'\n"
+                "set system login user vyos authentication public-keys "
+                "'key2' type 'ssh-rsa'\n"
+            )
+        )
+
+        result = check_ssh_key_configured(mock_ssh)
+
+        # Should fail because no single key has both properties
+        assert result.passed is False
+        assert "incomplete" in result.message
+        # Should mention both keys
+        assert "key1" in result.message
+        assert "key2" in result.message
+
 
 class TestCheckOspfEnabled:
     """Test check_ospf_enabled helper function."""
