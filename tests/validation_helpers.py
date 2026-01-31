@@ -190,6 +190,11 @@ def check_interface_ip(
                 link/ether 52:54:00:12:34:56 brd ff:ff:ff:ff:ff:ff
                 inet 192.168.122.10/24 brd 192.168.122.255 scope global eth0
 
+    Note:
+        If the interface has multiple IP addresses configured, this function
+        checks if the expected IP is present among any of them. The validation
+        passes if the expected IP is found in any position (primary or secondary).
+
     Args:
         ssh: SSH connection callable from ssh_connection fixture
         interface: Interface name (e.g., "eth0", "eth1")
@@ -214,7 +219,10 @@ def check_interface_ip(
     # Look for "inet <ip>/<cidr>" pattern in output
     # Example: "inet 192.168.122.10/24 brd ..."
     # Use findall to collect all IPs (interfaces can have multiple IPs)
-    ip_pattern = re.compile(r"inet\s+(\d+\.\d+\.\d+\.\d+)/\d+")
+    ip_pattern = re.compile(
+        r"inet\s+((?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}"
+        r"(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?))/\d+"
+    )
     ip_matches = ip_pattern.findall(output)
 
     if not ip_matches:
@@ -272,7 +280,9 @@ def check_hostname(
 
     # Look for "host-name 'hostname'" or "host-name hostname" pattern
     # VyOS config can use single quotes or no quotes
-    hostname_pattern = re.compile(r"host-name\s+['\"]?([a-zA-Z0-9-]+)['\"]?")
+    hostname_pattern = re.compile(
+        r"host-name\s+['\"]?([a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)['\"]?"
+    )
     match = hostname_pattern.search(output)
 
     if not match:
@@ -347,7 +357,7 @@ def check_ssh_key_configured(
 
     # Extract key names and their properties
     key_pattern = re.compile(
-        r"authentication public-keys\s+['\"]?([^'\"]+)['\"]?\s+(key|type)\s+"
+        r"authentication public-keys\s+(?:'([^']+)|\"([^\"]+)\"|([^\s]+))\s+(key|type)\s+"
     )
 
     # Group by key name to track which keys have both properties
@@ -355,8 +365,8 @@ def check_ssh_key_configured(
     for line in output.split("\n"):
         match = key_pattern.search(line)
         if match:
-            key_name = match.group(1)
-            property_type = match.group(2)
+            key_name = match.group(1) or match.group(2) or match.group(3)
+            property_type = match.group(4)
 
             if key_name not in key_data:
                 key_data[key_name] = {"key": False, "type": False}
