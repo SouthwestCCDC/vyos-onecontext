@@ -1187,7 +1187,7 @@ def check_vrf_interface(
     # Format: interface names appear under "Interfaces:" section
     # Check if interface appears after "Interfaces:" line
     interfaces_section_pattern = re.compile(
-        r"Interfaces:\s*\n((?:\s+\S+\s*\n)*)",
+        r"Interfaces:\s*\n((?:\s+\S+\s*(?:\n|$))*)",
         re.MULTILINE,
     )
     interfaces_match = interfaces_section_pattern.search(output)

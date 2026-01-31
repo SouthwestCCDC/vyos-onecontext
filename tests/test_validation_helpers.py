@@ -1403,7 +1403,7 @@ class TestCheckServiceVrf:
         # This might happen if there are multiple services or config contexts
         mock_ssh = Mock(
             return_value=(
-                "set service ssh vrf 'mgmt'\nset service ssh vrf listen-address '10.0.0.1'\n"
+                "set service ssh vrf 'mgmt'\nset service ssh listen-address '10.0.0.1'\n"
             )
         )
 
