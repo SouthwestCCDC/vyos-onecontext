@@ -9,6 +9,9 @@ from unittest.mock import Mock
 
 from tests.validation_helpers import (
     ValidationResult,
+    check_dhcp_options,
+    check_dhcp_pool,
+    check_dhcp_server_running,
     check_hostname,
     check_interface_ip,
     check_ospf_enabled,
@@ -131,7 +134,7 @@ class TestCheckInterfaceIp:
         """Test when interface has multiple IPs and first one matches.
 
         Note: VyOS can have multiple IPs on one interface (secondary IPs).
-        This helper checks if the expected IP is present, matching the first found.
+        This helper checks if the expected IP is present in the list.
         """
         mock_ssh = Mock(
             return_value=(
@@ -144,6 +147,21 @@ class TestCheckInterfaceIp:
 
         # Check for first IP
         result = check_interface_ip(mock_ssh, "eth0", "192.168.1.1")
+        assert result.passed is True
+
+    def test_interface_multiple_ips_second_match(self) -> None:
+        """Test when interface has multiple IPs and second one matches."""
+        mock_ssh = Mock(
+            return_value=(
+                "eth0@NONE: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500\n"
+                "    link/ether 52:54:00:12:34:56 brd ff:ff:ff:ff:ff:ff\n"
+                "    inet 192.168.1.1/24 brd 192.168.1.255 scope global eth0\n"
+                "    inet 192.168.1.2/24 brd 192.168.1.255 scope global secondary eth0\n"
+            )
+        )
+
+        # Check for second IP
+        result = check_interface_ip(mock_ssh, "eth0", "192.168.1.2")
         assert result.passed is True
 
 
@@ -159,7 +177,7 @@ class TestCheckHostname:
         assert result.passed is True
         assert "matches" in result.message.lower()
         assert "test-simple" in result.message
-        mock_ssh.assert_called_once_with("show configuration | grep host-name")
+        mock_ssh.assert_called_once_with("show configuration | grep host-name || true")
 
     def test_hostname_matches_without_quotes(self) -> None:
         """Test when hostname matches (no quotes in config)."""
@@ -232,10 +250,9 @@ class TestCheckSshKeyConfigured:
         """Test when SSH public keys are configured."""
         mock_ssh = Mock(
             return_value=(
-                "    public-keys test-key-1 {\n"
-                "        key AAAAB3NzaC1yc2EAAAADAQABAAABAQC...\n"
-                "        type ssh-rsa\n"
-                "    }\n"
+                "set system login user vyos authentication public-keys test-key-1 "
+                "key 'AAAAB3NzaC1yc2EAAAADAQABAAABAQC...'\n"
+                "set system login user vyos authentication public-keys test-key-1 type 'ssh-rsa'\n"
             )
         )
 
@@ -243,7 +260,10 @@ class TestCheckSshKeyConfigured:
 
         assert result.passed is True
         assert "SSH public key(s) found" in result.message
-        mock_ssh.assert_called_once_with("show configuration | grep 'public-keys' || echo ''")
+        mock_ssh.assert_called_once_with(
+            "show configuration commands | "
+            "grep 'set system login user vyos authentication public-keys' || echo ''"
+        )
 
     def test_ssh_key_not_configured(self) -> None:
         """Test when no SSH keys are configured."""
@@ -258,14 +278,13 @@ class TestCheckSshKeyConfigured:
         """Test when multiple SSH keys are configured."""
         mock_ssh = Mock(
             return_value=(
-                "    public-keys test-key-1 {\n"
-                "        key AAAAB3NzaC1yc2EAAAADAQABAAABAQC...\n"
-                "        type ssh-rsa\n"
-                "    }\n"
-                "    public-keys test-key-2 {\n"
-                "        key AAAAC3NzaC1lZDI1NTE5AAAAIN...\n"
-                "        type ssh-ed25519\n"
-                "    }\n"
+                "set system login user vyos authentication public-keys test-key-1 "
+                "key 'AAAAB3NzaC1yc2EAAAADAQABAAABAQC...'\n"
+                "set system login user vyos authentication public-keys test-key-1 type 'ssh-rsa'\n"
+                "set system login user vyos authentication public-keys test-key-2 "
+                "key 'AAAAC3NzaC1lZDI1NTE5AAAAIN...'\n"
+                "set system login user vyos authentication public-keys test-key-2 "
+                "type 'ssh-ed25519'\n"
             )
         )
 
@@ -277,7 +296,9 @@ class TestCheckSshKeyConfigured:
     def test_ssh_key_malformed_config(self) -> None:
         """Test when public-keys stanza exists but is incomplete."""
         # Stanza found but missing key data or type
-        mock_ssh = Mock(return_value="    public-keys test-key-1 {\n    }\n")
+        mock_ssh = Mock(
+            return_value="set system login user vyos authentication public-keys test-key-1\n"
+        )
 
         result = check_ssh_key_configured(mock_ssh)
 
@@ -298,10 +319,10 @@ class TestCheckSshKeyConfigured:
         """Test with ed25519 key type."""
         mock_ssh = Mock(
             return_value=(
-                "    public-keys test-ed25519 {\n"
-                "        key AAAAC3NzaC1lZDI1NTE5AAAAIN...\n"
-                "        type ssh-ed25519\n"
-                "    }\n"
+                "set system login user vyos authentication public-keys test-ed25519 "
+                "key 'AAAAC3NzaC1lZDI1NTE5AAAAIN...'\n"
+                "set system login user vyos authentication public-keys test-ed25519 "
+                "type 'ssh-ed25519'\n"
             )
         )
 
@@ -313,10 +334,9 @@ class TestCheckSshKeyConfigured:
         """Test with RSA key type."""
         mock_ssh = Mock(
             return_value=(
-                "    public-keys test-rsa {\n"
-                "        key AAAAB3NzaC1yc2EAAAADAQABAAABAQC...\n"
-                "        type ssh-rsa\n"
-                "    }\n"
+                "set system login user vyos authentication public-keys test-rsa "
+                "key 'AAAAB3NzaC1yc2EAAAADAQABAAABAQC...'\n"
+                "set system login user vyos authentication public-keys test-rsa type 'ssh-rsa'\n"
             )
         )
 
@@ -328,18 +348,9 @@ class TestCheckSshKeyConfigured:
         """Test with full VyOS config output containing other settings."""
         mock_ssh = Mock(
             return_value=(
-                "system {\n"
-                "    login {\n"
-                "        user vyos {\n"
-                "            authentication {\n"
-                "                public-keys test-key {\n"
-                "                    key AAAAB3NzaC1yc2EAAAADAQABAAABAQC...\n"
-                "                    type ssh-rsa\n"
-                "                }\n"
-                "            }\n"
-                "        }\n"
-                "    }\n"
-                "}\n"
+                "set system login user vyos authentication public-keys test-key "
+                "key 'AAAAB3NzaC1yc2EAAAADAQABAAABAQC...'\n"
+                "set system login user vyos authentication public-keys test-key type 'ssh-rsa'\n"
             )
         )
 
@@ -649,3 +660,473 @@ class TestCheckOspfInterface:
         result = check_ospf_interface(mock_ssh, "eth0", "10.20.30.40")
 
         assert result.passed is True
+
+
+class TestCheckDhcpServerRunning:
+    """Test check_dhcp_server_running helper function."""
+
+    def test_dhcp_server_running(self) -> None:
+        """Test when DHCP server is running and listening."""
+        mock_ssh = Mock(
+            return_value=(
+                "DHCP server listening on:\n"
+                "    eth1\n"
+                "\n"
+                "Pool: dhcp-eth1\n"
+                "    Failover state: N/A\n"
+                "    Status: active\n"
+                "    Leases: 5\n"
+                "    Available: 95\n"
+            )
+        )
+
+        result = check_dhcp_server_running(mock_ssh)
+
+        assert result.passed is True
+        assert "DHCP server is running" in result.message
+        mock_ssh.assert_called_once_with("show service dhcp-server")
+
+    def test_dhcp_server_with_pool_only(self) -> None:
+        """Test when output contains Pool information."""
+        mock_ssh = Mock(return_value=("Pool: dhcp-eth2\n    Status: active\n    Leases: 0\n"))
+
+        result = check_dhcp_server_running(mock_ssh)
+
+        assert result.passed is True
+        assert "DHCP server is running" in result.message
+
+    def test_dhcp_server_not_configured(self) -> None:
+        """Test when DHCP server is not configured."""
+        mock_ssh = Mock(return_value="DHCP server is not configured\n")
+
+        result = check_dhcp_server_running(mock_ssh)
+
+        assert result.passed is False
+        assert "not configured or not running" in result.message
+
+    def test_dhcp_server_empty_output(self) -> None:
+        """Test when command returns empty output."""
+        mock_ssh = Mock(return_value="")
+
+        result = check_dhcp_server_running(mock_ssh)
+
+        assert result.passed is False
+        assert "not configured or not running" in result.message
+
+    def test_dhcp_server_query_fails(self) -> None:
+        """Test when SSH command fails."""
+        mock_ssh = Mock(side_effect=Exception("Network error"))
+
+        result = check_dhcp_server_running(mock_ssh)
+
+        assert result.passed is False
+        assert "Failed to query DHCP server status" in result.message
+        assert result.raw_output == ""
+
+    def test_dhcp_server_unknown_output(self) -> None:
+        """Test when output format is unexpected."""
+        mock_ssh = Mock(return_value="Some unexpected output\n")
+
+        result = check_dhcp_server_running(mock_ssh)
+
+        assert result.passed is False
+        assert "Unable to determine DHCP server status" in result.message
+
+
+class TestCheckDhcpPool:
+    """Test check_dhcp_pool helper function."""
+
+    def test_dhcp_pool_exists_with_subnet(self) -> None:
+        """Test when DHCP pool exists with expected subnet."""
+        mock_ssh = Mock(
+            return_value=(
+                "set service dhcp-server shared-network-name dhcp-eth1 "
+                "subnet 10.1.1.0/24 range 0 start 10.1.1.100\n"
+                "set service dhcp-server shared-network-name dhcp-eth1 "
+                "subnet 10.1.1.0/24 range 0 stop 10.1.1.200\n"
+                "set service dhcp-server shared-network-name dhcp-eth1 "
+                "subnet 10.1.1.0/24 default-router 10.1.1.1\n"
+            )
+        )
+
+        result = check_dhcp_pool(mock_ssh, "dhcp-eth1", "10.1.1.0/24")
+
+        assert result.passed is True
+        assert "exists with subnet" in result.message
+        assert "dhcp-eth1" in result.message
+        assert "10.1.1.0/24" in result.message
+        mock_ssh.assert_called_once_with("show configuration commands | grep dhcp-server || true")
+
+    def test_dhcp_pool_exists_without_subnet_check(self) -> None:
+        """Test when checking pool exists without specific subnet."""
+        mock_ssh = Mock(
+            return_value=(
+                "set service dhcp-server shared-network-name dhcp-eth2 "
+                "subnet 192.168.1.0/24 range 0 start 192.168.1.10\n"
+            )
+        )
+
+        result = check_dhcp_pool(mock_ssh, "dhcp-eth2", None)
+
+        assert result.passed is True
+        assert "exists" in result.message
+        assert "dhcp-eth2" in result.message
+
+    def test_dhcp_pool_not_found(self) -> None:
+        """Test when DHCP pool does not exist."""
+        mock_ssh = Mock(
+            return_value=(
+                "set service dhcp-server shared-network-name dhcp-eth1 "
+                "subnet 10.1.1.0/24 range 0 start 10.1.1.100\n"
+            )
+        )
+
+        result = check_dhcp_pool(mock_ssh, "dhcp-eth3", None)
+
+        assert result.passed is False
+        assert "not found" in result.message
+        assert "dhcp-eth3" in result.message
+
+    def test_dhcp_pool_exists_but_wrong_subnet(self) -> None:
+        """Test when pool exists but with different subnet."""
+        mock_ssh = Mock(
+            return_value=(
+                "set service dhcp-server shared-network-name dhcp-eth1 "
+                "subnet 10.1.1.0/24 range 0 start 10.1.1.100\n"
+            )
+        )
+
+        result = check_dhcp_pool(mock_ssh, "dhcp-eth1", "10.2.1.0/24")
+
+        assert result.passed is False
+        assert "not configured" in result.message
+        assert "10.2.1.0/24" in result.message
+
+    def test_dhcp_pool_query_fails(self) -> None:
+        """Test when SSH command fails."""
+        mock_ssh = Mock(side_effect=Exception("Connection lost"))
+
+        result = check_dhcp_pool(mock_ssh, "dhcp-eth1", "10.1.1.0/24")
+
+        assert result.passed is False
+        assert "Failed to query DHCP server configuration" in result.message
+        assert result.raw_output == ""
+
+    def test_dhcp_pool_multiple_pools(self) -> None:
+        """Test with multiple DHCP pools configured."""
+        mock_ssh = Mock(
+            return_value=(
+                "set service dhcp-server shared-network-name dhcp-eth1 "
+                "subnet 10.1.1.0/24 range 0 start 10.1.1.100\n"
+                "set service dhcp-server shared-network-name dhcp-eth2 "
+                "subnet 10.2.1.0/24 range 0 start 10.2.1.100\n"
+                "set service dhcp-server shared-network-name dhcp-eth3 "
+                "subnet 10.3.1.0/24 range 0 start 10.3.1.100\n"
+            )
+        )
+
+        result = check_dhcp_pool(mock_ssh, "dhcp-eth2", "10.2.1.0/24")
+
+        assert result.passed is True
+        assert "dhcp-eth2" in result.message
+        assert "10.2.1.0/24" in result.message
+
+    def test_dhcp_pool_with_quoted_values(self) -> None:
+        """Test when VyOS outputs quoted values (real device behavior)."""
+        mock_ssh = Mock(
+            return_value=(
+                "set service dhcp-server shared-network-name 'dhcp-eth1' "
+                "subnet '10.1.1.0/24' range 0 start '10.1.1.100'\n"
+                "set service dhcp-server shared-network-name 'dhcp-eth1' "
+                "subnet '10.1.1.0/24' range 0 stop '10.1.1.200'\n"
+            )
+        )
+
+        result = check_dhcp_pool(mock_ssh, "dhcp-eth1", "10.1.1.0/24")
+
+        assert result.passed is True
+        assert "exists with subnet" in result.message
+
+
+class TestCheckDhcpOptions:
+    """Test check_dhcp_options helper function."""
+
+    def test_dhcp_options_all_present(self) -> None:
+        """Test when all DHCP options are correctly configured."""
+        mock_ssh = Mock(
+            return_value=(
+                "set service dhcp-server shared-network-name dhcp-eth1 "
+                "subnet 10.1.1.0/24 range 0 start 10.1.1.100\n"
+                "set service dhcp-server shared-network-name dhcp-eth1 "
+                "subnet 10.1.1.0/24 default-router 10.1.1.1\n"
+                "set service dhcp-server shared-network-name dhcp-eth1 "
+                "subnet 10.1.1.0/24 name-server 10.63.4.101\n"
+                "set service dhcp-server shared-network-name dhcp-eth1 "
+                "subnet 10.1.1.0/24 name-server 8.8.8.8\n"
+            )
+        )
+
+        result = check_dhcp_options(mock_ssh, "dhcp-eth1", "10.1.1.1", ["10.63.4.101", "8.8.8.8"])
+
+        assert result.passed is True
+        assert "correct" in result.message
+        assert "dhcp-eth1" in result.message
+        assert "default-router=10.1.1.1" in result.message
+        assert "dns=10.63.4.101,8.8.8.8" in result.message
+        mock_ssh.assert_called_once_with("show configuration commands | grep dhcp-server || true")
+
+    def test_dhcp_options_only_router(self) -> None:
+        """Test when checking only default-router."""
+        mock_ssh = Mock(
+            return_value=(
+                "set service dhcp-server shared-network-name dhcp-eth1 "
+                "subnet 10.1.1.0/24 default-router 10.1.1.1\n"
+            )
+        )
+
+        result = check_dhcp_options(mock_ssh, "dhcp-eth1", "10.1.1.1", None)
+
+        assert result.passed is True
+        assert "default-router=10.1.1.1" in result.message
+
+    def test_dhcp_options_only_dns(self) -> None:
+        """Test when checking only DNS servers."""
+        mock_ssh = Mock(
+            return_value=(
+                "set service dhcp-server shared-network-name dhcp-eth1 "
+                "subnet 10.1.1.0/24 name-server 8.8.8.8\n"
+            )
+        )
+
+        result = check_dhcp_options(mock_ssh, "dhcp-eth1", None, ["8.8.8.8"])
+
+        assert result.passed is True
+        assert "dns=8.8.8.8" in result.message
+
+    def test_dhcp_options_missing_router(self) -> None:
+        """Test when default-router is missing."""
+        mock_ssh = Mock(
+            return_value=(
+                "set service dhcp-server shared-network-name dhcp-eth1 "
+                "subnet 10.1.1.0/24 range 0 start 10.1.1.100\n"
+                "set service dhcp-server shared-network-name dhcp-eth1 "
+                "subnet 10.1.1.0/24 name-server 8.8.8.8\n"
+            )
+        )
+
+        result = check_dhcp_options(mock_ssh, "dhcp-eth1", "10.1.1.1", ["8.8.8.8"])
+
+        assert result.passed is False
+        assert "incomplete" in result.message
+        assert "default-router '10.1.1.1' not found" in result.message
+
+    def test_dhcp_options_missing_dns(self) -> None:
+        """Test when DNS server is missing."""
+        mock_ssh = Mock(
+            return_value=(
+                "set service dhcp-server shared-network-name dhcp-eth1 "
+                "subnet 10.1.1.0/24 default-router 10.1.1.1\n"
+            )
+        )
+
+        result = check_dhcp_options(mock_ssh, "dhcp-eth1", "10.1.1.1", ["8.8.8.8", "8.8.4.4"])
+
+        assert result.passed is False
+        assert "incomplete" in result.message
+        assert "name-server '8.8.8.8' not found" in result.message
+        assert "name-server '8.8.4.4' not found" in result.message
+
+    def test_dhcp_options_network_not_found(self) -> None:
+        """Test when shared-network does not exist."""
+        mock_ssh = Mock(
+            return_value=(
+                "set service dhcp-server shared-network-name dhcp-eth2 "
+                "subnet 10.2.1.0/24 default-router 10.2.1.1\n"
+            )
+        )
+
+        result = check_dhcp_options(mock_ssh, "dhcp-eth1", "10.1.1.1", None)
+
+        assert result.passed is False
+        assert "not found" in result.message
+        assert "dhcp-eth1" in result.message
+
+    def test_dhcp_options_no_checks(self) -> None:
+        """Test when no options are being checked (both None)."""
+        mock_ssh = Mock(
+            return_value=(
+                "set service dhcp-server shared-network-name dhcp-eth1 "
+                "subnet 10.1.1.0/24 range 0 start 10.1.1.100\n"
+            )
+        )
+
+        result = check_dhcp_options(mock_ssh, "dhcp-eth1", None, None)
+
+        assert result.passed is True
+        assert "no options checked" in result.message
+
+    def test_dhcp_options_query_fails(self) -> None:
+        """Test when SSH command fails."""
+        mock_ssh = Mock(side_effect=Exception("Network timeout"))
+
+        result = check_dhcp_options(mock_ssh, "dhcp-eth1", "10.1.1.1", None)
+
+        assert result.passed is False
+        assert "Failed to query DHCP server configuration" in result.message
+        assert result.raw_output == ""
+
+    def test_dhcp_options_single_dns_server(self) -> None:
+        """Test with a single DNS server."""
+        mock_ssh = Mock(
+            return_value=(
+                "set service dhcp-server shared-network-name dhcp-eth1 "
+                "subnet 10.1.1.0/24 name-server 10.1.1.1\n"
+            )
+        )
+
+        result = check_dhcp_options(mock_ssh, "dhcp-eth1", None, ["10.1.1.1"])
+
+        assert result.passed is True
+        assert "dns=10.1.1.1" in result.message
+
+    def test_dhcp_options_with_quoted_values(self) -> None:
+        """Test when VyOS outputs quoted values (real device behavior)."""
+        mock_ssh = Mock(
+            return_value=(
+                "set service dhcp-server shared-network-name 'dhcp-eth1' "
+                "subnet '10.1.1.0/24' default-router '10.1.1.1'\n"
+                "set service dhcp-server shared-network-name 'dhcp-eth1' "
+                "subnet '10.1.1.0/24' name-server '10.63.4.101'\n"
+                "set service dhcp-server shared-network-name 'dhcp-eth1' "
+                "subnet '10.1.1.0/24' name-server '8.8.8.8'\n"
+            )
+        )
+
+        result = check_dhcp_options(mock_ssh, "dhcp-eth1", "10.1.1.1", ["10.63.4.101", "8.8.8.8"])
+
+        assert result.passed is True
+        assert "correct" in result.message
+
+    def test_dhcp_options_empty_dns_list(self) -> None:
+        """Test when dns_servers is empty list (should skip DNS check like None)."""
+        mock_ssh = Mock(
+            return_value=(
+                "set service dhcp-server shared-network-name 'dhcp-eth1' "
+                "subnet '10.1.1.0/24' default-router '10.1.1.1'\n"
+                "set service dhcp-server shared-network-name 'dhcp-eth1' "
+                "subnet '10.1.1.0/24' name-server '8.8.8.8'\n"
+            )
+        )
+
+        # Empty list should skip DNS check (same as None)
+        result = check_dhcp_options(mock_ssh, "dhcp-eth1", "10.1.1.1", [])
+
+        assert result.passed is True
+        assert "default-router=10.1.1.1" in result.message
+        # DNS should not be mentioned since we're skipping that check
+        assert "dns=" not in result.message
+
+    def test_dhcp_pool_prefix_no_false_positive(self) -> None:
+        """Test that dhcp-eth1 does NOT match dhcp-eth10 (prefix matching bug).
+
+        This test verifies the regex fix that requires 'subnet' keyword after
+        network name, preventing false positives when network names are prefixes.
+        """
+        mock_ssh = Mock(
+            return_value=(
+                "set service dhcp-server shared-network-name dhcp-eth10 "
+                "subnet 10.10.1.0/24 range 0 start 10.10.1.100\n"
+                "set service dhcp-server shared-network-name dhcp-eth10 "
+                "subnet 10.10.1.0/24 default-router 10.10.1.1\n"
+            )
+        )
+
+        # Looking for dhcp-eth1 should NOT match dhcp-eth10
+        result = check_dhcp_pool(mock_ssh, "dhcp-eth1", None)
+
+        assert result.passed is False
+        assert "not found" in result.message
+        assert "dhcp-eth1" in result.message
+
+    def test_dhcp_pool_prefix_with_hyphen_no_false_positive(self) -> None:
+        """Test that dhcp-eth1 does NOT match dhcp-eth1-backup."""
+        mock_ssh = Mock(
+            return_value=(
+                "set service dhcp-server shared-network-name dhcp-eth1-backup "
+                "subnet 10.1.2.0/24 range 0 start 10.1.2.100\n"
+            )
+        )
+
+        # Looking for dhcp-eth1 should NOT match dhcp-eth1-backup
+        result = check_dhcp_pool(mock_ssh, "dhcp-eth1", None)
+
+        assert result.passed is False
+        assert "not found" in result.message
+
+    def test_dhcp_pool_network_name_with_dots(self) -> None:
+        """Test network names with dots (special regex characters)."""
+        mock_ssh = Mock(
+            return_value=(
+                "set service dhcp-server shared-network-name dhcp.vlan.100 "
+                "subnet 10.100.1.0/24 range 0 start 10.100.1.100\n"
+            )
+        )
+
+        result = check_dhcp_pool(mock_ssh, "dhcp.vlan.100", "10.100.1.0/24")
+
+        assert result.passed is True
+        assert "exists with subnet" in result.message
+
+    def test_dhcp_pool_network_name_with_underscores(self) -> None:
+        """Test network names with underscores."""
+        mock_ssh = Mock(
+            return_value=(
+                "set service dhcp-server shared-network-name dhcp_test_network "
+                "subnet 10.99.1.0/24 range 0 start 10.99.1.100\n"
+            )
+        )
+
+        result = check_dhcp_pool(mock_ssh, "dhcp_test_network", None)
+
+        assert result.passed is True
+        assert "exists" in result.message
+
+
+class TestCheckDhcpOptionsNetworkMatching:
+    """Test check_dhcp_options network name matching edge cases."""
+
+    def test_dhcp_options_prefix_no_false_positive(self) -> None:
+        """Test that dhcp-eth1 does NOT match dhcp-eth10 in check_dhcp_options."""
+        mock_ssh = Mock(
+            return_value=(
+                "set service dhcp-server shared-network-name dhcp-eth10 "
+                "subnet 10.10.1.0/24 default-router 10.10.1.1\n"
+            )
+        )
+
+        # Looking for dhcp-eth1 should NOT match dhcp-eth10
+        result = check_dhcp_options(mock_ssh, "dhcp-eth1", "10.1.1.1", None)
+
+        assert result.passed is False
+        assert "not found" in result.message
+        assert "dhcp-eth1" in result.message
+
+    def test_dhcp_options_exact_match_with_similar_names(self) -> None:
+        """Test exact network name matching when similar names exist."""
+        mock_ssh = Mock(
+            return_value=(
+                "set service dhcp-server shared-network-name dhcp-eth1 "
+                "subnet 10.1.1.0/24 default-router 10.1.1.1\n"
+                "set service dhcp-server shared-network-name dhcp-eth10 "
+                "subnet 10.10.1.0/24 default-router 10.10.1.1\n"
+                "set service dhcp-server shared-network-name dhcp-eth1-backup "
+                "subnet 10.1.2.0/24 default-router 10.1.2.1\n"
+            )
+        )
+
+        # Should match only dhcp-eth1, not dhcp-eth10 or dhcp-eth1-backup
+        result = check_dhcp_options(mock_ssh, "dhcp-eth1", "10.1.1.1", None)
+
+        assert result.passed is True
+        assert "dhcp-eth1" in result.message
+        assert "default-router=10.1.1.1" in result.message

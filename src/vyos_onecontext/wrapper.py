@@ -138,11 +138,13 @@ class VyOSConfigSession:
 
         if result.returncode != 0:
             error_msg = result.stderr.strip() or result.stdout.strip() or "Unknown error"
-            raise VyOSConfigError(
-                f"VyOS wrapper command failed: {' '.join(args)}\n"
-                f"Exit code: {result.returncode}\n"
-                f"Error: {error_msg}"
-            )
+            # Include both stdout and stderr in error for better diagnostics
+            diagnostic = f"VyOS wrapper command failed: {' '.join(args)}\n" \
+                        f"Exit code: {result.returncode}\n" \
+                        f"Error: {error_msg}"
+            if result.stdout and result.stderr:
+                diagnostic += f"\nStdout: {result.stdout.strip()}\nStderr: {result.stderr.strip()}"
+            raise VyOSConfigError(diagnostic)
 
         return result
 
