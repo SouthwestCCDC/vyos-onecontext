@@ -793,7 +793,7 @@ def check_snat_rule(
     if outbound_interface is not None:
         escaped_iface = re.escape(outbound_interface)
         interface_pattern = re.compile(
-            rf"set nat source rule {rule_num} outbound-interface name '{escaped_iface}'"
+            rf"set nat source rule {rule_num} outbound-interface name \'?{escaped_iface}\'?"
         )
         if not interface_pattern.search(rule_config):
             return ValidationResult(
@@ -808,7 +808,7 @@ def check_snat_rule(
     # Check translation if specified
     if translation is not None:
         translation_pattern = re.compile(
-            rf"set nat source rule {rule_num} translation address '{re.escape(translation)}'"
+            rf"set nat source rule {rule_num} translation address \'?{re.escape(translation)}\'?"
         )
         if not translation_pattern.search(rule_config):
             return ValidationResult(
@@ -839,6 +839,7 @@ def check_dnat_rule(
     protocol: str | None = None,
     port: str | None = None,
     translation_address: str | None = None,
+    translation_port: str | None = None,
 ) -> ValidationResult:
     """Verify a destination NAT rule exists with expected parameters.
 
@@ -861,6 +862,7 @@ def check_dnat_rule(
         protocol: Expected protocol (tcp/udp) (optional)
         port: Expected destination port (optional)
         translation_address: Expected translation IP address (optional)
+        translation_port: Expected translation port (optional)
 
     Returns:
         ValidationResult indicating whether DNAT rule matches expectations
@@ -892,7 +894,7 @@ def check_dnat_rule(
     if inbound_interface is not None:
         escaped_iface = re.escape(inbound_interface)
         interface_pattern = re.compile(
-            rf"set nat destination rule {rule_num} inbound-interface name '{escaped_iface}'"
+            rf"set nat destination rule {rule_num} inbound-interface name \'?{escaped_iface}\'?"
         )
         if not interface_pattern.search(rule_config):
             return ValidationResult(
@@ -907,7 +909,7 @@ def check_dnat_rule(
     # Check protocol if specified
     if protocol is not None:
         protocol_pattern = re.compile(
-            rf"set nat destination rule {rule_num} protocol '{re.escape(protocol)}'"
+            rf"set nat destination rule {rule_num} protocol \'?{re.escape(protocol)}\'?"
         )
         if not protocol_pattern.search(rule_config):
             return ValidationResult(
@@ -919,7 +921,7 @@ def check_dnat_rule(
     # Check port if specified
     if port is not None:
         port_pattern = re.compile(
-            rf"set nat destination rule {rule_num} destination port '{re.escape(port)}'"
+            rf"set nat destination rule {rule_num} destination port \'?{re.escape(port)}\'?"
         )
         if not port_pattern.search(rule_config):
             return ValidationResult(
@@ -932,7 +934,7 @@ def check_dnat_rule(
     if translation_address is not None:
         escaped_addr = re.escape(translation_address)
         translation_pattern = re.compile(
-            rf"set nat destination rule {rule_num} translation address '{escaped_addr}'"
+            rf"set nat destination rule {rule_num} translation address \'?{escaped_addr}\'?"
         )
         if not translation_pattern.search(rule_config):
             return ValidationResult(
@@ -940,6 +942,22 @@ def check_dnat_rule(
                 message=(
                     f"DNAT rule {rule_num} translation address mismatch: "
                     f"expected '{translation_address}'"
+                ),
+                raw_output=rule_config,
+            )
+
+    # Check translation port if specified
+    if translation_port is not None:
+        escaped_port = re.escape(translation_port)
+        port_pattern = re.compile(
+            rf"set nat destination rule {rule_num} translation port '?{escaped_port}'?"
+        )
+        if not port_pattern.search(rule_config):
+            return ValidationResult(
+                passed=False,
+                message=(
+                    f"DNAT rule {rule_num} translation port mismatch: "
+                    f"expected '{translation_port}'"
                 ),
                 raw_output=rule_config,
             )
@@ -954,6 +972,8 @@ def check_dnat_rule(
         checks.append(f"port={port}")
     if translation_address is not None:
         checks.append(f"translation={translation_address}")
+    if translation_port is not None:
+        checks.append(f"translation_port={translation_port}")
 
     check_str = ", ".join(checks) if checks else "exists"
     return ValidationResult(
