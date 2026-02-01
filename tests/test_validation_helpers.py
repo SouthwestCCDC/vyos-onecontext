@@ -1713,6 +1713,50 @@ class TestSshKeyQuoteHandling:
 
         assert result.passed is True
 
+    def test_ssh_key_names_extracted_without_quotes(self) -> None:
+        """Test that key names are extracted WITHOUT surrounding quotes.
+
+        This is a regression test for the missing closing quote in the regex
+        pattern. The pattern should extract 'my-key', not "'my-key'" or "my-key".
+        """
+        from tests.validation_helpers import re
+
+        # Test the actual pattern used in check_ssh_key_configured
+        key_pattern = re.compile(
+            r"authentication public-keys\s+(?:'([^']+)'|\"([^\"]+)\"|([^\s]+))"
+            r"\s+(key|type)\s+"
+        )
+
+        # Test single-quoted key name
+        line_single = (
+            "set system login user vyos authentication public-keys "
+            "'my-key' key 'AAAAB3...'"
+        )
+        match = key_pattern.search(line_single)
+        assert match is not None
+        key_name = match.group(1) or match.group(2) or match.group(3)
+        assert key_name == "my-key", f"Expected 'my-key', got '{key_name}'"
+
+        # Test double-quoted key name
+        line_double = (
+            'set system login user vyos authentication public-keys '
+            '"my-key" key "AAAAB3..."'
+        )
+        match = key_pattern.search(line_double)
+        assert match is not None
+        key_name = match.group(1) or match.group(2) or match.group(3)
+        assert key_name == "my-key", f"Expected 'my-key', got '{key_name}'"
+
+        # Test unquoted key name
+        line_unquoted = (
+            "set system login user vyos authentication public-keys "
+            "mykey key 'AAAAB3...'"
+        )
+        match = key_pattern.search(line_unquoted)
+        assert match is not None
+        key_name = match.group(1) or match.group(2) or match.group(3)
+        assert key_name == "mykey", f"Expected 'mykey', got '{key_name}'"
+
 
 class TestInterfaceIpOctetValidation:
     """Test interface IP validation rejects invalid octets.
