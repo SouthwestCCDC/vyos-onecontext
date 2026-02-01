@@ -357,7 +357,7 @@ def check_ssh_key_configured(
 
     # Extract key names and their properties
     key_pattern = re.compile(
-        r"authentication public-keys\s+(?:'([^']+)|\"([^\"]+)\"|([^\s]+))\s+(key|type)\s+"
+        r"authentication public-keys\s+(?:'([^']+)'|\"([^\"]+)\"|([^\s]+))\s+(key|type)\s+"
     )
 
     # Group by key name to track which keys have both properties
