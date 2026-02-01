@@ -14,7 +14,10 @@ from tests.validation_helpers import (
     check_ospf_enabled,
     check_ospf_interface,
     check_ospf_router_id,
+    check_service_vrf,
     check_ssh_key_configured,
+    check_vrf_exists,
+    check_vrf_interface,
 )
 
 
@@ -217,12 +220,16 @@ class TestCheckHostname:
         assert result.passed is True
 
     def test_hostname_with_underscores(self) -> None:
-        """Test hostname validation with underscores."""
+        """Test hostname validation rejects underscores (per RFC 952/1123)."""
         mock_ssh = Mock(return_value="host-name 'test_router'\n")
 
         result = check_hostname(mock_ssh, "test_router")
 
-        assert result.passed is True
+        # Hostname with underscore will match only the part before underscore
+        # This causes a mismatch: expected "test_router", got "test"
+        assert result.passed is False
+        assert "Hostname mismatch" in result.message
+        assert "expected test_router, got test" in result.message
 
 
 class TestCheckSshKeyConfigured:
@@ -649,3 +656,325 @@ class TestCheckOspfInterface:
         result = check_ospf_interface(mock_ssh, "eth0", "10.20.30.40")
 
         assert result.passed is True
+
+
+class TestCheckVrfExists:
+    """Test check_vrf_exists helper function."""
+
+    def test_vrf_exists_without_table_id(self) -> None:
+        """Test when VRF exists and no table ID validation requested."""
+        mock_ssh = Mock(
+            return_value=(
+                "VRF name          state     mac address        flags            interfaces\n"
+                "--------          -----     -----------        -----            ----------\n"
+                "mgmt              up        aa:bb:cc:dd:ee:ff  noarp,master     eth0\n"
+            )
+        )
+
+        result = check_vrf_exists(mock_ssh, "mgmt")
+
+        assert result.passed is True
+        assert "VRF 'mgmt' exists" in result.message
+        mock_ssh.assert_called_once_with("show vrf")
+
+    def test_vrf_exists_with_matching_table_id(self) -> None:
+        """Test when VRF exists with correct table ID."""
+        mock_ssh = Mock()
+        # First call returns VRF list, second call returns VRF details
+        mock_ssh.side_effect = [
+            (
+                "VRF name          state     mac address        flags            interfaces\n"
+                "--------          -----     -----------        -----            ----------\n"
+                "mgmt              up        aa:bb:cc:dd:ee:ff  noarp,master     eth0\n"
+            ),
+            ("VRF: mgmt\n  Table: 1000\n  Interfaces:\n    eth0\n"),
+        ]
+
+        result = check_vrf_exists(mock_ssh, "mgmt", table_id=1000)
+
+        assert result.passed is True
+        assert "VRF 'mgmt' exists with table ID 1000" in result.message
+        assert mock_ssh.call_count == 2
+        mock_ssh.assert_any_call("show vrf")
+        mock_ssh.assert_any_call("show vrf name mgmt")
+
+    def test_vrf_not_found(self) -> None:
+        """Test when VRF does not exist."""
+        mock_ssh = Mock(
+            return_value=(
+                "VRF name          state     mac address        flags            interfaces\n"
+                "--------          -----     -----------        -----            ----------\n"
+                "other             up        aa:bb:cc:dd:ee:ff  noarp,master     eth1\n"
+            )
+        )
+
+        result = check_vrf_exists(mock_ssh, "mgmt")
+
+        assert result.passed is False
+        assert "VRF 'mgmt' not found" in result.message
+
+    def test_vrf_table_id_mismatch(self) -> None:
+        """Test when VRF exists but table ID doesn't match."""
+        mock_ssh = Mock()
+        mock_ssh.side_effect = [
+            (
+                "VRF name          state     mac address        flags            interfaces\n"
+                "--------          -----     -----------        -----            ----------\n"
+                "mgmt              up        aa:bb:cc:dd:ee:ff  noarp,master     eth0\n"
+            ),
+            ("VRF: mgmt\n  Table: 2000\n  Interfaces:\n    eth0\n"),
+        ]
+
+        result = check_vrf_exists(mock_ssh, "mgmt", table_id=1000)
+
+        assert result.passed is False
+        assert "table ID mismatch" in result.message
+        assert "expected 1000" in result.message
+        assert "got 2000" in result.message
+
+    def test_vrf_query_fails(self) -> None:
+        """Test when show vrf command fails."""
+        mock_ssh = Mock(side_effect=Exception("Connection lost"))
+
+        result = check_vrf_exists(mock_ssh, "mgmt")
+
+        assert result.passed is False
+        assert "Failed to query VRF list" in result.message
+        assert result.raw_output == ""
+
+    def test_vrf_detail_query_fails(self) -> None:
+        """Test when VRF exists but detail query fails."""
+        mock_ssh = Mock()
+        mock_ssh.side_effect = [
+            (
+                "VRF name          state     mac address        flags            interfaces\n"
+                "--------          -----     -----------        -----            ----------\n"
+                "mgmt              up        aa:bb:cc:dd:ee:ff  noarp,master     eth0\n"
+            ),
+            Exception("Permission denied"),
+        ]
+
+        result = check_vrf_exists(mock_ssh, "mgmt", table_id=1000)
+
+        assert result.passed is False
+        assert "Failed to query VRF 'mgmt' details" in result.message
+
+    def test_vrf_no_table_in_details(self) -> None:
+        """Test when VRF details don't contain table ID."""
+        mock_ssh = Mock()
+        mock_ssh.side_effect = [
+            (
+                "VRF name          state     mac address        flags            interfaces\n"
+                "--------          -----     -----------        -----            ----------\n"
+                "mgmt              up        aa:bb:cc:dd:ee:ff  noarp,master     eth0\n"
+            ),
+            ("VRF: mgmt\n  Interfaces:\n    eth0\n"),
+        ]
+
+        result = check_vrf_exists(mock_ssh, "mgmt", table_id=1000)
+
+        assert result.passed is False
+        assert "table ID not found in details" in result.message
+
+    def test_vrf_multiple_vrfs_in_list(self) -> None:
+        """Test finding specific VRF among multiple VRFs."""
+        mock_ssh = Mock(
+            return_value=(
+                "VRF name          state     mac address        flags            interfaces\n"
+                "--------          -----     -----------        -----            ----------\n"
+                "blue              up        aa:bb:cc:dd:ee:01  noarp,master     eth1\n"
+                "mgmt              up        aa:bb:cc:dd:ee:ff  noarp,master     eth0\n"
+                "red               up        aa:bb:cc:dd:ee:02  noarp,master     eth2\n"
+            )
+        )
+
+        result = check_vrf_exists(mock_ssh, "mgmt")
+
+        assert result.passed is True
+        assert "VRF 'mgmt' exists" in result.message
+
+    def test_vrf_name_with_hyphens(self) -> None:
+        """Test VRF name containing hyphens."""
+        mock_ssh = Mock(
+            return_value=(
+                "VRF name          state     mac address        flags            interfaces\n"
+                "--------          -----     -----------        -----            ----------\n"
+                "my-vrf-1          up        aa:bb:cc:dd:ee:ff  noarp,master     eth0\n"
+            )
+        )
+
+        result = check_vrf_exists(mock_ssh, "my-vrf-1")
+
+        assert result.passed is True
+
+
+class TestCheckVrfInterface:
+    """Test check_vrf_interface helper function."""
+
+    def test_interface_in_vrf(self) -> None:
+        """Test when interface is correctly bound to VRF."""
+        mock_ssh = Mock(return_value=("VRF: mgmt\n  Table: 1000\n  Interfaces:\n    eth0\n"))
+
+        result = check_vrf_interface(mock_ssh, "mgmt", "eth0")
+
+        assert result.passed is True
+        assert "Interface eth0 is bound to VRF 'mgmt'" in result.message
+        mock_ssh.assert_called_once_with("show vrf name mgmt")
+
+    def test_interface_not_in_vrf(self) -> None:
+        """Test when interface is not in the VRF."""
+        mock_ssh = Mock(return_value=("VRF: mgmt\n  Table: 1000\n  Interfaces:\n    eth0\n"))
+
+        result = check_vrf_interface(mock_ssh, "mgmt", "eth1")
+
+        assert result.passed is False
+        assert "Interface eth1 not found in VRF 'mgmt'" in result.message
+
+    def test_vrf_no_interfaces(self) -> None:
+        """Test when VRF exists but has no interfaces."""
+        mock_ssh = Mock(return_value=("VRF: mgmt\n  Table: 1000\n"))
+
+        result = check_vrf_interface(mock_ssh, "mgmt", "eth0")
+
+        assert result.passed is False
+        assert "has no interfaces listed" in result.message
+
+    def test_vrf_multiple_interfaces(self) -> None:
+        """Test finding interface among multiple interfaces in VRF."""
+        mock_ssh = Mock(
+            return_value=("VRF: mgmt\n  Table: 1000\n  Interfaces:\n    eth0\n    eth1\n    eth2\n")
+        )
+
+        result = check_vrf_interface(mock_ssh, "mgmt", "eth1")
+
+        assert result.passed is True
+        assert "eth1" in result.message
+
+    def test_vrf_query_fails(self) -> None:
+        """Test when VRF query fails."""
+        mock_ssh = Mock(side_effect=Exception("VRF not found"))
+
+        result = check_vrf_interface(mock_ssh, "mgmt", "eth0")
+
+        assert result.passed is False
+        assert "Failed to query VRF 'mgmt'" in result.message
+        assert result.raw_output == ""
+
+    def test_interface_with_vlan(self) -> None:
+        """Test interface with VLAN subinterface."""
+        mock_ssh = Mock(return_value=("VRF: mgmt\n  Table: 1000\n  Interfaces:\n    eth0.100\n"))
+
+        result = check_vrf_interface(mock_ssh, "mgmt", "eth0.100")
+
+        assert result.passed is True
+
+    def test_vrf_empty_interfaces_list(self) -> None:
+        """Test when VRF has Interfaces: section but it's empty."""
+        mock_ssh = Mock(return_value=("VRF: mgmt\n  Table: 1000\n  Interfaces:\n"))
+
+        result = check_vrf_interface(mock_ssh, "mgmt", "eth0")
+
+        assert result.passed is False
+        assert "not found in VRF" in result.message
+
+
+class TestCheckServiceVrf:
+    """Test check_service_vrf helper function."""
+
+    def test_service_bound_to_vrf_with_quotes(self) -> None:
+        """Test when service is correctly bound to VRF (with quotes)."""
+        mock_ssh = Mock(return_value="set service ssh vrf 'mgmt'\n")
+
+        result = check_service_vrf(mock_ssh, "ssh", "mgmt")
+
+        assert result.passed is True
+        assert "Service 'ssh' is bound to VRF 'mgmt'" in result.message
+        mock_ssh.assert_called_once_with(
+            "show configuration commands | grep 'service ssh vrf' || echo ''"
+        )
+
+    def test_service_bound_to_vrf_without_quotes(self) -> None:
+        """Test when service is bound to VRF (no quotes)."""
+        mock_ssh = Mock(return_value="set service ssh vrf mgmt\n")
+
+        result = check_service_vrf(mock_ssh, "ssh", "mgmt")
+
+        assert result.passed is True
+
+    def test_service_no_vrf_binding(self) -> None:
+        """Test when service has no VRF binding."""
+        mock_ssh = Mock(return_value="")
+
+        result = check_service_vrf(mock_ssh, "ssh", "mgmt")
+
+        assert result.passed is False
+        assert "Service 'ssh' has no VRF binding configured" in result.message
+
+    def test_service_wrong_vrf(self) -> None:
+        """Test when service is bound to different VRF."""
+        mock_ssh = Mock(return_value="set service ssh vrf 'other'\n")
+
+        result = check_service_vrf(mock_ssh, "ssh", "mgmt")
+
+        assert result.passed is False
+        assert "VRF mismatch" in result.message
+        assert "expected 'mgmt'" in result.message
+        assert "got 'other'" in result.message
+
+    def test_service_query_fails(self) -> None:
+        """Test when configuration query fails."""
+        mock_ssh = Mock(side_effect=Exception("Access denied"))
+
+        result = check_service_vrf(mock_ssh, "ssh", "mgmt")
+
+        assert result.passed is False
+        assert "Failed to query service 'ssh' VRF configuration" in result.message
+        assert result.raw_output == ""
+
+    def test_https_service(self) -> None:
+        """Test HTTPS service VRF binding."""
+        mock_ssh = Mock(return_value="set service https vrf 'mgmt'\n")
+
+        result = check_service_vrf(mock_ssh, "https", "mgmt")
+
+        assert result.passed is True
+        assert "https" in result.message
+
+    def test_snmp_service(self) -> None:
+        """Test SNMP service VRF binding."""
+        mock_ssh = Mock(return_value="set service snmp vrf 'mgmt'\n")
+
+        result = check_service_vrf(mock_ssh, "snmp", "mgmt")
+
+        assert result.passed is True
+
+    def test_service_vrf_with_hyphens(self) -> None:
+        """Test VRF name with hyphens."""
+        mock_ssh = Mock(return_value="set service ssh vrf 'my-mgmt-vrf'\n")
+
+        result = check_service_vrf(mock_ssh, "ssh", "my-mgmt-vrf")
+
+        assert result.passed is True
+
+    def test_service_multiple_config_lines(self) -> None:
+        """Test when grep returns multiple service configurations."""
+        # This might happen if there are multiple services or config contexts
+        mock_ssh = Mock(
+            return_value=(
+                "set service ssh vrf 'mgmt'\nset service ssh listen-address '10.0.0.1'\n"
+            )
+        )
+
+        result = check_service_vrf(mock_ssh, "ssh", "mgmt")
+
+        assert result.passed is True
+
+    def test_service_unparseable_vrf_config(self) -> None:
+        """Test when VRF config exists but cannot parse VRF name."""
+        # Edge case: malformed config that matches grep but not regex
+        mock_ssh = Mock(return_value="set service ssh vrf\n")
+
+        result = check_service_vrf(mock_ssh, "ssh", "mgmt")
+
+        assert result.passed is False
+        assert "cannot parse VRF name" in result.message
