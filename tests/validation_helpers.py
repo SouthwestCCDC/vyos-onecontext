@@ -16,8 +16,10 @@ VyOS Command Output Formats:
 - show configuration | grep public-keys: Returns public-keys stanzas if configured
 - show ip ospf: Shows OSPF instance status including router ID
 - show configuration commands | grep ospf: Shows OSPF config commands
+- show ip route: Returns routing table with protocol codes and next-hop info
 """
 
+import ipaddress
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -411,5 +413,324 @@ def check_ospf_interface(
         return ValidationResult(
             passed=False,
             message=f"Interface {interface} area mismatch: expected {area}, got {actual_area}",
+            raw_output=output,
+        )
+
+
+def check_route_exists(
+    ssh: Callable[[str], str],
+    destination: str,
+    via: str | None = None,
+    interface: str | None = None,
+) -> ValidationResult:
+    """Verify a route exists in the routing table.
+
+    This function checks if a specific route exists in the VyOS routing table,
+    optionally validating the next-hop gateway or outgoing interface.
+
+    VyOS supports two types of static routes:
+    1. Gateway routes: Route via next-hop IP address
+    2. Interface routes: Route directly connected via interface
+
+    VyOS Output Format:
+        show ip route <destination>
+        Returns output like:
+            S>* 10.0.0.0/8 [1/0] via 192.168.122.1, eth0, weight 1, 00:01:00
+            S>* 172.16.0.0/12 [1/0] is directly connected, eth0, weight 1, 00:01:00
+
+        Output format breakdown:
+        - S>*: Protocol code (S=static, >=selected, *=FIB)
+        - 10.0.0.0/8: Destination network
+        - [1/0]: Admin distance/metric
+        - via 192.168.122.1: Next-hop gateway (for gateway routes)
+        - is directly connected: Interface route indicator
+        - eth0: Outgoing interface
+        - weight 1, 00:01:00: Additional route info
+
+        ECMP (Equal-Cost Multi-Path) routes:
+            Multiple routes to same destination with different next-hops
+            S>* 10.0.0.0/8 [1/0] via 192.168.122.1, eth0, weight 1, 00:01:00
+            S>* 10.0.0.0/8 [1/0] via 192.168.122.2, eth1, weight 1, 00:01:00
+
+    Args:
+        ssh: SSH connection callable from ssh_connection fixture
+        destination: Destination network in CIDR notation (e.g., "10.0.0.0/8")
+        via: Expected next-hop gateway IP (optional, for gateway routes)
+        interface: Expected outgoing interface (optional)
+
+    Returns:
+        ValidationResult indicating whether route exists and matches criteria
+
+    Note:
+        - At least one of 'via' or 'interface' should be provided for meaningful
+          validation. If both are None, only checks if destination exists.
+        - Only supports IPv4 routes. IPv6 routes require 'show ipv6 route'.
+        - Queries default routing table. VRF routes require different commands.
+    """
+    # Validate destination is valid CIDR
+    # Require explicit prefix notation (e.g., "10.0.0.0/8" not "10.0.0.1")
+    if "/" not in destination:
+        return ValidationResult(
+            passed=False,
+            message=(
+                f"Invalid destination CIDR '{destination}': "
+                "must include prefix length (e.g., '10.0.0.0/8')"
+            ),
+            raw_output="",
+        )
+
+    try:
+        ipaddress.ip_network(destination, strict=False)
+    except ValueError as e:
+        return ValidationResult(
+            passed=False,
+            message=f"Invalid destination CIDR '{destination}': {e}",
+            raw_output="",
+        )
+
+    # Validate via parameter if provided
+    if via is not None:
+        try:
+            addr = ipaddress.ip_address(via)
+            # Only IPv4 addresses are supported (show ip route is IPv4-only)
+            if not isinstance(addr, ipaddress.IPv4Address):
+                return ValidationResult(
+                    passed=False,
+                    message=(
+                        f"Invalid gateway IP '{via}': "
+                        "IPv6 addresses not supported (use 'show ipv6 route')"
+                    ),
+                    raw_output="",
+                )
+        except ValueError as e:
+            return ValidationResult(
+                passed=False,
+                message=f"Invalid gateway IP '{via}': {e}",
+                raw_output="",
+            )
+
+    try:
+        output = ssh(f"show ip route {destination}")
+    except Exception as e:
+        return ValidationResult(
+            passed=False,
+            message=f"Failed to query route for {destination}: {e}",
+            raw_output="",
+        )
+
+    # Check for VyOS error messages BEFORE checking if destination in output
+    # This prevents false positives where error messages might contain the destination
+    error_indicators = [
+        "Invalid value",
+        "Configuration path",
+        "Error:",
+    ]
+    for indicator in error_indicators:
+        if indicator in output:
+            return ValidationResult(
+                passed=False,
+                message=f"VyOS error querying route for {destination}: {output.strip()}",
+                raw_output=output,
+            )
+
+    # Check if route exists (should contain the destination)
+    # "% Network not in table" is VyOS's way of saying route doesn't exist
+    # Note: We check "Network not in table" BEFORE checking if destination in output
+    # to avoid substring matches in error messages
+    if "Network not in table" in output or destination not in output:
+        return ValidationResult(
+            passed=False,
+            message=f"Route for {destination} not found in routing table",
+            raw_output=output,
+        )
+
+    # Parse the route entry
+    # Pattern matches both gateway and interface routes, including VTI and aliases
+    # Example gateway: "S>* 10.0.0.0/8 [1/0] via 192.168.122.1, eth0"
+    # Example interface: "S>* 172.16.0.0/12 [1/0] is directly connected, eth0"
+    # Example VTI: "via 192.168.1.1, vti@NONE"
+    # Example alias: "via 192.168.1.1, eth0:1"
+
+    # Updated regex to support:
+    # - IPv4 addresses ([\d.]+)
+    # - VTI interfaces with @ symbol ([\w.@:-]+)
+    # - Interface aliases with colon ([\w.@:-]+)
+    route_pattern = re.compile(
+        r"(?:via\s+([\d.]+)|is\s+directly\s+connected),\s+([\w.@:-]+)"
+    )
+
+    # Use findall to get ALL routes (handles ECMP)
+    matches = route_pattern.findall(output)
+
+    if not matches:
+        return ValidationResult(
+            passed=False,
+            message=f"Route for {destination} found but could not parse next-hop/interface",
+            raw_output=output,
+        )
+
+    # Check if ANY route matches the criteria (for ECMP support)
+    for match in matches:
+        actual_via = match[0] if match[0] else None  # Empty string becomes None
+        actual_interface = match[1]
+
+        # Check if this route matches expectations
+        via_matches = via is None or actual_via == via
+        interface_matches = interface is None or actual_interface == interface
+
+        if via_matches and interface_matches:
+            # Found a matching route
+            details = []
+            if via is not None:
+                details.append(f"via {via}")
+            if interface is not None:
+                details.append(f"interface {interface}")
+
+            detail_str = " ".join(details) if details else "exists"
+
+            return ValidationResult(
+                passed=True,
+                message=f"Route for {destination} {detail_str}",
+                raw_output=output,
+            )
+
+    # No matching route found - build failure message
+    failures = []
+
+    # Get the first route for error reporting
+    first_via = matches[0][0] if matches[0][0] else None
+
+    if via is not None:
+        if first_via is None:
+            failures.append(
+                f"expected gateway route via {via}, "
+                "but found interface route (directly connected)"
+            )
+        else:
+            found_gateways = [m[0] for m in matches if m[0]]
+            failures.append(
+                f"gateway mismatch (expected {via}, found {', '.join(found_gateways)})"
+            )
+
+    if interface is not None:
+        found_interfaces = [m[1] for m in matches]
+        failures.append(
+            f"interface mismatch (expected {interface}, found {', '.join(found_interfaces)})"
+        )
+
+    return ValidationResult(
+        passed=False,
+        message=f"Route for {destination} exists but {', '.join(failures)}",
+        raw_output=output,
+    )
+
+
+def check_default_route(
+    ssh: Callable[[str], str],
+    gateway: str | None = None,
+) -> ValidationResult:
+    """Verify default route (0.0.0.0/0) exists in routing table.
+
+    This function checks if a default route is configured, optionally
+    validating the gateway IP address.
+
+    VyOS Output Format:
+        show ip route 0.0.0.0/0
+        Returns output like:
+            S>* 0.0.0.0/0 [1/0] via 192.168.122.1, eth0, weight 1, 00:01:00
+
+    Args:
+        ssh: SSH connection callable from ssh_connection fixture
+        gateway: Expected gateway IP for default route (optional)
+
+    Returns:
+        ValidationResult indicating whether default route exists and matches
+    """
+    # Validate gateway parameter if provided
+    if gateway is not None:
+        try:
+            addr = ipaddress.ip_address(gateway)
+            # Only IPv4 addresses are supported (show ip route is IPv4-only)
+            if not isinstance(addr, ipaddress.IPv4Address):
+                return ValidationResult(
+                    passed=False,
+                    message=(
+                        f"Invalid gateway IP '{gateway}': "
+                        "IPv6 addresses not supported (use 'show ipv6 route')"
+                    ),
+                    raw_output="",
+                )
+        except ValueError as e:
+            return ValidationResult(
+                passed=False,
+                message=f"Invalid gateway IP '{gateway}': {e}",
+                raw_output="",
+            )
+
+    try:
+        output = ssh("show ip route 0.0.0.0/0")
+    except Exception as e:
+        return ValidationResult(
+            passed=False,
+            message=f"Failed to query default route: {e}",
+            raw_output="",
+        )
+
+    # Check for VyOS error messages BEFORE checking if destination in output
+    # This prevents false positives where error messages might contain the destination
+    error_indicators = ["Invalid value", "Configuration path", "Error:"]
+    for indicator in error_indicators:
+        if indicator in output:
+            return ValidationResult(
+                passed=False,
+                message=f"VyOS error querying default route: {output.strip()}",
+                raw_output=output,
+            )
+
+    # Check if default route exists
+    # "% Network not in table" is VyOS's way of saying route doesn't exist
+    # Note: We check "Network not in table" BEFORE checking if destination in output
+    # to avoid substring matches in error messages
+    if "Network not in table" in output or "0.0.0.0/0" not in output:
+        return ValidationResult(
+            passed=False,
+            message="Default route (0.0.0.0/0) not found in routing table",
+            raw_output=output,
+        )
+
+    # If gateway specified, validate it
+    if gateway is not None:
+        # Look for "via <gateway>" in output
+        # Use findall to support ECMP routes with multiple gateways
+        via_pattern = re.compile(r"via\s+([\d.]+)")
+        matches = via_pattern.findall(output)
+
+        if not matches:
+            return ValidationResult(
+                passed=False,
+                message="Default route found but could not parse gateway",
+                raw_output=output,
+            )
+
+        # Check if ANY gateway matches (ECMP support)
+        if gateway in matches:
+            return ValidationResult(
+                passed=True,
+                message=f"Default route exists via {gateway}",
+                raw_output=output,
+            )
+        else:
+            return ValidationResult(
+                passed=False,
+                message=(
+                    f"Default route gateway mismatch: "
+                    f"expected {gateway}, got {', '.join(matches)}"
+                ),
+                raw_output=output,
+            )
+    else:
+        return ValidationResult(
+            passed=True,
+            message="Default route exists",
             raw_output=output,
         )
