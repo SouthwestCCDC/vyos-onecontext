@@ -847,6 +847,120 @@ class TestCheckRouteExists:
         assert result.passed is True
         assert "interface eth0" in result.message
 
+    def test_route_invalid_cidr_missing_prefix(self) -> None:
+        """Test that bare IP addresses without prefix are rejected."""
+        mock_ssh = Mock()
+
+        result = check_route_exists(
+            mock_ssh,
+            destination="10.0.0.1",  # Missing /32 or other prefix
+        )
+
+        assert result.passed is False
+        assert "Invalid destination CIDR" in result.message
+        assert "must include prefix length" in result.message
+        # SSH should not be called if validation fails early
+        mock_ssh.assert_not_called()
+
+    def test_route_invalid_cidr_format(self) -> None:
+        """Test that invalid CIDR notation is rejected."""
+        mock_ssh = Mock()
+
+        result = check_route_exists(
+            mock_ssh,
+            destination="10.0.0.0/999",  # Invalid prefix length
+        )
+
+        assert result.passed is False
+        assert "Invalid destination CIDR" in result.message
+        mock_ssh.assert_not_called()
+
+    def test_route_invalid_gateway_ip(self) -> None:
+        """Test that invalid gateway IP addresses are rejected."""
+        mock_ssh = Mock()
+
+        result = check_route_exists(
+            mock_ssh,
+            destination="10.0.0.0/8",
+            via="999.999.999.999",  # Invalid IP
+        )
+
+        assert result.passed is False
+        assert "Invalid gateway IP" in result.message
+        mock_ssh.assert_not_called()
+
+    def test_route_ipv6_gateway_rejected(self) -> None:
+        """Test that IPv6 gateway addresses are rejected for IPv4 routes."""
+        mock_ssh = Mock()
+
+        result = check_route_exists(
+            mock_ssh,
+            destination="10.0.0.0/8",
+            via="2001:db8::1",  # IPv6 address
+        )
+
+        assert result.passed is False
+        assert "Invalid gateway IP" in result.message
+        assert "IPv6 addresses not supported" in result.message
+        mock_ssh.assert_not_called()
+
+    def test_route_vti_interface(self) -> None:
+        """Test route validation with VTI interface names (vti@NONE)."""
+        mock_ssh = Mock(
+            return_value="S>* 10.0.0.0/8 [1/0] via 192.168.1.1, vti@NONE, weight 1, 00:01:00\n"
+        )
+
+        result = check_route_exists(
+            mock_ssh,
+            destination="10.0.0.0/8",
+            via="192.168.1.1",
+            interface="vti@NONE",
+        )
+
+        assert result.passed is True
+        assert "via 192.168.1.1" in result.message
+        assert "interface vti@NONE" in result.message
+
+    def test_route_ecmp_multiple_gateways(self) -> None:
+        """Test ECMP route validation with multiple next-hops."""
+        mock_ssh = Mock(
+            return_value=(
+                "Routing entry for 10.0.0.0/8\n"
+                "  Known via \"static\", distance 1, metric 0, best\n"
+                "S>* 10.0.0.0/8 [1/0] via 192.168.122.1, eth0, weight 1, 00:01:00\n"
+                "S>* 10.0.0.0/8 [1/0] via 192.168.122.2, eth1, weight 1, 00:01:00\n"
+            )
+        )
+
+        # Should match first gateway
+        result = check_route_exists(
+            mock_ssh,
+            destination="10.0.0.0/8",
+            via="192.168.122.1",
+        )
+        assert result.passed is True
+        assert "via 192.168.122.1" in result.message
+
+        # Should also match second gateway
+        result = check_route_exists(
+            mock_ssh,
+            destination="10.0.0.0/8",
+            via="192.168.122.2",
+        )
+        assert result.passed is True
+        assert "via 192.168.122.2" in result.message
+
+        # Should fail if gateway not in ECMP set
+        result = check_route_exists(
+            mock_ssh,
+            destination="10.0.0.0/8",
+            via="192.168.122.3",
+        )
+        assert result.passed is False
+        assert "gateway mismatch" in result.message
+        assert "192.168.122.1" in result.message
+        assert "192.168.122.2" in result.message
+
 
 class TestCheckDefaultRoute:
     """Test check_default_route helper function."""
@@ -935,3 +1049,52 @@ class TestCheckDefaultRoute:
 
         assert result.passed is True
         assert "Default route exists" in result.message
+
+    def test_default_route_invalid_gateway_ip(self) -> None:
+        """Test that invalid gateway IP addresses are rejected."""
+        mock_ssh = Mock()
+
+        result = check_default_route(mock_ssh, gateway="999.999.999.999")
+
+        assert result.passed is False
+        assert "Invalid gateway IP" in result.message
+        mock_ssh.assert_not_called()
+
+    def test_default_route_ipv6_gateway_rejected(self) -> None:
+        """Test that IPv6 gateway addresses are rejected."""
+        mock_ssh = Mock()
+
+        result = check_default_route(mock_ssh, gateway="2001:db8::1")
+
+        assert result.passed is False
+        assert "Invalid gateway IP" in result.message
+        assert "IPv6 addresses not supported" in result.message
+        mock_ssh.assert_not_called()
+
+    def test_default_route_ecmp_multiple_gateways(self) -> None:
+        """Test ECMP default route with multiple next-hops."""
+        mock_ssh = Mock(
+            return_value=(
+                "Routing entry for 0.0.0.0/0\n"
+                "  Known via \"static\", distance 1, metric 0, best\n"
+                "S>* 0.0.0.0/0 [1/0] via 192.168.122.1, eth0, weight 1, 00:05:23\n"
+                "S>* 0.0.0.0/0 [1/0] via 192.168.122.2, eth1, weight 1, 00:05:23\n"
+            )
+        )
+
+        # Should match first gateway
+        result = check_default_route(mock_ssh, gateway="192.168.122.1")
+        assert result.passed is True
+        assert "via 192.168.122.1" in result.message
+
+        # Should also match second gateway
+        result = check_default_route(mock_ssh, gateway="192.168.122.2")
+        assert result.passed is True
+        assert "via 192.168.122.2" in result.message
+
+        # Should fail if gateway not in ECMP set
+        result = check_default_route(mock_ssh, gateway="192.168.122.3")
+        assert result.passed is False
+        assert "gateway mismatch" in result.message
+        assert "192.168.122.1" in result.message
+        assert "192.168.122.2" in result.message

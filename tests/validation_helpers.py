@@ -468,8 +468,19 @@ def check_route_exists(
         - Queries default routing table. VRF routes require different commands.
     """
     # Validate destination is valid CIDR
+    # Require explicit prefix notation (e.g., "10.0.0.0/8" not "10.0.0.1")
+    if "/" not in destination:
+        return ValidationResult(
+            passed=False,
+            message=(
+                f"Invalid destination CIDR '{destination}': "
+                "must include prefix length (e.g., '10.0.0.0/8')"
+            ),
+            raw_output="",
+        )
+
     try:
-        ipaddress.ip_network(destination)
+        ipaddress.ip_network(destination, strict=False)
     except ValueError as e:
         return ValidationResult(
             passed=False,
@@ -480,7 +491,17 @@ def check_route_exists(
     # Validate via parameter if provided
     if via is not None:
         try:
-            ipaddress.ip_address(via)
+            addr = ipaddress.ip_address(via)
+            # Only IPv4 addresses are supported (show ip route is IPv4-only)
+            if not isinstance(addr, ipaddress.IPv4Address):
+                return ValidationResult(
+                    passed=False,
+                    message=(
+                        f"Invalid gateway IP '{via}': "
+                        "IPv6 addresses not supported (use 'show ipv6 route')"
+                    ),
+                    raw_output="",
+                )
         except ValueError as e:
             return ValidationResult(
                 passed=False,
@@ -497,8 +518,8 @@ def check_route_exists(
             raw_output="",
         )
 
-    # Check for VyOS error messages before assuming route is missing
-    # Note: "% Network not in table" is the normal response when route doesn't exist
+    # Check for VyOS error messages BEFORE checking if destination in output
+    # This prevents false positives where error messages might contain the destination
     error_indicators = [
         "Invalid value",
         "Configuration path",
@@ -514,7 +535,9 @@ def check_route_exists(
 
     # Check if route exists (should contain the destination)
     # "% Network not in table" is VyOS's way of saying route doesn't exist
-    if destination not in output or "Network not in table" in output:
+    # Note: We check "Network not in table" BEFORE checking if destination in output
+    # to avoid substring matches in error messages
+    if "Network not in table" in output or destination not in output:
         return ValidationResult(
             passed=False,
             message=f"Route for {destination} not found in routing table",
@@ -626,7 +649,17 @@ def check_default_route(
     # Validate gateway parameter if provided
     if gateway is not None:
         try:
-            ipaddress.ip_address(gateway)
+            addr = ipaddress.ip_address(gateway)
+            # Only IPv4 addresses are supported (show ip route is IPv4-only)
+            if not isinstance(addr, ipaddress.IPv4Address):
+                return ValidationResult(
+                    passed=False,
+                    message=(
+                        f"Invalid gateway IP '{gateway}': "
+                        "IPv6 addresses not supported (use 'show ipv6 route')"
+                    ),
+                    raw_output="",
+                )
         except ValueError as e:
             return ValidationResult(
                 passed=False,
@@ -643,8 +676,8 @@ def check_default_route(
             raw_output="",
         )
 
-    # Check for VyOS error messages
-    # Note: "% Network not in table" is the normal response when route doesn't exist
+    # Check for VyOS error messages BEFORE checking if destination in output
+    # This prevents false positives where error messages might contain the destination
     error_indicators = ["Invalid value", "Configuration path", "Error:"]
     for indicator in error_indicators:
         if indicator in output:
@@ -656,7 +689,9 @@ def check_default_route(
 
     # Check if default route exists
     # "% Network not in table" is VyOS's way of saying route doesn't exist
-    if "0.0.0.0/0" not in output or "Network not in table" in output:
+    # Note: We check "Network not in table" BEFORE checking if destination in output
+    # to avoid substring matches in error messages
+    if "Network not in table" in output or "0.0.0.0/0" not in output:
         return ValidationResult(
             passed=False,
             message="Default route (0.0.0.0/0) not found in routing table",
@@ -666,30 +701,33 @@ def check_default_route(
     # If gateway specified, validate it
     if gateway is not None:
         # Look for "via <gateway>" in output
+        # Use findall to support ECMP routes with multiple gateways
         via_pattern = re.compile(r"via\s+([\d.]+)")
-        match = via_pattern.search(output)
+        matches = via_pattern.findall(output)
 
-        if not match:
+        if not matches:
             return ValidationResult(
                 passed=False,
                 message="Default route found but could not parse gateway",
                 raw_output=output,
             )
 
-        actual_gateway = match.group(1)
-
-        if actual_gateway != gateway:
+        # Check if ANY gateway matches (ECMP support)
+        if gateway in matches:
             return ValidationResult(
-                passed=False,
-                message=f"Default route gateway mismatch: expected {gateway}, got {actual_gateway}",
+                passed=True,
+                message=f"Default route exists via {gateway}",
                 raw_output=output,
             )
-
-        return ValidationResult(
-            passed=True,
-            message=f"Default route exists via {gateway}",
-            raw_output=output,
-        )
+        else:
+            return ValidationResult(
+                passed=False,
+                message=(
+                    f"Default route gateway mismatch: "
+                    f"expected {gateway}, got {', '.join(matches)}"
+                ),
+                raw_output=output,
+            )
     else:
         return ValidationResult(
             passed=True,
