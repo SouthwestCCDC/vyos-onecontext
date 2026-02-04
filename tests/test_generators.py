@@ -1413,7 +1413,9 @@ class TestGenerateConfigWithVrf:
         assert not any("vrf" in cmd for cmd in commands)
 
     def test_generate_config_command_order_with_vrf(self):
-        """Test that VRF commands come after routing commands, SSH VRF after VRF."""
+        """Test VRF->Interface->Routing command ordering.
+
+        VRF assignment must precede interface IPs to avoid VyOS rejection."""
         config = RouterConfig(
             hostname="router-01",
             interfaces=[
@@ -1446,9 +1448,9 @@ class TestGenerateConfigWithVrf:
         vrf_idx = next(i for i, cmd in enumerate(commands) if "vrf name" in cmd)
         ssh_vrf_idx = next(i for i, cmd in enumerate(commands) if "service ssh vrf" in cmd)
 
-        # Interfaces -> Routing -> VRF -> SSH VRF
+        # VRF -> Interfaces -> Routing -> SSH VRF
+        assert vrf_idx < interface_idx
         assert interface_idx < routing_idx
-        assert routing_idx < vrf_idx
         assert vrf_idx < ssh_vrf_idx
 
     def test_generate_config_static_routes_with_management_vrf(self):
