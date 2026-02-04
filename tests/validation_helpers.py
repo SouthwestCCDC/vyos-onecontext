@@ -13,8 +13,7 @@ Each helper function:
 VyOS Command Output Formats:
 - show interfaces: Contains "link/ether", "inet" lines with IP addresses
 - show configuration | grep host-name: Returns "host-name 'hostname'"
-- show configuration commands | grep 'set system login user vyos authentication
-  public-keys': Returns flat set commands for SSH keys
+- show configuration commands | grep 'set system login user vyos authentication public-keys': Returns flat set commands for SSH keys
 - show ip ospf: Shows OSPF instance status including router ID
 - show configuration commands | grep ospf: Shows OSPF config commands
 - show ip route: Returns routing table with protocol codes and next-hop info
@@ -26,6 +25,7 @@ VyOS Command Output Formats:
 
 import ipaddress
 import re
+import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -209,6 +209,14 @@ def check_interface_ip(
 
     try:
         output = ssh(f"show interfaces ethernet {interface}")
+    except subprocess.CalledProcessError as e:
+        # Capture stdout/stderr from the failed command for debugging
+        raw_output = (e.stdout or b"").decode() + (e.stderr or b"").decode()
+        return ValidationResult(
+            passed=False,
+            message=f"Failed to query interface {interface}: {e}",
+            raw_output=raw_output,
+        )
     except Exception as e:
         return ValidationResult(
             passed=False,
@@ -271,6 +279,14 @@ def check_hostname(
     """
     try:
         output = ssh("show configuration | grep host-name || echo ''")
+    except subprocess.CalledProcessError as e:
+        # Capture stdout/stderr from the failed command for debugging
+        raw_output = (e.stdout or b"").decode() + (e.stderr or b"").decode()
+        return ValidationResult(
+            passed=False,
+            message=f"Failed to query hostname: {e}",
+            raw_output=raw_output,
+        )
     except Exception as e:
         return ValidationResult(
             passed=False,
@@ -333,6 +349,14 @@ def check_ssh_key_configured(
         output = ssh(
             "show configuration commands | grep "
             "'set system login user vyos authentication public-keys' || echo ''"
+        )
+    except subprocess.CalledProcessError as e:
+        # Capture stdout/stderr from the failed command for debugging
+        raw_output = (e.stdout or b"").decode() + (e.stderr or b"").decode()
+        return ValidationResult(
+            passed=False,
+            message=f"Failed to query SSH key configuration: {e}",
+            raw_output=raw_output,
         )
     except Exception as e:
         return ValidationResult(
