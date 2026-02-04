@@ -27,6 +27,7 @@ from vyos_onecontext.models.routing import (
     RoutesConfig,
     StaticRoute,
 )
+from vyos_onecontext.models.system import ConntrackConfig, ConntrackTimeoutRule
 
 __all__ = [
     # config
@@ -56,4 +57,7 @@ __all__ = [
     "OspfInterface",
     "RoutesConfig",
     "StaticRoute",
+    # system
+    "ConntrackConfig",
+    "ConntrackTimeoutRule",
 ]

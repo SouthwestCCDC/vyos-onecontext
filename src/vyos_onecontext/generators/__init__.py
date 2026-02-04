@@ -14,7 +14,7 @@ from vyos_onecontext.generators.nat import NatGenerator
 from vyos_onecontext.generators.ospf import OspfGenerator
 from vyos_onecontext.generators.routing import RoutingGenerator, StaticRoutesGenerator
 from vyos_onecontext.generators.service import SshServiceGenerator
-from vyos_onecontext.generators.system import HostnameGenerator, SshKeyGenerator
+from vyos_onecontext.generators.system import ConntrackGenerator, HostnameGenerator, SshKeyGenerator
 from vyos_onecontext.generators.vrf import VRF_NAME, VRF_TABLE_ID, VrfGenerator
 from vyos_onecontext.models import RouterConfig
 
@@ -76,6 +76,9 @@ def generate_config(config: RouterConfig) -> list[str]:
     # Firewall (groups, zones, global state policy, inter-zone policies)
     commands.extend(FirewallGenerator(config.firewall).generate())
 
+    # Conntrack timeout rules
+    commands.extend(ConntrackGenerator(config.conntrack).generate())
+
     # Custom config (START_CONFIG) - executed last, before commit
     commands.extend(StartConfigGenerator(config.start_config).generate())
 
@@ -87,6 +90,7 @@ def generate_config(config: RouterConfig) -> list[str]:
 
 __all__ = [
     "BaseGenerator",
+    "ConntrackGenerator",
     "DhcpGenerator",
     "FirewallGenerator",
     "HostnameGenerator",

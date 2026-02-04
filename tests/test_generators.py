@@ -5,6 +5,7 @@ from ipaddress import IPv4Address
 from vyos_onecontext.generators import (
     VRF_NAME,
     VRF_TABLE_ID,
+    ConntrackGenerator,
     FirewallGenerator,
     HostnameGenerator,
     InterfaceGenerator,
@@ -20,6 +21,8 @@ from vyos_onecontext.generators import (
 from vyos_onecontext.models import (
     AliasConfig,
     BinatRule,
+    ConntrackConfig,
+    ConntrackTimeoutRule,
     DestinationNatRule,
     FirewallConfig,
     FirewallGroups,
@@ -3574,3 +3577,234 @@ set system time-zone America/Chicago"""
         commands = gen.generate()
 
         assert len(commands) == 0
+
+
+# === Conntrack Generator Tests ===
+
+
+class TestConntrackGenerator:
+    """Tests for ConntrackGenerator."""
+
+    def test_none_conntrack(self):
+        """Test generator with no conntrack configuration."""
+        gen = ConntrackGenerator(None)
+        commands = gen.generate()
+        assert commands == []
+
+    def test_empty_config(self):
+        """Test generator with empty conntrack configuration."""
+        config = ConntrackConfig(timeout_rules=[])
+        gen = ConntrackGenerator(config)
+        commands = gen.generate()
+        assert commands == []
+
+    def test_single_tcp_rule(self):
+        """Test single TCP conntrack timeout rule."""
+        config = ConntrackConfig(
+            timeout_rules=[
+                ConntrackTimeoutRule(
+                    description="IP hopping - short idle timeout",
+                    source_address="10.60.0.0/14",
+                    protocol="tcp",
+                    tcp_established=60,
+                )
+            ]
+        )
+        gen = ConntrackGenerator(config)
+        commands = gen.generate()
+
+        # Note: First string uses implicit concatenation for readability
+        expected = [
+            "set system conntrack timeout custom rule 1 "
+            "description 'IP hopping - short idle timeout'",
+            "set system conntrack timeout custom rule 1 source address 10.60.0.0/14",
+            "set system conntrack timeout custom rule 1 protocol tcp",
+            "set system conntrack timeout custom rule 1 protocol tcp established 60",
+        ]
+        assert commands == expected
+
+    def test_multiple_tcp_timeouts(self):
+        """Test TCP rule with multiple timeout values."""
+        config = ConntrackConfig(
+            timeout_rules=[
+                ConntrackTimeoutRule(
+                    protocol="tcp",
+                    tcp_established=60,
+                    tcp_time_wait=30,
+                    tcp_syn_sent=10,
+                )
+            ]
+        )
+        gen = ConntrackGenerator(config)
+        commands = gen.generate()
+
+        assert "set system conntrack timeout custom rule 1 protocol tcp" in commands
+        assert "set system conntrack timeout custom rule 1 protocol tcp established 60" in commands
+        assert "set system conntrack timeout custom rule 1 protocol tcp time-wait 30" in commands
+        assert "set system conntrack timeout custom rule 1 protocol tcp syn-sent 10" in commands
+
+    def test_udp_rule(self):
+        """Test UDP conntrack timeout rule."""
+        config = ConntrackConfig(
+            timeout_rules=[
+                ConntrackTimeoutRule(
+                    protocol="udp",
+                    udp_stream=30,
+                    udp_other=10,
+                )
+            ]
+        )
+        gen = ConntrackGenerator(config)
+        commands = gen.generate()
+
+        assert "set system conntrack timeout custom rule 1 protocol udp" in commands
+        assert "set system conntrack timeout custom rule 1 protocol udp stream 30" in commands
+        assert "set system conntrack timeout custom rule 1 protocol udp other 10" in commands
+
+    def test_icmp_rule(self):
+        """Test ICMP conntrack timeout rule."""
+        config = ConntrackConfig(
+            timeout_rules=[
+                ConntrackTimeoutRule(
+                    protocol="icmp",
+                    icmp_timeout=5,
+                )
+            ]
+        )
+        gen = ConntrackGenerator(config)
+        commands = gen.generate()
+
+        assert "set system conntrack timeout custom rule 1 protocol icmp" in commands
+        assert "set system conntrack timeout custom rule 1 icmp 5" in commands
+
+    def test_multiple_rules(self):
+        """Test multiple conntrack timeout rules."""
+        config = ConntrackConfig(
+            timeout_rules=[
+                ConntrackTimeoutRule(
+                    description="TCP timeout",
+                    protocol="tcp",
+                    tcp_established=60,
+                ),
+                ConntrackTimeoutRule(
+                    description="UDP timeout",
+                    protocol="udp",
+                    udp_stream=30,
+                ),
+            ]
+        )
+        gen = ConntrackGenerator(config)
+        commands = gen.generate()
+
+        # Check rule 1 (TCP)
+        assert "set system conntrack timeout custom rule 1 description 'TCP timeout'" in commands
+        assert "set system conntrack timeout custom rule 1 protocol tcp" in commands
+        assert "set system conntrack timeout custom rule 1 protocol tcp established 60" in commands
+
+        # Check rule 2 (UDP)
+        assert "set system conntrack timeout custom rule 2 description 'UDP timeout'" in commands
+        assert "set system conntrack timeout custom rule 2 protocol udp" in commands
+        assert "set system conntrack timeout custom rule 2 protocol udp stream 30" in commands
+
+    def test_rule_with_destination_address(self):
+        """Test rule with both source and destination addresses."""
+        config = ConntrackConfig(
+            timeout_rules=[
+                ConntrackTimeoutRule(
+                    source_address="10.60.0.0/14",
+                    destination_address="203.0.113.0/24",
+                    protocol="tcp",
+                    tcp_established=120,
+                )
+            ]
+        )
+        gen = ConntrackGenerator(config)
+        commands = gen.generate()
+
+        assert "set system conntrack timeout custom rule 1 source address 10.60.0.0/14" in commands
+        assert (
+            "set system conntrack timeout custom rule 1 destination address 203.0.113.0/24"
+            in commands
+        )
+
+
+# === NAT Generator Address Mapping Tests ===
+
+
+class TestNatGeneratorAddressMapping:
+    """Tests for address-mapping option in NAT generator."""
+
+    def test_address_mapping_random(self):
+        """Test NAT rule generation with random address mapping."""
+        config = NatConfig(
+            source=[
+                SourceNatRule(
+                    outbound_interface="eth2",
+                    source_address="10.60.0.0/14",
+                    translation_address="10.97.0.0-10.103.255.254",
+                    address_mapping="random",
+                )
+            ]
+        )
+        gen = NatGenerator(config)
+        commands = gen.generate()
+
+        assert "set nat source rule 100 outbound-interface name eth2" in commands
+        assert "set nat source rule 100 source address 10.60.0.0/14" in commands
+        assert "set nat source rule 100 translation address 10.97.0.0-10.103.255.254" in commands
+        assert "set nat source rule 100 translation options address-mapping random" in commands
+
+    def test_address_mapping_persistent(self):
+        """Test NAT rule generation with persistent address mapping."""
+        config = NatConfig(
+            source=[
+                SourceNatRule(
+                    outbound_interface="eth2",
+                    source_address="10.60.0.0/14",
+                    translation_address="10.97.0.0-10.103.255.254",
+                    address_mapping="persistent",
+                )
+            ]
+        )
+        gen = NatGenerator(config)
+        commands = gen.generate()
+
+        assert "set nat source rule 100 translation options address-mapping persistent" in commands
+
+    def test_no_address_mapping(self):
+        """Test NAT rule generation without address mapping (default behavior)."""
+        config = NatConfig(
+            source=[
+                SourceNatRule(
+                    outbound_interface="eth2",
+                    source_address="10.60.0.0/14",
+                    translation_address="10.97.0.0-10.103.255.254",
+                )
+            ]
+        )
+        gen = NatGenerator(config)
+        commands = gen.generate()
+
+        # Should not include address-mapping option
+        assert not any("address-mapping" in cmd for cmd in commands)
+        # But should still have translation address
+        assert "set nat source rule 100 translation address 10.97.0.0-10.103.255.254" in commands
+
+    def test_address_mapping_with_description(self):
+        """Test NAT rule with both address mapping and description."""
+        config = NatConfig(
+            source=[
+                SourceNatRule(
+                    outbound_interface="eth2",
+                    source_address="10.60.0.0/14",
+                    translation_address="10.97.0.0-10.103.255.254",
+                    address_mapping="random",
+                    description="IP hopping for scoring traffic",
+                )
+            ]
+        )
+        gen = NatGenerator(config)
+        commands = gen.generate()
+
+        assert "set nat source rule 100 translation options address-mapping random" in commands
+        assert "set nat source rule 100 description 'IP hopping for scoring traffic'" in commands

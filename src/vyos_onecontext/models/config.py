@@ -11,6 +11,7 @@ from vyos_onecontext.models.firewall import FirewallConfig
 from vyos_onecontext.models.interface import AliasConfig, InterfaceConfig
 from vyos_onecontext.models.nat import NatConfig
 from vyos_onecontext.models.routing import OspfConfig, RoutesConfig
+from vyos_onecontext.models.system import ConntrackConfig
 
 
 class OnecontextMode(str, Enum):
@@ -154,6 +155,11 @@ class RouterConfig(BaseModel):
     # Firewall
     firewall: Annotated[
         FirewallConfig | None, Field(None, description="Zone-based firewall configuration")
+    ]
+
+    # System
+    conntrack: Annotated[
+        ConntrackConfig | None, Field(None, description="Conntrack timeout configuration")
     ]
 
     # Escape hatches

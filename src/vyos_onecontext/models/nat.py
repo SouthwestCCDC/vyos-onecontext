@@ -23,6 +23,10 @@ class SourceNatRule(BaseModel):
     translation_address: Annotated[
         str | None, Field(None, description="Static SNAT address or range")
     ]
+    address_mapping: Annotated[
+        Literal["random", "persistent"] | None,
+        Field(None, description="Address mapping mode for translation address pools"),
+    ]
     description: Annotated[str | None, Field(None, description="Rule description")]
 
     @field_validator("source_address")
@@ -84,6 +88,13 @@ class SourceNatRule(BaseModel):
             raise ValueError("Cannot specify both 'translation' and 'translation_address'")
         if not has_translation and not has_address:
             raise ValueError("Must specify either 'translation' or 'translation_address'")
+
+        # Validate address_mapping only used with translation_address
+        if self.address_mapping is not None and has_translation:
+            raise ValueError(
+                "address_mapping can only be used with translation_address (pools), "
+                "not with translation='masquerade'"
+            )
         return self
 
 

@@ -98,6 +98,13 @@ class NatGenerator(BaseGenerator):
                     f"set nat source rule {rule_num} translation address {rule.translation_address}"
                 )
 
+            # Address mapping option (for IP pools)
+            if rule.address_mapping:
+                commands.append(
+                    f"set nat source rule {rule_num} translation options "
+                    f"address-mapping {rule.address_mapping}"
+                )
+
             # Description (optional)
             if rule.description:
                 commands.append(f"set nat source rule {rule_num} description '{rule.description}'")
