@@ -232,6 +232,24 @@ class FirewallConfig(BaseModel):
     zones: dict[str, FirewallZone] = Field(default_factory=dict, description="Zone definitions")
     policies: list[FirewallPolicy] = Field(default_factory=list, description="Inter-zone policies")
 
+    @model_validator(mode="before")
+    @classmethod
+    def inject_zone_names(cls, data: Any) -> Any:
+        """Inject zone names from dict keys before validation.
+
+        This allows users to specify zones as:
+            {"zones": {"DOWNSTREAM": {"default_action": "drop", "interfaces": ["eth2"]}}}
+
+        Without requiring the redundant "name" field in each zone.
+        """
+        if isinstance(data, dict) and "zones" in data:
+            zones = data.get("zones", {})
+            if isinstance(zones, dict):
+                for zone_name, zone_data in zones.items():
+                    if isinstance(zone_data, dict) and "name" not in zone_data:
+                        zone_data["name"] = zone_name
+        return data
+
     @field_validator("zones")
     @classmethod
     def validate_zones(cls, v: dict[str, FirewallZone]) -> dict[str, FirewallZone]:
