@@ -23,6 +23,10 @@ class SourceNatRule(BaseModel):
     translation_address: Annotated[
         str | None, Field(None, description="Static SNAT address or range")
     ]
+    address_mapping: Annotated[
+        Literal["random", "persistent"] | None,
+        Field(None, description="Address mapping mode for translation address pools"),
+    ]
     description: Annotated[str | None, Field(None, description="Rule description")]
 
     @field_validator("source_address")
