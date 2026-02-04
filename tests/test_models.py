@@ -1273,7 +1273,7 @@ class TestInputValidation:
 class TestConntrackTimeoutRule:
     """Tests for ConntrackTimeoutRule model."""
 
-    def test_tcp_rule_valid(self):
+    def test_tcp_rule_valid(self) -> None:
         """Test valid TCP conntrack timeout rule."""
         rule = ConntrackTimeoutRule(
             description="Short timeout for scoring",
@@ -1286,7 +1286,7 @@ class TestConntrackTimeoutRule:
         assert rule.protocol == "tcp"
         assert rule.tcp_established == 60
 
-    def test_udp_rule_valid(self):
+    def test_udp_rule_valid(self) -> None:
         """Test valid UDP conntrack timeout rule."""
         rule = ConntrackTimeoutRule(
             protocol="udp",
@@ -1297,7 +1297,7 @@ class TestConntrackTimeoutRule:
         assert rule.udp_stream == 30
         assert rule.udp_other == 10
 
-    def test_icmp_rule_valid(self):
+    def test_icmp_rule_valid(self) -> None:
         """Test valid ICMP conntrack timeout rule."""
         rule = ConntrackTimeoutRule(
             protocol="icmp",
@@ -1306,7 +1306,7 @@ class TestConntrackTimeoutRule:
         assert rule.protocol == "icmp"
         assert rule.icmp_timeout == 5
 
-    def test_tcp_with_udp_field_invalid(self):
+    def test_tcp_with_udp_field_invalid(self) -> None:
         """Test that TCP rule cannot have UDP fields."""
         with pytest.raises(ValidationError, match="not valid for protocol 'tcp'"):
             ConntrackTimeoutRule(
@@ -1315,7 +1315,7 @@ class TestConntrackTimeoutRule:
                 udp_stream=30,  # Invalid for TCP
             )
 
-    def test_udp_with_tcp_field_invalid(self):
+    def test_udp_with_tcp_field_invalid(self) -> None:
         """Test that UDP rule cannot have TCP fields."""
         with pytest.raises(ValidationError, match="not valid for protocol 'udp'"):
             ConntrackTimeoutRule(
@@ -1324,7 +1324,7 @@ class TestConntrackTimeoutRule:
                 tcp_established=60,  # Invalid for UDP
             )
 
-    def test_icmp_with_tcp_field_invalid(self):
+    def test_icmp_with_tcp_field_invalid(self) -> None:
         """Test that ICMP rule cannot have TCP fields."""
         with pytest.raises(ValidationError, match="not valid for protocol 'icmp'"):
             ConntrackTimeoutRule(
@@ -1333,7 +1333,7 @@ class TestConntrackTimeoutRule:
                 tcp_established=60,  # Invalid for ICMP
             )
 
-    def test_tcp_without_timeout_invalid(self):
+    def test_tcp_without_timeout_invalid(self) -> None:
         """Test that TCP rule requires at least one TCP timeout field."""
         with pytest.raises(ValidationError, match="At least one TCP timeout field must be set"):
             ConntrackTimeoutRule(
@@ -1341,7 +1341,7 @@ class TestConntrackTimeoutRule:
                 source_address="10.0.0.0/8",
             )
 
-    def test_udp_without_timeout_invalid(self):
+    def test_udp_without_timeout_invalid(self) -> None:
         """Test that UDP rule requires at least one UDP timeout field."""
         with pytest.raises(ValidationError, match="At least one UDP timeout field must be set"):
             ConntrackTimeoutRule(
@@ -1349,7 +1349,7 @@ class TestConntrackTimeoutRule:
                 source_address="10.0.0.0/8",
             )
 
-    def test_icmp_without_timeout_invalid(self):
+    def test_icmp_without_timeout_invalid(self) -> None:
         """Test that ICMP rule requires icmp_timeout field."""
         with pytest.raises(ValidationError, match="ICMP timeout field must be set"):
             ConntrackTimeoutRule(
@@ -1357,7 +1357,7 @@ class TestConntrackTimeoutRule:
                 source_address="10.0.0.0/8",
             )
 
-    def test_all_tcp_timeouts(self):
+    def test_all_tcp_timeouts(self) -> None:
         """Test TCP rule with all timeout fields set."""
         rule = ConntrackTimeoutRule(
             protocol="tcp",
@@ -1383,12 +1383,12 @@ class TestConntrackTimeoutRule:
 class TestConntrackConfig:
     """Tests for ConntrackConfig model."""
 
-    def test_empty_config(self):
+    def test_empty_config(self) -> None:
         """Test empty conntrack configuration."""
         config = ConntrackConfig()
         assert config.timeout_rules == []
 
-    def test_single_rule(self):
+    def test_single_rule(self) -> None:
         """Test conntrack config with single rule."""
         config = ConntrackConfig(
             timeout_rules=[
@@ -1403,7 +1403,7 @@ class TestConntrackConfig:
         assert len(config.timeout_rules) == 1
         assert config.timeout_rules[0].description == "IP hopping timeout"
 
-    def test_multiple_rules(self):
+    def test_multiple_rules(self) -> None:
         """Test conntrack config with multiple rules."""
         config = ConntrackConfig(
             timeout_rules=[
@@ -1433,7 +1433,7 @@ class TestConntrackConfig:
 class TestSourceNatRuleAddressMapping:
     """Tests for address_mapping field in SourceNatRule."""
 
-    def test_address_mapping_random(self):
+    def test_address_mapping_random(self) -> None:
         """Test source NAT rule with random address mapping."""
         rule = SourceNatRule(
             outbound_interface="eth2",
@@ -1443,7 +1443,7 @@ class TestSourceNatRuleAddressMapping:
         )
         assert rule.address_mapping == "random"
 
-    def test_address_mapping_persistent(self):
+    def test_address_mapping_persistent(self) -> None:
         """Test source NAT rule with persistent address mapping."""
         rule = SourceNatRule(
             outbound_interface="eth2",
@@ -1453,7 +1453,7 @@ class TestSourceNatRuleAddressMapping:
         )
         assert rule.address_mapping == "persistent"
 
-    def test_address_mapping_none(self):
+    def test_address_mapping_none(self) -> None:
         """Test source NAT rule without address mapping (default VyOS behavior)."""
         rule = SourceNatRule(
             outbound_interface="eth2",
@@ -1462,12 +1462,11 @@ class TestSourceNatRuleAddressMapping:
         )
         assert rule.address_mapping is None
 
-    def test_address_mapping_with_masquerade(self):
-        """Test that address_mapping can be used with masquerade."""
-        rule = SourceNatRule(
-            outbound_interface="eth2",
-            translation="masquerade",
-            address_mapping="random",
-        )
-        assert rule.translation == "masquerade"
-        assert rule.address_mapping == "random"
+    def test_address_mapping_with_masquerade(self) -> None:
+        """Test that address_mapping cannot be used with masquerade."""
+        with pytest.raises(ValidationError, match="address_mapping can only be used with translation_address"):
+            SourceNatRule(
+                outbound_interface="eth2",
+                translation="masquerade",
+                address_mapping="random",
+            )

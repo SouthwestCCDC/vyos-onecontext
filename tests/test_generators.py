@@ -3610,6 +3610,7 @@ class TestConntrackGenerator:
         gen = ConntrackGenerator(config)
         commands = gen.generate()
 
+        # Note: First string uses implicit concatenation for readability
         expected = [
             "set system conntrack timeout custom rule 1 "
             "description 'IP hopping - short idle timeout'",
