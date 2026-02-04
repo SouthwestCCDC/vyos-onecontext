@@ -228,7 +228,7 @@ def check_interface_ip(
     except Exception as e:
         return ValidationResult(
             passed=False,
-            message=f"Failed to query interface {interface} (exit code {e.returncode})",
+            message=f"Failed to query interface {interface}: {e}",
             raw_output="",
         )
 
@@ -305,7 +305,7 @@ def check_hostname(
     except Exception as e:
         return ValidationResult(
             passed=False,
-            message=f"Failed to query hostname (exit code {e.returncode})",
+            message=f"Failed to query hostname: {e}",
             raw_output="",
         )
 
@@ -394,7 +394,7 @@ def check_ssh_key_configured(
     except Exception as e:
         return ValidationResult(
             passed=False,
-            message=f"Failed to query SSH key configuration (exit code {e.returncode})",
+            message=f"Failed to query SSH key configuration: {e}",
             raw_output="",
         )
 
