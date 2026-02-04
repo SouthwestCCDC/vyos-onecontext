@@ -6,13 +6,13 @@
 #
 # Usage: reset-vyos-config.sh
 
-set -euo pipefail
+# NOTE: Do not modify shell options here; this script is intended to be sourced.
 
 # SSH configuration should be exported by the calling script
 # Expected variables: SSH_PORT, SSH_OPTS, SSH_USER, SSH_HOST, SSH_PASSWORD
 if [ -z "${SSH_PORT:-}" ] || [ -z "${SSH_USER:-}" ] || [ -z "${SSH_HOST:-}" ]; then
     echo "ERROR: SSH configuration not set. This script must be sourced from run-qemu-group-test.sh" >&2
-    exit 1
+    return 1
 fi
 
 # Helper function to run SSH commands on the VM (same as in run-qemu-test.sh)
@@ -32,8 +32,7 @@ source /opt/vyatta/etc/functions/script-template
 configure
 
 # Delete user-configured sections (preserve system basics)
-# Note: We keep system login, ssh, and eth0 with DHCP for connectivity
-delete interfaces ethernet eth0 address
+# Note: We keep system login, ssh, and eth0 address/DHCP for connectivity
 delete interfaces ethernet eth0 vrf
 delete protocols
 delete nat
@@ -54,7 +53,7 @@ RESET_EOF
 )
 
 # Execute reset script via SSH
-if ssh_command "sudo bash -c '$RESET_SCRIPT'" 2>&1 | tee /tmp/reset-output.log; then
+if ssh_command "sudo /bin/vbash -c '$RESET_SCRIPT'" 2>&1 | tee /tmp/reset-output.log; then
     if grep -q "RESET_COMPLETE" /tmp/reset-output.log; then
         echo "[PASS] Configuration reset completed"
         return 0

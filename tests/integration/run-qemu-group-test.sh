@@ -198,6 +198,55 @@ done
 # Give system a moment to settle
 sleep 2
 
+# Function to reset VyOS configuration (extracted from reset-vyos-config.sh)
+reset_vyos_config() {
+    echo "Resetting VyOS configuration to clean state..."
+
+    # Build reset commands as a multi-line script
+    RESET_SCRIPT=$(cat <<'RESET_EOF'
+#!/bin/vbash
+source /opt/vyatta/etc/functions/script-template
+
+# Enter configuration mode
+configure
+
+# Delete user-configured sections (preserve system basics)
+# Note: We keep system login, ssh, and eth0 address/DHCP for connectivity
+delete interfaces ethernet eth0 vrf
+delete protocols
+delete nat
+delete service dhcp-server
+delete service ntp
+delete firewall
+delete vrf
+delete policy
+
+# Commit the clean state
+commit
+
+# Exit configuration mode
+exit
+
+echo "RESET_COMPLETE"
+RESET_EOF
+)
+
+    # Execute reset script via SSH
+    if ssh_command "sudo /bin/vbash -c '$RESET_SCRIPT'" 2>&1 | tee /tmp/reset-output.log; then
+        if grep -q "RESET_COMPLETE" /tmp/reset-output.log; then
+            echo "[PASS] Configuration reset completed"
+            return 0
+        else
+            echo "[FAIL] Configuration reset did not complete properly"
+            return 1
+        fi
+    else
+        echo "[FAIL] Configuration reset failed"
+        cat /tmp/reset-output.log
+        return 1
+    fi
+}
+
 echo ""
 echo "========================================"
 echo "  Running Test Fixtures"
@@ -241,7 +290,7 @@ for i in "${!FIXTURES[@]}"; do
     if [ $fixture_num -lt $TOTAL_TESTS ]; then
         echo ""
         echo "Resetting configuration for next test..."
-        if source "$SCRIPT_DIR/reset-vyos-config.sh"; then
+        if reset_vyos_config; then
             echo "[PASS] Configuration reset"
         else
             echo "[WARN] Configuration reset failed - next test may be affected"

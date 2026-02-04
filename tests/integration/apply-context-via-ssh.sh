@@ -61,8 +61,8 @@ CONTEXT_FILE="$1"
 sudo mkdir -p /var/run/one-context
 sudo cp "$CONTEXT_FILE" /var/run/one-context/one_env
 
-# Run contextualization (as root, since it needs to modify config)
-if sudo python3 -m vyos_onecontext /var/run/one-context/one_env 2>&1; then
+# Run contextualization via the boot script (handles sg vyattacfg)
+if sudo /opt/vyos-onecontext/boot.sh 2>&1; then
     echo "APPLY_COMPLETE"
     exit 0
 else

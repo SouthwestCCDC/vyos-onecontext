@@ -38,8 +38,12 @@ echo "  3 fixtures × ~150s = ~450s (7m 30s)"
 echo ""
 
 if [ $ELAPSED -lt 300 ]; then
-    SPEEDUP=$(echo "scale=2; 450 / $ELAPSED" | bc)
-    echo "Speedup: ${SPEEDUP}x faster"
+    if command -v bc >/dev/null 2>&1; then
+        SPEEDUP=$(echo "scale=2; 450 / $ELAPSED" | bc)
+        echo "Speedup: ${SPEEDUP}x faster"
+    else
+        echo "Speedup: (unable to calculate, 'bc' not installed)"
+    fi
     echo "[SUCCESS] Group testing is significantly faster!"
 else
     echo "[INFO] Group testing took longer than expected"
