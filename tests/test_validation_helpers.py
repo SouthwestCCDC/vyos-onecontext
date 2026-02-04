@@ -13,6 +13,9 @@ import pytest
 from tests.validation_helpers import (
     ValidationResult,
     check_default_route,
+    check_dhcp_options,
+    check_dhcp_pool,
+    check_dhcp_server_running,
     check_dnat_rule,
     check_hostname,
     check_interface_ip,
@@ -1911,3 +1914,315 @@ class TestInterfaceIpOctetValidation:
         # Should raise ValueError for invalid IP input
         with pytest.raises(ValueError, match=r"octet 1 \(999\) out of range"):
             check_interface_ip(mock_ssh, "eth0", "999.999.999.999")
+
+
+class TestCheckDhcpServerRunning:
+    """Test check_dhcp_server_running helper function."""
+
+    def test_dhcp_server_running(self) -> None:
+        """Test when DHCP server is running and listening."""
+        mock_ssh = Mock(
+            return_value=(
+                "DHCP server listening on:\n"
+                "    eth1\n"
+                "\n"
+                "Pool: dhcp-eth1\n"
+                "    Failover state: N/A\n"
+                "    Status: active\n"
+                "    Leases: 5\n"
+                "    Available: 95\n"
+            )
+        )
+
+        result = check_dhcp_server_running(mock_ssh)
+
+        assert result.passed is True
+        assert "DHCP server is running" in result.message
+        mock_ssh.assert_called_once_with("show service dhcp-server")
+
+    def test_dhcp_server_with_pool_only(self) -> None:
+        """Test when output contains Pool information."""
+        mock_ssh = Mock(return_value=("Pool: dhcp-eth2\n    Status: active\n    Leases: 0\n"))
+
+        result = check_dhcp_server_running(mock_ssh)
+
+        assert result.passed is True
+        assert "DHCP server is running" in result.message
+
+    def test_dhcp_server_not_configured(self) -> None:
+        """Test when DHCP server is not configured."""
+        mock_ssh = Mock(return_value="DHCP server is not configured\n")
+
+        result = check_dhcp_server_running(mock_ssh)
+
+        assert result.passed is False
+        assert "not configured or not running" in result.message
+
+    def test_dhcp_server_empty_output(self) -> None:
+        """Test when command returns empty output."""
+        mock_ssh = Mock(return_value="")
+
+        result = check_dhcp_server_running(mock_ssh)
+
+        assert result.passed is False
+        assert "not configured or not running" in result.message
+
+    def test_dhcp_server_query_fails(self) -> None:
+        """Test when SSH command fails."""
+        mock_ssh = Mock(side_effect=Exception("Network error"))
+
+        result = check_dhcp_server_running(mock_ssh)
+
+        assert result.passed is False
+        assert "Failed to query DHCP server status" in result.message
+        assert result.raw_output == ""
+
+    def test_dhcp_server_unknown_output(self) -> None:
+        """Test when output format is unexpected."""
+        mock_ssh = Mock(return_value="Some unexpected output\n")
+
+        result = check_dhcp_server_running(mock_ssh)
+
+        assert result.passed is False
+        assert "Unable to determine DHCP server status" in result.message
+
+
+class TestCheckDhcpPool:
+    """Test check_dhcp_pool helper function."""
+
+    def test_dhcp_pool_exists_with_subnet(self) -> None:
+        """Test when DHCP pool exists with expected subnet."""
+        mock_ssh = Mock(
+            return_value=(
+                "set service dhcp-server shared-network-name dhcp-eth1 "
+                "subnet 10.1.1.0/24 range 0 start 10.1.1.100\n"
+                "set service dhcp-server shared-network-name dhcp-eth1 "
+                "subnet 10.1.1.0/24 range 0 stop 10.1.1.200\n"
+                "set service dhcp-server shared-network-name dhcp-eth1 "
+                "subnet 10.1.1.0/24 default-router 10.1.1.1\n"
+            )
+        )
+
+        result = check_dhcp_pool(mock_ssh, "dhcp-eth1", "10.1.1.0/24")
+
+        assert result.passed is True
+        assert "exists with subnet" in result.message
+        assert "dhcp-eth1" in result.message
+        assert "10.1.1.0/24" in result.message
+        mock_ssh.assert_called_once_with("show configuration commands | grep dhcp-server")
+
+    def test_dhcp_pool_exists_without_subnet_check(self) -> None:
+        """Test when checking pool exists without specific subnet."""
+        mock_ssh = Mock(
+            return_value=(
+                "set service dhcp-server shared-network-name dhcp-eth2 "
+                "subnet 192.168.1.0/24 range 0 start 192.168.1.10\n"
+            )
+        )
+
+        result = check_dhcp_pool(mock_ssh, "dhcp-eth2", None)
+
+        assert result.passed is True
+        assert "exists" in result.message
+        assert "dhcp-eth2" in result.message
+
+    def test_dhcp_pool_not_found(self) -> None:
+        """Test when DHCP pool does not exist."""
+        mock_ssh = Mock(
+            return_value=(
+                "set service dhcp-server shared-network-name dhcp-eth1 "
+                "subnet 10.1.1.0/24 range 0 start 10.1.1.100\n"
+            )
+        )
+
+        result = check_dhcp_pool(mock_ssh, "dhcp-eth3", None)
+
+        assert result.passed is False
+        assert "not found" in result.message
+        assert "dhcp-eth3" in result.message
+
+    def test_dhcp_pool_exists_but_wrong_subnet(self) -> None:
+        """Test when pool exists but with different subnet."""
+        mock_ssh = Mock(
+            return_value=(
+                "set service dhcp-server shared-network-name dhcp-eth1 "
+                "subnet 10.1.1.0/24 range 0 start 10.1.1.100\n"
+            )
+        )
+
+        result = check_dhcp_pool(mock_ssh, "dhcp-eth1", "10.2.1.0/24")
+
+        assert result.passed is False
+        assert "not configured" in result.message
+        assert "10.2.1.0/24" in result.message
+
+    def test_dhcp_pool_query_fails(self) -> None:
+        """Test when SSH command fails."""
+        mock_ssh = Mock(side_effect=Exception("Connection lost"))
+
+        result = check_dhcp_pool(mock_ssh, "dhcp-eth1", "10.1.1.0/24")
+
+        assert result.passed is False
+        assert "Failed to query DHCP server configuration" in result.message
+        assert result.raw_output == ""
+
+    def test_dhcp_pool_multiple_pools(self) -> None:
+        """Test with multiple DHCP pools configured."""
+        mock_ssh = Mock(
+            return_value=(
+                "set service dhcp-server shared-network-name dhcp-eth1 "
+                "subnet 10.1.1.0/24 range 0 start 10.1.1.100\n"
+                "set service dhcp-server shared-network-name dhcp-eth2 "
+                "subnet 10.2.1.0/24 range 0 start 10.2.1.100\n"
+                "set service dhcp-server shared-network-name dhcp-eth3 "
+                "subnet 10.3.1.0/24 range 0 start 10.3.1.100\n"
+            )
+        )
+
+        result = check_dhcp_pool(mock_ssh, "dhcp-eth2", "10.2.1.0/24")
+
+        assert result.passed is True
+        assert "dhcp-eth2" in result.message
+        assert "10.2.1.0/24" in result.message
+
+
+class TestCheckDhcpOptions:
+    """Test check_dhcp_options helper function."""
+
+    def test_dhcp_options_all_present(self) -> None:
+        """Test when all DHCP options are correctly configured."""
+        mock_ssh = Mock(
+            return_value=(
+                "set service dhcp-server shared-network-name dhcp-eth1 "
+                "subnet 10.1.1.0/24 range 0 start 10.1.1.100\n"
+                "set service dhcp-server shared-network-name dhcp-eth1 "
+                "subnet 10.1.1.0/24 default-router 10.1.1.1\n"
+                "set service dhcp-server shared-network-name dhcp-eth1 "
+                "subnet 10.1.1.0/24 name-server 10.63.4.101\n"
+                "set service dhcp-server shared-network-name dhcp-eth1 "
+                "subnet 10.1.1.0/24 name-server 8.8.8.8\n"
+            )
+        )
+
+        result = check_dhcp_options(mock_ssh, "dhcp-eth1", "10.1.1.1", ["10.63.4.101", "8.8.8.8"])
+
+        assert result.passed is True
+        assert "correct" in result.message
+        assert "dhcp-eth1" in result.message
+        assert "default-router=10.1.1.1" in result.message
+        assert "dns=10.63.4.101,8.8.8.8" in result.message
+        mock_ssh.assert_called_once_with("show configuration commands | grep dhcp-server")
+
+    def test_dhcp_options_only_router(self) -> None:
+        """Test when checking only default-router."""
+        mock_ssh = Mock(
+            return_value=(
+                "set service dhcp-server shared-network-name dhcp-eth1 "
+                "subnet 10.1.1.0/24 default-router 10.1.1.1\n"
+            )
+        )
+
+        result = check_dhcp_options(mock_ssh, "dhcp-eth1", "10.1.1.1", None)
+
+        assert result.passed is True
+        assert "default-router=10.1.1.1" in result.message
+
+    def test_dhcp_options_only_dns(self) -> None:
+        """Test when checking only DNS servers."""
+        mock_ssh = Mock(
+            return_value=(
+                "set service dhcp-server shared-network-name dhcp-eth1 "
+                "subnet 10.1.1.0/24 name-server 8.8.8.8\n"
+            )
+        )
+
+        result = check_dhcp_options(mock_ssh, "dhcp-eth1", None, ["8.8.8.8"])
+
+        assert result.passed is True
+        assert "dns=8.8.8.8" in result.message
+
+    def test_dhcp_options_missing_router(self) -> None:
+        """Test when default-router is missing."""
+        mock_ssh = Mock(
+            return_value=(
+                "set service dhcp-server shared-network-name dhcp-eth1 "
+                "subnet 10.1.1.0/24 range 0 start 10.1.1.100\n"
+                "set service dhcp-server shared-network-name dhcp-eth1 "
+                "subnet 10.1.1.0/24 name-server 8.8.8.8\n"
+            )
+        )
+
+        result = check_dhcp_options(mock_ssh, "dhcp-eth1", "10.1.1.1", ["8.8.8.8"])
+
+        assert result.passed is False
+        assert "incomplete" in result.message
+        assert "default-router '10.1.1.1' not found" in result.message
+
+    def test_dhcp_options_missing_dns(self) -> None:
+        """Test when DNS server is missing."""
+        mock_ssh = Mock(
+            return_value=(
+                "set service dhcp-server shared-network-name dhcp-eth1 "
+                "subnet 10.1.1.0/24 default-router 10.1.1.1\n"
+            )
+        )
+
+        result = check_dhcp_options(mock_ssh, "dhcp-eth1", "10.1.1.1", ["8.8.8.8", "8.8.4.4"])
+
+        assert result.passed is False
+        assert "incomplete" in result.message
+        assert "name-server '8.8.8.8' not found" in result.message
+        assert "name-server '8.8.4.4' not found" in result.message
+
+    def test_dhcp_options_network_not_found(self) -> None:
+        """Test when shared-network does not exist."""
+        mock_ssh = Mock(
+            return_value=(
+                "set service dhcp-server shared-network-name dhcp-eth2 "
+                "subnet 10.2.1.0/24 default-router 10.2.1.1\n"
+            )
+        )
+
+        result = check_dhcp_options(mock_ssh, "dhcp-eth1", "10.1.1.1", None)
+
+        assert result.passed is False
+        assert "not found" in result.message
+        assert "dhcp-eth1" in result.message
+
+    def test_dhcp_options_no_checks(self) -> None:
+        """Test when no options are being checked (both None)."""
+        mock_ssh = Mock(
+            return_value=(
+                "set service dhcp-server shared-network-name dhcp-eth1 "
+                "subnet 10.1.1.0/24 range 0 start 10.1.1.100\n"
+            )
+        )
+
+        result = check_dhcp_options(mock_ssh, "dhcp-eth1", None, None)
+
+        assert result.passed is True
+        assert "no options checked" in result.message
+
+    def test_dhcp_options_query_fails(self) -> None:
+        """Test when SSH command fails."""
+        mock_ssh = Mock(side_effect=Exception("Network timeout"))
+
+        result = check_dhcp_options(mock_ssh, "dhcp-eth1", "10.1.1.1", None)
+
+        assert result.passed is False
+        assert "Failed to query DHCP server configuration" in result.message
+        assert result.raw_output == ""
+
+    def test_dhcp_options_single_dns_server(self) -> None:
+        """Test with a single DNS server."""
+        mock_ssh = Mock(
+            return_value=(
+                "set service dhcp-server shared-network-name dhcp-eth1 "
+                "subnet 10.1.1.0/24 name-server 10.1.1.1\n"
+            )
+        )
+
+        result = check_dhcp_options(mock_ssh, "dhcp-eth1", None, ["10.1.1.1"])
+
+        assert result.passed is True
+        assert "dns=10.1.1.1" in result.message
