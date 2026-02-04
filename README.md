@@ -21,7 +21,7 @@ state without drift.
 
 ## Features
 
-**Implemented (Phase 0):**
+**Implemented:**
 
 - Interface configuration with primary IP addresses
 - NIC aliases (secondary IPs for 1:1 NAT scenarios)
@@ -32,13 +32,7 @@ state without drift.
 - Cross-reference validation (interfaces referenced by NAT, DHCP, OSPF, etc.)
 - Operational modes: stateless (default), save, freeze
 - START_SCRIPT execution after commit
-
-**Parsed (execution pending):**
-
 - START_CONFIG (raw VyOS commands)
-
-**Designed (models ready, generators in progress):**
-
 - Management VRF interface placement
 - Static routing with VRF support
 - OSPF dynamic routing (interface-based, Sagitta syntax)
@@ -47,6 +41,11 @@ state without drift.
 - Destination NAT (port forwarding)
 - Bidirectional 1:1 NAT
 - Zone-based firewall (groups, zones, policies)
+
+**In Progress:**
+
+- Phase 7.5: Documentation updates (context-reference.md, README examples)
+
 
 **Out of scope:**
 
