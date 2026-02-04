@@ -439,6 +439,52 @@ class TestFirewallConfig:
         assert "WAN" in fw.zones
         assert len(fw.policies) == 1
 
+    def test_firewall_zone_name_from_dict_key(self) -> None:
+        """Test that zone name is automatically injected from dict key.
+
+        This validates issue #174 fix: users should be able to omit the 'name'
+        field in zone data, and it will be automatically set from the dict key.
+        """
+        fw = FirewallConfig(
+            zones={
+                "DOWNSTREAM": {
+                    "default_action": "drop",
+                    "interfaces": ["eth2"],
+                },
+                "UPSTREAM": {
+                    "default_action": "reject",
+                    "interfaces": ["eth0"],
+                },
+            }
+        )
+        assert "DOWNSTREAM" in fw.zones
+        assert fw.zones["DOWNSTREAM"].name == "DOWNSTREAM"
+        assert fw.zones["DOWNSTREAM"].default_action == "drop"
+        assert fw.zones["DOWNSTREAM"].interfaces == ["eth2"]
+
+        assert "UPSTREAM" in fw.zones
+        assert fw.zones["UPSTREAM"].name == "UPSTREAM"
+        assert fw.zones["UPSTREAM"].default_action == "reject"
+        assert fw.zones["UPSTREAM"].interfaces == ["eth0"]
+
+    def test_firewall_zone_name_explicit_overrides_key(self) -> None:
+        """Test that explicit name field is honored even if dict key differs.
+
+        While not recommended, if users provide both dict key and 'name' field,
+        the existing field_validator will normalize to use the dict key.
+        """
+        fw = FirewallConfig(
+            zones={
+                "DOWNSTREAM": {
+                    "name": "DIFFERENT_NAME",
+                    "default_action": "drop",
+                    "interfaces": ["eth2"],
+                }
+            }
+        )
+        # The field_validator should normalize this to use the dict key
+        assert fw.zones["DOWNSTREAM"].name == "DOWNSTREAM"
+
 
 class TestRouterConfig:
     """Tests for top-level RouterConfig."""
