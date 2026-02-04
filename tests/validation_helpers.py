@@ -176,23 +176,23 @@ class ValidationResult:
 
 def _format_called_process_error_output(e: subprocess.CalledProcessError) -> str:
     """Extract and format stdout/stderr from CalledProcessError.
-    
+
     Handles both text (str) and binary (bytes) outputs safely.
-    
+
     Args:
         e: CalledProcessError exception from subprocess
-        
+
     Returns:
         Concatenated stdout and stderr as a string
     """
     stdout = e.stdout or ""
     stderr = e.stderr or ""
-    
+
     if isinstance(stdout, bytes):
         stdout = stdout.decode(errors="replace")
     if isinstance(stderr, bytes):
         stderr = stderr.decode(errors="replace")
-    
+
     return stdout + stderr
 
 
