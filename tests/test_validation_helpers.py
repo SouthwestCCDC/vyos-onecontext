@@ -256,19 +256,19 @@ class TestCheckHostname:
     def test_hostname_with_underscores(self) -> None:
         """Test hostname validation rejects underscores (RFC 1123 compliance).
 
+
         The project enforces RFC 1123 hostnames which do not allow underscores.
-        The validation helper should fail because it truncates at the underscore,
-        resulting in a mismatch.
+        The validation helper should explicitly reject hostnames containing
+        underscores as RFC 1123 violations.
         """
         mock_ssh = Mock(return_value="host-name 'test_router'\n")
 
         result = check_hostname(mock_ssh, "test_router")
 
-        # Should fail because regex matches only 'test' (truncating at underscore)
+        # Should fail with RFC 1123 violation message
         assert result.passed is False
-        assert "mismatch" in result.message.lower()
-        assert "test_router" in result.message  # expected
-        assert "test" in result.message  # actual (truncated)
+        assert "invalid" in result.message.lower() or "rfc" in result.message.lower()
+        assert "test_router" in result.message  # Full hostname shown, not truncated
 
 
 class TestCheckSshKeyConfigured:
@@ -1575,16 +1575,17 @@ class TestHostnameRFC1123Validation:
     def test_hostname_rejects_underscore_explicit(self) -> None:
         """Test that hostnames with underscores are explicitly rejected.
 
-        RFC 1123 does not allow underscores in hostnames. The regex should
-        not match underscores, preventing false positives from truncation.
+        RFC 1123 does not allow underscores in hostnames. The validation
+        helper should extract the full hostname and explicitly detect
+        the RFC 1123 violation rather than silently truncating.
         """
         mock_ssh = Mock(return_value="host-name 'test_invalid'\n")
 
         result = check_hostname(mock_ssh, "test_invalid")
 
-        # Should fail with mismatch (regex captures up to underscore)
+        # Should fail with explicit RFC 1123 violation message
         assert result.passed is False
-        assert "mismatch" in result.message.lower()
+        assert "invalid" in result.message.lower() or "rfc 1123" in result.message.lower()
 
     def test_hostname_single_char_valid(self) -> None:
         """Test single character hostname (edge case for RFC 1123)."""

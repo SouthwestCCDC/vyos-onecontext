@@ -309,23 +309,34 @@ def check_hostname(
             raw_output="",
         )
 
-    # Look for "host-name 'hostname'" or "host-name hostname" pattern
-    # VyOS config can use single quotes or no quotes
-    hostname_pattern = re.compile(
-        r"host-name\s+['\"]?([a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)['\"]?"
-    )
-    match = hostname_pattern.search(output)
+    # Extract the full hostname token (quoted or unquoted)
+    # First, get the raw hostname value from the output
+    hostname_extraction = re.compile(r"host-name\s+(?:'([^']+)'|\"([^\"]+)\"|([^\s]+))")
+    extract_match = hostname_extraction.search(output)
 
-    if not match:
+    if not extract_match:
         return ValidationResult(
             passed=False,
             message="No hostname found in configuration",
             raw_output=output,
         )
 
-    actual_hostname = match.group(1)
+    # Get the hostname (could be from single quotes, double quotes, or unquoted)
+    raw_hostname = extract_match.group(1) or extract_match.group(2) or extract_match.group(3)
 
-    if actual_hostname == expected:
+    # Validate hostname against RFC 1123 (alphanumeric + hyphens, no underscores)
+    # Must start and end with alphanumeric, hyphens only in middle, max 63 chars
+    rfc1123_pattern = re.compile(r"^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$")
+
+    if not rfc1123_pattern.fullmatch(raw_hostname):
+        return ValidationResult(
+            passed=False,
+            message=f"Invalid hostname in config: {raw_hostname} (violates RFC 1123)",
+            raw_output=output,
+        )
+
+    # Now check if it matches expected
+    if raw_hostname == expected:
         return ValidationResult(
             passed=True,
             message=f"Hostname matches expected value: {expected}",
@@ -334,7 +345,7 @@ def check_hostname(
     else:
         return ValidationResult(
             passed=False,
-            message=f"Hostname mismatch: expected {expected}, got {actual_hostname}",
+            message=f"Hostname mismatch: expected {expected}, got {raw_hostname}",
             raw_output=output,
         )
 
