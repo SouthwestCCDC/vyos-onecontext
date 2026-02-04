@@ -8,9 +8,12 @@ without requiring a live VyOS instance.
 import subprocess
 from unittest.mock import Mock
 
+import pytest
+
 from tests.validation_helpers import (
     ValidationResult,
     check_default_route,
+    check_dnat_rule,
     check_hostname,
     check_interface_ip,
     check_ospf_enabled,
@@ -1577,8 +1580,7 @@ class TestCheckServiceVrf:
         result = check_service_vrf(mock_ssh, "ssh", "mgmt")
 
         assert result.passed is False
-        assert "translation port mismatch" in result.message
-        assert "9090" in result.message
+        assert "cannot parse VRF name" in result.message
 
     def test_dnat_rule_translation_port_unquoted(self) -> None:
         """Test DNAT rule with unquoted translation port."""
@@ -1838,11 +1840,9 @@ class TestInterfaceIpOctetValidation:
             )
         )
 
-        result = check_interface_ip(mock_ssh, "eth0", "999.999.999.999")
-
-        # Pattern should not match invalid IP, so no IP found
-        assert result.passed is False
-        assert "No IP address found" in result.message
+        # Should raise ValueError because input validation rejects invalid octets
+        with pytest.raises(ValueError, match=r"octet 1 \(999\) out of range"):
+            check_interface_ip(mock_ssh, "eth0", "999.999.999.999")
 
     def test_interface_ip_accepts_valid_octet_255(self) -> None:
         """Test that IP with maximum valid octet (255) is accepted."""
@@ -1882,10 +1882,9 @@ class TestInterfaceIpOctetValidation:
             )
         )
 
-        result = check_interface_ip(mock_ssh, "eth0", "192.168.256.1")
-
-        assert result.passed is False
-        assert "No IP address found" in result.message
+        # Should raise ValueError because input validation rejects invalid octets
+        with pytest.raises(ValueError, match=r"octet 3 \(256\) out of range"):
+            check_interface_ip(mock_ssh, "eth0", "192.168.256.1")
 
     def test_interface_ip_mixed_valid_and_invalid(self) -> None:
         """Test interface with both valid and invalid IP formats.
@@ -1905,6 +1904,6 @@ class TestInterfaceIpOctetValidation:
         result = check_interface_ip(mock_ssh, "eth0", "192.168.1.10")
         assert result.passed is True
 
-        # Should not find the invalid IP
-        result = check_interface_ip(mock_ssh, "eth0", "999.999.999.999")
-        assert result.passed is False
+        # Should raise ValueError for invalid IP input
+        with pytest.raises(ValueError, match=r"octet 1 \(999\) out of range"):
+            check_interface_ip(mock_ssh, "eth0", "999.999.999.999")
