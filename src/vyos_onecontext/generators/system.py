@@ -1,8 +1,9 @@
-"""System configuration generators (hostname, SSH keys)."""
+"""System configuration generators (hostname, SSH keys, conntrack)."""
 
 import re
 
 from vyos_onecontext.generators.base import BaseGenerator
+from vyos_onecontext.models.system import ConntrackConfig
 
 
 class HostnameGenerator(BaseGenerator):
@@ -109,5 +110,120 @@ class SshKeyGenerator(BaseGenerator):
         if key_configs:
             commands.append("set service ssh port 22")
             commands.extend(key_configs)
+
+        return commands
+
+
+class ConntrackGenerator(BaseGenerator):
+    """Generate VyOS conntrack timeout configuration commands."""
+
+    def __init__(self, conntrack: ConntrackConfig | None):
+        """Initialize conntrack generator.
+
+        Args:
+            conntrack: Conntrack configuration (None if not configured)
+        """
+        self.conntrack = conntrack
+
+    def generate(self) -> list[str]:
+        """Generate conntrack timeout configuration commands.
+
+        Returns:
+            List of VyOS 'set' commands for conntrack timeout rules
+        """
+        commands: list[str] = []
+
+        if self.conntrack is None:
+            return commands
+
+        for idx, rule in enumerate(self.conntrack.timeout_rules, start=1):
+            rule_num = idx
+
+            # Description (optional)
+            if rule.description:
+                commands.append(
+                    f"set system conntrack timeout custom rule {rule_num} "
+                    f"description '{rule.description}'"
+                )
+
+            # Source address (optional)
+            if rule.source_address:
+                commands.append(
+                    f"set system conntrack timeout custom rule {rule_num} "
+                    f"source address {rule.source_address}"
+                )
+
+            # Destination address (optional)
+            if rule.destination_address:
+                commands.append(
+                    f"set system conntrack timeout custom rule {rule_num} "
+                    f"destination address {rule.destination_address}"
+                )
+
+            # Protocol (required)
+            commands.append(
+                f"set system conntrack timeout custom rule {rule_num} "
+                f"protocol {rule.protocol}"
+            )
+
+            # Protocol-specific timeouts
+            if rule.protocol == "tcp":
+                if rule.tcp_close is not None:
+                    commands.append(
+                        f"set system conntrack timeout custom rule {rule_num} "
+                        f"protocol tcp close {rule.tcp_close}"
+                    )
+                if rule.tcp_close_wait is not None:
+                    commands.append(
+                        f"set system conntrack timeout custom rule {rule_num} "
+                        f"protocol tcp close-wait {rule.tcp_close_wait}"
+                    )
+                if rule.tcp_established is not None:
+                    commands.append(
+                        f"set system conntrack timeout custom rule {rule_num} "
+                        f"protocol tcp established {rule.tcp_established}"
+                    )
+                if rule.tcp_fin_wait is not None:
+                    commands.append(
+                        f"set system conntrack timeout custom rule {rule_num} "
+                        f"protocol tcp fin-wait {rule.tcp_fin_wait}"
+                    )
+                if rule.tcp_last_ack is not None:
+                    commands.append(
+                        f"set system conntrack timeout custom rule {rule_num} "
+                        f"protocol tcp last-ack {rule.tcp_last_ack}"
+                    )
+                if rule.tcp_syn_recv is not None:
+                    commands.append(
+                        f"set system conntrack timeout custom rule {rule_num} "
+                        f"protocol tcp syn-recv {rule.tcp_syn_recv}"
+                    )
+                if rule.tcp_syn_sent is not None:
+                    commands.append(
+                        f"set system conntrack timeout custom rule {rule_num} "
+                        f"protocol tcp syn-sent {rule.tcp_syn_sent}"
+                    )
+                if rule.tcp_time_wait is not None:
+                    commands.append(
+                        f"set system conntrack timeout custom rule {rule_num} "
+                        f"protocol tcp time-wait {rule.tcp_time_wait}"
+                    )
+            elif rule.protocol == "udp":
+                if rule.udp_other is not None:
+                    commands.append(
+                        f"set system conntrack timeout custom rule {rule_num} "
+                        f"protocol udp other {rule.udp_other}"
+                    )
+                if rule.udp_stream is not None:
+                    commands.append(
+                        f"set system conntrack timeout custom rule {rule_num} "
+                        f"protocol udp stream {rule.udp_stream}"
+                    )
+            elif rule.protocol == "icmp":
+                if rule.icmp_timeout is not None:
+                    commands.append(
+                        f"set system conntrack timeout custom rule {rule_num} "
+                        f"icmp {rule.icmp_timeout}"
+                    )
 
         return commands
