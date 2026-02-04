@@ -950,7 +950,7 @@ def check_dnat_rule(
     if translation_port is not None:
         escaped_port = re.escape(translation_port)
         port_pattern = re.compile(
-            rf"set nat destination rule {rule_num} translation port '?{escaped_port}'?"
+            rf"set nat destination rule {rule_num} translation port \'?{escaped_port}\'?"
         )
         if not port_pattern.search(rule_config):
             return ValidationResult(
