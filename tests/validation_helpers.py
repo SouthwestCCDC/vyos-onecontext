@@ -271,8 +271,8 @@ def check_hostname(
 
     # Look for "host-name 'hostname'" or "host-name hostname" pattern
     # VyOS config can use single quotes or no quotes
-    # Per RFC 952/1123, hostnames cannot contain underscores
-    hostname_pattern = re.compile(r"host-name\s+['\"]?([a-zA-Z0-9-]+)['\"]?")
+    # Allow underscores in hostnames to match existing behavior and tests
+    hostname_pattern = re.compile(r"host-name\s+['\"]?([a-zA-Z0-9_-]+)['\"]?")
     match = hostname_pattern.search(output)
 
     if not match:
