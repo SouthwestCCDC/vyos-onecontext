@@ -1464,7 +1464,9 @@ class TestSourceNatRuleAddressMapping:
 
     def test_address_mapping_with_masquerade(self) -> None:
         """Test that address_mapping cannot be used with masquerade."""
-        with pytest.raises(ValidationError, match="address_mapping can only be used with translation_address"):
+        with pytest.raises(
+            ValidationError, match="address_mapping can only be used with translation_address"
+        ):
             SourceNatRule(
                 outbound_interface="eth2",
                 translation="masquerade",

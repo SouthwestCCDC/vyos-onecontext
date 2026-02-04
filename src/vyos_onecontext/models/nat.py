@@ -88,7 +88,7 @@ class SourceNatRule(BaseModel):
             raise ValueError("Cannot specify both 'translation' and 'translation_address'")
         if not has_translation and not has_address:
             raise ValueError("Must specify either 'translation' or 'translation_address'")
-        
+
         # Validate address_mapping only used with translation_address
         if self.address_mapping is not None and has_translation:
             raise ValueError(
