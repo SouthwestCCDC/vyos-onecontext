@@ -1036,3 +1036,81 @@ class TestParserAPI:
         config = parse_context(str(context_file))
 
         assert config.hostname == "test"
+
+
+class TestEmptyOptionalFields:
+    """Tests for empty string handling in optional fields."""
+
+    def test_interface_with_empty_gateway_and_dns(self, tmp_path: Path) -> None:
+        """Test parsing interface with empty gateway and DNS (regression test for production bug).
+
+        OpenNebula can provide empty strings for optional ETHx_GATEWAY and ETHx_DNS fields.
+        These should be converted to None, not passed as empty strings to Pydantic which
+        would cause IPv4 validation errors.
+        """
+        context_file = tmp_path / "one_env"
+        content = """ETH0_IP="10.0.1.1"
+ETH0_MASK="255.255.255.0"
+ETH0_GATEWAY=""
+ETH0_DNS=""
+"""
+        context_file.write_text(content)
+
+        config = parse_context(str(context_file))
+
+        assert len(config.interfaces) == 1
+        iface = config.interfaces[0]
+        assert iface.name == "eth0"
+        assert str(iface.ip) == "10.0.1.1"
+        assert iface.mask == "255.255.255.0"
+        assert iface.gateway is None
+        assert iface.dns is None
+
+    def test_interface_with_only_empty_gateway(self, tmp_path: Path) -> None:
+        """Test parsing interface with empty gateway but valid DNS."""
+        context_file = tmp_path / "one_env"
+        content = """ETH0_IP="10.0.1.1"
+ETH0_MASK="255.255.255.0"
+ETH0_GATEWAY=""
+ETH0_DNS="8.8.8.8"
+"""
+        context_file.write_text(content)
+
+        config = parse_context(str(context_file))
+
+        assert len(config.interfaces) == 1
+        iface = config.interfaces[0]
+        assert iface.gateway is None
+        assert str(iface.dns) == "8.8.8.8"
+
+    def test_interface_with_only_empty_dns(self, tmp_path: Path) -> None:
+        """Test parsing interface with valid gateway but empty DNS."""
+        context_file = tmp_path / "one_env"
+        content = """ETH0_IP="10.0.1.1"
+ETH0_MASK="255.255.255.0"
+ETH0_GATEWAY="10.0.1.254"
+ETH0_DNS=""
+"""
+        context_file.write_text(content)
+
+        config = parse_context(str(context_file))
+
+        assert len(config.interfaces) == 1
+        iface = config.interfaces[0]
+        assert str(iface.gateway) == "10.0.1.254"
+        assert iface.dns is None
+
+    def test_interface_with_missing_gateway_and_dns(self, tmp_path: Path) -> None:
+        """Test parsing interface with gateway and DNS variables completely absent."""
+        context_file = tmp_path / "one_env"
+        content = """ETH0_IP="10.0.1.1"
+ETH0_MASK="255.255.255.0"
+"""
+        context_file.write_text(content)
+
+        config = parse_context(str(context_file))
+
+        assert len(config.interfaces) == 1
+        iface = config.interfaces[0]
+        assert iface.gateway is None
+        assert iface.dns is None

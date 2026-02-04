@@ -287,13 +287,18 @@ class ContextParser:
             # Parse management flag
             management = management_str == "YES" if management_str else False
 
+            # Convert empty strings to None for optional IPv4Address fields
+            # This prevents Pydantic validation errors when OpenNebula provides empty strings
+            gateway_value = gateway if gateway else None
+            dns_value = dns if dns else None
+
             interfaces.append(
                 InterfaceConfig(
                     name=f"eth{eth_num}",
                     ip=ip,  # type: ignore[arg-type]  # Pydantic converts str to IPv4Address
                     mask=mask,
-                    gateway=gateway,  # type: ignore[arg-type]  # Pydantic converts str to IPv4Address
-                    dns=dns,  # type: ignore[arg-type]  # Pydantic converts str to IPv4Address
+                    gateway=gateway_value,  # type: ignore[arg-type]  # Pydantic converts str to IPv4Address
+                    dns=dns_value,  # type: ignore[arg-type]  # Pydantic converts str to IPv4Address
                     mtu=mtu,
                     management=management,
                 )
