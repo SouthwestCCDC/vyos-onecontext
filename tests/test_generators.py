@@ -1452,6 +1452,7 @@ class TestGenerateConfigWithVrf:
         assert vrf_idx < interface_idx
         assert interface_idx < routing_idx
         assert vrf_idx < ssh_vrf_idx
+        assert routing_idx < ssh_vrf_idx
 
     def test_generate_config_static_routes_with_management_vrf(self):
         """Test that static routes referencing management VRF work correctly.
