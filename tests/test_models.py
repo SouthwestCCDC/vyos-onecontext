@@ -442,8 +442,8 @@ class TestFirewallConfig:
     def test_firewall_zone_name_from_dict_key(self) -> None:
         """Test that zone name is automatically injected from dict key.
 
-        This validates issue #174 fix: users should be able to omit the 'name'
-        field in zone data, and it will be automatically set from the dict key.
+        Users should be able to omit the 'name' field in zone data,
+        and it will be automatically set from the dict key.
         """
         fw = FirewallConfig(
             zones={
