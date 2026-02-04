@@ -6,6 +6,8 @@ from pydantic import ValidationError
 from vyos_onecontext.models import (
     AliasConfig,
     BinatRule,
+    ConntrackConfig,
+    ConntrackTimeoutRule,
     DestinationNatRule,
     DhcpConfig,
     DhcpPool,
@@ -1263,3 +1265,209 @@ class TestInputValidation:
         """Test that invalid alias interface name is rejected."""
         with pytest.raises(ValidationError, match="Invalid interface name"):
             AliasConfig(interface="invalid", ip="10.0.1.2", mask="255.255.255.0")
+
+
+# === Conntrack Timeout Configuration Tests ===
+
+
+class TestConntrackTimeoutRule:
+    """Tests for ConntrackTimeoutRule model."""
+
+    def test_tcp_rule_valid(self):
+        """Test valid TCP conntrack timeout rule."""
+        rule = ConntrackTimeoutRule(
+            description="Short timeout for scoring",
+            source_address="10.60.0.0/14",
+            protocol="tcp",
+            tcp_established=60,
+        )
+        assert rule.description == "Short timeout for scoring"
+        assert rule.source_address == "10.60.0.0/14"
+        assert rule.protocol == "tcp"
+        assert rule.tcp_established == 60
+
+    def test_udp_rule_valid(self):
+        """Test valid UDP conntrack timeout rule."""
+        rule = ConntrackTimeoutRule(
+            protocol="udp",
+            udp_stream=30,
+            udp_other=10,
+        )
+        assert rule.protocol == "udp"
+        assert rule.udp_stream == 30
+        assert rule.udp_other == 10
+
+    def test_icmp_rule_valid(self):
+        """Test valid ICMP conntrack timeout rule."""
+        rule = ConntrackTimeoutRule(
+            protocol="icmp",
+            icmp_timeout=5,
+        )
+        assert rule.protocol == "icmp"
+        assert rule.icmp_timeout == 5
+
+    def test_tcp_with_udp_field_invalid(self):
+        """Test that TCP rule cannot have UDP fields."""
+        with pytest.raises(ValidationError, match="not valid for protocol 'tcp'"):
+            ConntrackTimeoutRule(
+                protocol="tcp",
+                tcp_established=60,
+                udp_stream=30,  # Invalid for TCP
+            )
+
+    def test_udp_with_tcp_field_invalid(self):
+        """Test that UDP rule cannot have TCP fields."""
+        with pytest.raises(ValidationError, match="not valid for protocol 'udp'"):
+            ConntrackTimeoutRule(
+                protocol="udp",
+                udp_stream=30,
+                tcp_established=60,  # Invalid for UDP
+            )
+
+    def test_icmp_with_tcp_field_invalid(self):
+        """Test that ICMP rule cannot have TCP fields."""
+        with pytest.raises(ValidationError, match="not valid for protocol 'icmp'"):
+            ConntrackTimeoutRule(
+                protocol="icmp",
+                icmp_timeout=5,
+                tcp_established=60,  # Invalid for ICMP
+            )
+
+    def test_tcp_without_timeout_invalid(self):
+        """Test that TCP rule requires at least one TCP timeout field."""
+        with pytest.raises(ValidationError, match="At least one TCP timeout field must be set"):
+            ConntrackTimeoutRule(
+                protocol="tcp",
+                source_address="10.0.0.0/8",
+            )
+
+    def test_udp_without_timeout_invalid(self):
+        """Test that UDP rule requires at least one UDP timeout field."""
+        with pytest.raises(ValidationError, match="At least one UDP timeout field must be set"):
+            ConntrackTimeoutRule(
+                protocol="udp",
+                source_address="10.0.0.0/8",
+            )
+
+    def test_icmp_without_timeout_invalid(self):
+        """Test that ICMP rule requires icmp_timeout field."""
+        with pytest.raises(ValidationError, match="ICMP timeout field must be set"):
+            ConntrackTimeoutRule(
+                protocol="icmp",
+                source_address="10.0.0.0/8",
+            )
+
+    def test_all_tcp_timeouts(self):
+        """Test TCP rule with all timeout fields set."""
+        rule = ConntrackTimeoutRule(
+            protocol="tcp",
+            tcp_close=10,
+            tcp_close_wait=20,
+            tcp_established=60,
+            tcp_fin_wait=30,
+            tcp_last_ack=15,
+            tcp_syn_recv=10,
+            tcp_syn_sent=10,
+            tcp_time_wait=30,
+        )
+        assert rule.tcp_close == 10
+        assert rule.tcp_close_wait == 20
+        assert rule.tcp_established == 60
+        assert rule.tcp_fin_wait == 30
+        assert rule.tcp_last_ack == 15
+        assert rule.tcp_syn_recv == 10
+        assert rule.tcp_syn_sent == 10
+        assert rule.tcp_time_wait == 30
+
+
+class TestConntrackConfig:
+    """Tests for ConntrackConfig model."""
+
+    def test_empty_config(self):
+        """Test empty conntrack configuration."""
+        config = ConntrackConfig()
+        assert config.timeout_rules == []
+
+    def test_single_rule(self):
+        """Test conntrack config with single rule."""
+        config = ConntrackConfig(
+            timeout_rules=[
+                ConntrackTimeoutRule(
+                    description="IP hopping timeout",
+                    source_address="10.60.0.0/14",
+                    protocol="tcp",
+                    tcp_established=60,
+                )
+            ]
+        )
+        assert len(config.timeout_rules) == 1
+        assert config.timeout_rules[0].description == "IP hopping timeout"
+
+    def test_multiple_rules(self):
+        """Test conntrack config with multiple rules."""
+        config = ConntrackConfig(
+            timeout_rules=[
+                ConntrackTimeoutRule(
+                    protocol="tcp",
+                    tcp_established=60,
+                ),
+                ConntrackTimeoutRule(
+                    protocol="udp",
+                    udp_stream=30,
+                ),
+                ConntrackTimeoutRule(
+                    protocol="icmp",
+                    icmp_timeout=5,
+                ),
+            ]
+        )
+        assert len(config.timeout_rules) == 3
+        assert config.timeout_rules[0].protocol == "tcp"
+        assert config.timeout_rules[1].protocol == "udp"
+        assert config.timeout_rules[2].protocol == "icmp"
+
+
+# === NAT Address Mapping Tests ===
+
+
+class TestSourceNatRuleAddressMapping:
+    """Tests for address_mapping field in SourceNatRule."""
+
+    def test_address_mapping_random(self):
+        """Test source NAT rule with random address mapping."""
+        rule = SourceNatRule(
+            outbound_interface="eth2",
+            source_address="10.60.0.0/14",
+            translation_address="10.97.0.0-10.103.255.254",
+            address_mapping="random",
+        )
+        assert rule.address_mapping == "random"
+
+    def test_address_mapping_persistent(self):
+        """Test source NAT rule with persistent address mapping."""
+        rule = SourceNatRule(
+            outbound_interface="eth2",
+            source_address="10.60.0.0/14",
+            translation_address="10.97.0.0-10.103.255.254",
+            address_mapping="persistent",
+        )
+        assert rule.address_mapping == "persistent"
+
+    def test_address_mapping_none(self):
+        """Test source NAT rule without address mapping (default VyOS behavior)."""
+        rule = SourceNatRule(
+            outbound_interface="eth2",
+            source_address="10.60.0.0/14",
+            translation_address="10.97.0.0-10.103.255.254",
+        )
+        assert rule.address_mapping is None
+
+    def test_address_mapping_with_masquerade(self):
+        """Test that address_mapping can be used with masquerade."""
+        rule = SourceNatRule(
+            outbound_interface="eth2",
+            translation="masquerade",
+            address_mapping="random",
+        )
+        assert rule.translation == "masquerade"
+        assert rule.address_mapping == "random"
