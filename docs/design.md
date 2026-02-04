@@ -214,14 +214,16 @@ START_SCRIPT="#!/bin/bash\necho 'Custom setup'"
 | Cross-reference validation | (automatic) | **Implemented** |
 | Custom scripts | `START_SCRIPT` | **Implemented** |
 | Management VRF | `ETHx_VROUTER_MANAGEMENT` | **Implemented** |
-| Static routes | `ROUTES_JSON` | Model ready, generator pending |
-| OSPF | `OSPF_JSON` | Model ready, generator pending |
-| DHCP server | `DHCP_JSON` | Model ready, generator pending |
-| Source NAT (masquerade) | `NAT_JSON` | Model ready, generator pending |
-| Destination NAT (port forwards) | `NAT_JSON` | Model ready, generator pending |
-| 1:1 NAT (bidirectional) | `NAT_JSON` + `ETHx_ALIASy_IP` | Model ready, generator pending |
-| Custom commands | `START_CONFIG` | Parsed, execution pending |
-| Zone-based firewall | `FIREWALL_JSON` | Model ready, generator pending |
+| Static routes | `ROUTES_JSON` | **Implemented** |
+| OSPF | `OSPF_JSON` | **Implemented** |
+| DHCP server | `DHCP_JSON` | **Implemented** |
+| Source NAT (masquerade) | `NAT_JSON` | **Implemented** |
+| Destination NAT (port forwards) | `NAT_JSON` | **Implemented** |
+| 1:1 NAT (bidirectional) | `NAT_JSON` + `ETHx_ALIASy_IP` | **Implemented** |
+| Custom commands | `START_CONFIG` | **Implemented** |
+| Zone-based firewall | `FIREWALL_JSON` | **Implemented** |
+
+**Current status (February 2026):** All v1 features are implemented and tested with 475+ passing tests. Phase 7.5 (documentation) is in progress.
 
 ### Out of Scope (for vrouter-infra)
 
