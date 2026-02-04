@@ -212,7 +212,14 @@ def check_interface_ip(
         output = ssh(f"show interfaces ethernet {interface}")
     except subprocess.CalledProcessError as e:
         # Capture stdout/stderr from the failed command for debugging
-        raw_output = (e.stdout or b"").decode() + (e.stderr or b"").decode()
+        # subprocess.run(..., text=True) makes stdout/stderr strings; handle both str and bytes
+        stdout = e.stdout or ""
+        stderr = e.stderr or ""
+        if isinstance(stdout, bytes):
+            stdout = stdout.decode(errors="replace")
+        if isinstance(stderr, bytes):
+            stderr = stderr.decode(errors="replace")
+        raw_output = stdout + stderr
         return ValidationResult(
             passed=False,
             message=f"Failed to query interface {interface}: {e}",
@@ -282,7 +289,14 @@ def check_hostname(
         output = ssh("show configuration | grep host-name || echo ''")
     except subprocess.CalledProcessError as e:
         # Capture stdout/stderr from the failed command for debugging
-        raw_output = (e.stdout or b"").decode() + (e.stderr or b"").decode()
+        # subprocess.run(..., text=True) makes stdout/stderr strings; handle both str and bytes
+        stdout = e.stdout or ""
+        stderr = e.stderr or ""
+        if isinstance(stdout, bytes):
+            stdout = stdout.decode(errors="replace")
+        if isinstance(stderr, bytes):
+            stderr = stderr.decode(errors="replace")
+        raw_output = stdout + stderr
         return ValidationResult(
             passed=False,
             message=f"Failed to query hostname: {e}",
@@ -353,7 +367,14 @@ def check_ssh_key_configured(
         )
     except subprocess.CalledProcessError as e:
         # Capture stdout/stderr from the failed command for debugging
-        raw_output = (e.stdout or b"").decode() + (e.stderr or b"").decode()
+        # subprocess.run(..., text=True) makes stdout/stderr strings; handle both str and bytes
+        stdout = e.stdout or ""
+        stderr = e.stderr or ""
+        if isinstance(stdout, bytes):
+            stdout = stdout.decode(errors="replace")
+        if isinstance(stderr, bytes):
+            stderr = stderr.decode(errors="replace")
+        raw_output = stdout + stderr
         return ValidationResult(
             passed=False,
             message=f"Failed to query SSH key configuration: {e}",
