@@ -428,11 +428,17 @@ bidirectional 1:1 NAT.
 | `outbound_interface` | String | Yes | Egress interface |
 | `source_address` | CIDR | No | Source network to NAT |
 | `translation` | String | Conditional | `masquerade` for dynamic SNAT |
-| `translation_address` | IP/Range | Conditional | Static SNAT address |
+| `translation_address` | IP/Range | Conditional | Static SNAT address or range |
+| `address_mapping` | String | No | Address mapping mode: `random` or `persistent` |
 | `description` | String | No | Rule description |
 
-**Note:** Exactly one of `translation` or `translation_address` must be specified (they are
-mutually exclusive).
+**Notes:**
+- Exactly one of `translation` or `translation_address` must be specified (mutually exclusive)
+- `address_mapping` controls pool behavior:
+  - `random`: Non-deterministic address selection from pool
+  - `persistent`: Hash-based mapping (same source → same translation)
+  - Omitted: VyOS default behavior (persistent-like)
+- Use `address_mapping: "random"` with conntrack timeouts for IP hopping
 
 **Destination NAT Fields:**
 
@@ -546,6 +552,126 @@ set nat source rule 200 source address '10.63.0.101'
 set nat source rule 200 translation address '129.244.246.66'
 set nat source rule 200 description 'Scoring engine'
 ```
+
+---
+
+### CONNTRACK_JSON
+
+Connection tracking timeout configuration for customizing idle timeouts on specific traffic patterns.
+Useful for IP hopping scenarios where short timeouts force connection remapping.
+
+**Schema:**
+
+```json
+{
+  "timeout_rules": [
+    {
+      "description": "IP hopping - short idle timeout",
+      "source_address": "10.60.0.0/14",
+      "protocol": "tcp",
+      "tcp_established": 60
+    }
+  ]
+}
+```
+
+**Timeout Rule Fields:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `description` | String | No | Rule description |
+| `source_address` | CIDR | No | Source network to match |
+| `destination_address` | CIDR | No | Destination network to match |
+| `protocol` | String | Yes | Protocol: `tcp`, `udp`, or `icmp` |
+
+**TCP Timeout Fields** (only for `protocol: "tcp"`):
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `tcp_close` | Integer | TCP close timeout (seconds) |
+| `tcp_close_wait` | Integer | TCP close-wait timeout (seconds) |
+| `tcp_established` | Integer | TCP established timeout (seconds) |
+| `tcp_fin_wait` | Integer | TCP fin-wait timeout (seconds) |
+| `tcp_last_ack` | Integer | TCP last-ack timeout (seconds) |
+| `tcp_syn_recv` | Integer | TCP syn-recv timeout (seconds) |
+| `tcp_syn_sent` | Integer | TCP syn-sent timeout (seconds) |
+| `tcp_time_wait` | Integer | TCP time-wait timeout (seconds) |
+
+**UDP Timeout Fields** (only for `protocol: "udp"`):
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `udp_other` | Integer | UDP other timeout (seconds) |
+| `udp_stream` | Integer | UDP stream timeout (seconds) |
+
+**ICMP Timeout Field** (only for `protocol: "icmp"`):
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `icmp_timeout` | Integer | Yes | ICMP timeout (seconds) |
+
+**Terraform Example:**
+
+```hcl
+CONNTRACK_JSON = jsonencode({
+  timeout_rules = [
+    {
+      description = "IP hopping - short idle timeout"
+      source_address = "10.60.0.0/14"
+      protocol = "tcp"
+      tcp_established = 60
+    },
+    {
+      description = "Short UDP timeout for game traffic"
+      source_address = "10.64.0.0/10"
+      protocol = "udp"
+      udp_stream = 30
+      udp_other = 10
+    }
+  ]
+})
+```
+
+**Generated VyOS Commands:**
+
+```
+set system conntrack timeout custom rule 1 description 'IP hopping - short idle timeout'
+set system conntrack timeout custom rule 1 source address 10.60.0.0/14
+set system conntrack timeout custom rule 1 protocol tcp
+set system conntrack timeout custom rule 1 protocol tcp established 60
+
+set system conntrack timeout custom rule 2 description 'Short UDP timeout for game traffic'
+set system conntrack timeout custom rule 2 source address 10.64.0.0/10
+set system conntrack timeout custom rule 2 protocol udp
+set system conntrack timeout custom rule 2 protocol udp stream 30
+set system conntrack timeout custom rule 2 protocol udp other 10
+```
+
+**IP Hopping Use Case:**
+
+For effective IP hopping (randomized source addresses to prevent blue team blocking), combine:
+
+1. **Source NAT with address pool and random mapping:**
+   ```json
+   {
+     "outbound_interface": "eth2",
+     "source_address": "10.60.0.0/14",
+     "translation_address": "10.97.0.0-10.103.255.254",
+     "address_mapping": "random"
+   }
+   ```
+
+2. **Short conntrack timeout:**
+   ```json
+   {
+     "source_address": "10.60.0.0/14",
+     "protocol": "tcp",
+     "tcp_established": 60
+   }
+   ```
+
+This creates non-deterministic address selection with 60-second idle timeout.
+Active connections remain stable (timeouts are idle-based, reset on packet activity).
 
 ---
 
