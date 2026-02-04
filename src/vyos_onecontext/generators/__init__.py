@@ -26,8 +26,14 @@ def generate_config(config: RouterConfig) -> list[str]:
     1. System configuration (hostname, SSH keys)
     2. VRF configuration (must happen BEFORE interface IP configuration)
     3. Network interfaces (IP addresses)
-    4. Routing (default gateway, static routes)
-    5. ... (other generators will be added in later phases)
+    4. Routing (default gateway selection for non-management interfaces)
+    5. Static routes (ROUTES_JSON; may reference VRFs)
+    6. Services (SSH VRF binding)
+    7. Dynamic routing (OSPF)
+    8. DHCP server
+    9. NAT (source, destination, binat)
+    10. Firewall
+    11. Custom start config (START_CONFIG)
 
     Args:
         config: Complete router configuration
