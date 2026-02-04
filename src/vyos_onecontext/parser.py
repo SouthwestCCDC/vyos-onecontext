@@ -266,6 +266,21 @@ class ContextParser:
             if match:
                 eth_numbers.add(int(match.group(1)))
 
+        # Check for MGT_IFACE variable
+        mgt_iface = self.variables.get("MGT_IFACE")
+
+        # Validate no conflict between MGT_IFACE and ETHx_VROUTER_MANAGEMENT
+        if mgt_iface:
+            for eth_num in eth_numbers:
+                prefix = f"ETH{eth_num}"
+                management_str = self.variables.get(f"{prefix}_VROUTER_MANAGEMENT")
+                if management_str == "YES":
+                    raise ValueError(
+                        f"Cannot use both MGT_IFACE (set to '{mgt_iface}') and "
+                        f"{prefix}_VROUTER_MANAGEMENT=YES. Use only one method to "
+                        f"designate management interfaces."
+                    )
+
         # Parse each interface
         for eth_num in sorted(eth_numbers):
             prefix = f"ETH{eth_num}"
@@ -288,7 +303,13 @@ class ContextParser:
             mtu = int(mtu_str) if mtu_str else None
 
             # Parse management flag
-            management = management_str == "YES" if management_str else False
+            # If MGT_IFACE is set, check if this interface matches
+            # Otherwise, check ETHx_VROUTER_MANAGEMENT
+            interface_name = f"eth{eth_num}"
+            if mgt_iface:
+                management = interface_name == mgt_iface
+            else:
+                management = management_str == "YES" if management_str else False
 
             # Convert empty strings to None for optional IPv4Address fields
             # This prevents Pydantic validation errors when OpenNebula provides empty strings
@@ -297,7 +318,7 @@ class ContextParser:
 
             interfaces.append(
                 InterfaceConfig(
-                    name=f"eth{eth_num}",
+                    name=interface_name,
                     ip=ip,  # type: ignore[arg-type]  # Pydantic converts str to IPv4Address
                     mask=mask,
                     gateway=gateway_value,  # type: ignore[arg-type]  # Pydantic converts str to IPv4Address
