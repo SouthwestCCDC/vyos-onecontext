@@ -24,9 +24,16 @@ def generate_config(config: RouterConfig) -> list[str]:
 
     Generates commands in the correct order for VyOS commit:
     1. System configuration (hostname, SSH keys)
-    2. Network interfaces
-    3. Routing (default gateway, static routes)
-    4. ... (other generators will be added in later phases)
+    2. VRF configuration (must happen BEFORE interface IP configuration)
+    3. Network interfaces (IP addresses)
+    4. Routing (default gateway selection for non-management interfaces)
+    5. Static routes (ROUTES_JSON; may reference VRFs)
+    6. Services (SSH VRF binding)
+    7. Dynamic routing (OSPF)
+    8. DHCP server
+    9. NAT (source, destination, binat)
+    10. Firewall
+    11. Custom start config (START_CONFIG)
 
     Args:
         config: Complete router configuration
@@ -40,15 +47,16 @@ def generate_config(config: RouterConfig) -> list[str]:
     commands.extend(HostnameGenerator(config.hostname).generate())
     commands.extend(SshKeyGenerator(config.ssh_public_key).generate())
 
-    # Interfaces
+    # VRF configuration (management VRF) - must come BEFORE interface IP configuration
+    # VyOS requires VRF assignment on bare interfaces (no IPs configured yet)
+    commands.extend(VrfGenerator(config.interfaces).generate())
+
+    # Interfaces (IP addresses, MTU)
+    # This comes AFTER VRF assignment to avoid VyOS rejection
     commands.extend(InterfaceGenerator(config.interfaces, config.aliases).generate())
 
     # Routing (default gateway selection for non-management interfaces)
     commands.extend(RoutingGenerator(config.interfaces).generate())
-
-    # VRF configuration (management VRF) - must come BEFORE static routes
-    # since routes can reference VRFs
-    commands.extend(VrfGenerator(config.interfaces).generate())
 
     # Static routes (ROUTES_JSON) - must come AFTER VRF since routes can reference VRFs
     commands.extend(StaticRoutesGenerator(config.routes).generate())
