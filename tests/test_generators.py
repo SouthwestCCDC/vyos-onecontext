@@ -3615,11 +3615,11 @@ class TestConntrackGenerator:
 
         # Note: First string uses implicit concatenation for readability
         expected = [
-            "set system conntrack timeout custom rule 1 "
+            "set system conntrack timeout custom ipv4 rule 1 "
             "description 'IP hopping - short idle timeout'",
-            "set system conntrack timeout custom rule 1 source address 10.60.0.0/14",
-            "set system conntrack timeout custom rule 1 protocol tcp",
-            "set system conntrack timeout custom rule 1 protocol tcp established 60",
+            "set system conntrack timeout custom ipv4 rule 1 source address 10.60.0.0/14",
+            "set system conntrack timeout custom ipv4 rule 1 protocol tcp",
+            "set system conntrack timeout custom ipv4 rule 1 protocol tcp established 60",
         ]
         assert commands == expected
 
@@ -3638,10 +3638,17 @@ class TestConntrackGenerator:
         gen = ConntrackGenerator(config)
         commands = gen.generate()
 
-        assert "set system conntrack timeout custom rule 1 protocol tcp" in commands
-        assert "set system conntrack timeout custom rule 1 protocol tcp established 60" in commands
-        assert "set system conntrack timeout custom rule 1 protocol tcp time-wait 30" in commands
-        assert "set system conntrack timeout custom rule 1 protocol tcp syn-sent 10" in commands
+        assert "set system conntrack timeout custom ipv4 rule 1 protocol tcp" in commands
+        assert (
+            "set system conntrack timeout custom ipv4 rule 1 protocol tcp established 60"
+            in commands
+        )
+        assert (
+            "set system conntrack timeout custom ipv4 rule 1 protocol tcp time-wait 30" in commands
+        )
+        assert (
+            "set system conntrack timeout custom ipv4 rule 1 protocol tcp syn-sent 10" in commands
+        )
 
     def test_udp_rule(self):
         """Test UDP conntrack timeout rule."""
@@ -3657,9 +3664,9 @@ class TestConntrackGenerator:
         gen = ConntrackGenerator(config)
         commands = gen.generate()
 
-        assert "set system conntrack timeout custom rule 1 protocol udp" in commands
-        assert "set system conntrack timeout custom rule 1 protocol udp stream 30" in commands
-        assert "set system conntrack timeout custom rule 1 protocol udp other 10" in commands
+        assert "set system conntrack timeout custom ipv4 rule 1 protocol udp" in commands
+        assert "set system conntrack timeout custom ipv4 rule 1 protocol udp stream 30" in commands
+        assert "set system conntrack timeout custom ipv4 rule 1 protocol udp other 10" in commands
 
     def test_icmp_rule(self):
         """Test ICMP conntrack timeout rule."""
@@ -3674,8 +3681,8 @@ class TestConntrackGenerator:
         gen = ConntrackGenerator(config)
         commands = gen.generate()
 
-        assert "set system conntrack timeout custom rule 1 protocol icmp" in commands
-        assert "set system conntrack timeout custom rule 1 icmp 5" in commands
+        assert "set system conntrack timeout custom ipv4 rule 1 protocol icmp" in commands
+        assert "set system conntrack timeout custom ipv4 rule 1 icmp 5" in commands
 
     def test_multiple_rules(self):
         """Test multiple conntrack timeout rules."""
@@ -3697,14 +3704,23 @@ class TestConntrackGenerator:
         commands = gen.generate()
 
         # Check rule 1 (TCP)
-        assert "set system conntrack timeout custom rule 1 description 'TCP timeout'" in commands
-        assert "set system conntrack timeout custom rule 1 protocol tcp" in commands
-        assert "set system conntrack timeout custom rule 1 protocol tcp established 60" in commands
+        assert (
+            "set system conntrack timeout custom ipv4 rule 1 description 'TCP timeout'"
+            in commands
+        )
+        assert "set system conntrack timeout custom ipv4 rule 1 protocol tcp" in commands
+        assert (
+            "set system conntrack timeout custom ipv4 rule 1 protocol tcp established 60"
+            in commands
+        )
 
         # Check rule 2 (UDP)
-        assert "set system conntrack timeout custom rule 2 description 'UDP timeout'" in commands
-        assert "set system conntrack timeout custom rule 2 protocol udp" in commands
-        assert "set system conntrack timeout custom rule 2 protocol udp stream 30" in commands
+        assert (
+            "set system conntrack timeout custom ipv4 rule 2 description 'UDP timeout'"
+            in commands
+        )
+        assert "set system conntrack timeout custom ipv4 rule 2 protocol udp" in commands
+        assert "set system conntrack timeout custom ipv4 rule 2 protocol udp stream 30" in commands
 
     def test_rule_with_destination_address(self):
         """Test rule with both source and destination addresses."""
@@ -3721,9 +3737,12 @@ class TestConntrackGenerator:
         gen = ConntrackGenerator(config)
         commands = gen.generate()
 
-        assert "set system conntrack timeout custom rule 1 source address 10.60.0.0/14" in commands
         assert (
-            "set system conntrack timeout custom rule 1 destination address 203.0.113.0/24"
+            "set system conntrack timeout custom ipv4 rule 1 source address 10.60.0.0/14"
+            in commands
+        )
+        assert (
+            "set system conntrack timeout custom ipv4 rule 1 destination address 203.0.113.0/24"
             in commands
         )
 

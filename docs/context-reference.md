@@ -635,16 +635,16 @@ CONNTRACK_JSON = jsonencode({
 **Generated VyOS Commands:**
 
 ```
-set system conntrack timeout custom rule 1 description 'IP hopping - short idle timeout'
-set system conntrack timeout custom rule 1 source address 10.60.0.0/14
-set system conntrack timeout custom rule 1 protocol tcp
-set system conntrack timeout custom rule 1 protocol tcp established 60
+set system conntrack timeout custom ipv4 rule 1 description 'IP hopping - short idle timeout'
+set system conntrack timeout custom ipv4 rule 1 source address 10.60.0.0/14
+set system conntrack timeout custom ipv4 rule 1 protocol tcp
+set system conntrack timeout custom ipv4 rule 1 protocol tcp established 60
 
-set system conntrack timeout custom rule 2 description 'Short UDP timeout for game traffic'
-set system conntrack timeout custom rule 2 source address 10.64.0.0/10
-set system conntrack timeout custom rule 2 protocol udp
-set system conntrack timeout custom rule 2 protocol udp stream 30
-set system conntrack timeout custom rule 2 protocol udp other 10
+set system conntrack timeout custom ipv4 rule 2 description 'Short UDP timeout for game traffic'
+set system conntrack timeout custom ipv4 rule 2 source address 10.64.0.0/10
+set system conntrack timeout custom ipv4 rule 2 protocol udp
+set system conntrack timeout custom ipv4 rule 2 protocol udp stream 30
+set system conntrack timeout custom ipv4 rule 2 protocol udp other 10
 ```
 
 **IP Hopping Use Case:**
