@@ -174,6 +174,28 @@ class ValidationResult:
     raw_output: str
 
 
+def _format_called_process_error_output(e: subprocess.CalledProcessError) -> str:
+    """Extract and format stdout/stderr from CalledProcessError.
+    
+    Handles both text (str) and binary (bytes) outputs safely.
+    
+    Args:
+        e: CalledProcessError exception from subprocess
+        
+    Returns:
+        Concatenated stdout and stderr as a string
+    """
+    stdout = e.stdout or ""
+    stderr = e.stderr or ""
+    
+    if isinstance(stdout, bytes):
+        stdout = stdout.decode(errors="replace")
+    if isinstance(stderr, bytes):
+        stderr = stderr.decode(errors="replace")
+    
+    return stdout + stderr
+
+
 def check_interface_ip(
     ssh: Callable[[str], str],
     interface: str,
@@ -211,15 +233,7 @@ def check_interface_ip(
     try:
         output = ssh(f"show interfaces ethernet {interface}")
     except subprocess.CalledProcessError as e:
-        # Capture stdout/stderr from the failed command for debugging
-        # subprocess.run(..., text=True) makes stdout/stderr strings; handle both str and bytes
-        stdout = e.stdout or ""
-        stderr = e.stderr or ""
-        if isinstance(stdout, bytes):
-            stdout = stdout.decode(errors="replace")
-        if isinstance(stderr, bytes):
-            stderr = stderr.decode(errors="replace")
-        raw_output = stdout + stderr
+        raw_output = _format_called_process_error_output(e)
         return ValidationResult(
             passed=False,
             message=f"Failed to query interface {interface} (exit code {e.returncode})",
@@ -288,15 +302,7 @@ def check_hostname(
     try:
         output = ssh("show configuration | grep host-name || echo ''")
     except subprocess.CalledProcessError as e:
-        # Capture stdout/stderr from the failed command for debugging
-        # subprocess.run(..., text=True) makes stdout/stderr strings; handle both str and bytes
-        stdout = e.stdout or ""
-        stderr = e.stderr or ""
-        if isinstance(stdout, bytes):
-            stdout = stdout.decode(errors="replace")
-        if isinstance(stderr, bytes):
-            stderr = stderr.decode(errors="replace")
-        raw_output = stdout + stderr
+        raw_output = _format_called_process_error_output(e)
         return ValidationResult(
             passed=False,
             message=f"Failed to query hostname (exit code {e.returncode})",
@@ -377,15 +383,7 @@ def check_ssh_key_configured(
             "'set system login user vyos authentication public-keys' || echo ''"
         )
     except subprocess.CalledProcessError as e:
-        # Capture stdout/stderr from the failed command for debugging
-        # subprocess.run(..., text=True) makes stdout/stderr strings; handle both str and bytes
-        stdout = e.stdout or ""
-        stderr = e.stderr or ""
-        if isinstance(stdout, bytes):
-            stdout = stdout.decode(errors="replace")
-        if isinstance(stderr, bytes):
-            stderr = stderr.decode(errors="replace")
-        raw_output = stdout + stderr
+        raw_output = _format_called_process_error_output(e)
         return ValidationResult(
             passed=False,
             message=f"Failed to query SSH key configuration (exit code {e.returncode})",

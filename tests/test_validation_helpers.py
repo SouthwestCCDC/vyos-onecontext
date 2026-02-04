@@ -485,7 +485,7 @@ class TestCheckSshKeyConfigured:
         # Simulate subprocess.CalledProcessError with captured output
         error = subprocess.CalledProcessError(
             returncode=2,
-            cmd=["sshpass", "-p", "vyos", "ssh", "vyos@router"],
+            cmd=["sshpass", "-p", "SECRET_PASSWORD_123", "ssh", "vyos@router"],
             output="",
             stderr="Host key verification failed\n"
         )
@@ -496,7 +496,7 @@ class TestCheckSshKeyConfigured:
         assert result.passed is False
         assert "exit code 2" in result.message
         # Should NOT contain the password from the command
-        assert "vyos" not in result.message or "authentication public-keys" in result.message
+        assert "SECRET_PASSWORD_123" not in result.message
         # raw_output should contain stderr for debugging
         assert result.raw_output != ""
 
@@ -1782,7 +1782,7 @@ class TestSshKeyQuoteHandling:
         This is a regression test for the missing closing quote in the regex
         pattern. The pattern should extract 'my-key', not "'my-key'" or "my-key".
         """
-        from tests.validation_helpers import re
+        import re
 
         # Test the actual pattern used in check_ssh_key_configured
         key_pattern = re.compile(
