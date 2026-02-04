@@ -1108,6 +1108,7 @@ class TestCheckVrfExists:
         """Test when VRF exists and no table ID validation requested."""
         mock_ssh = Mock(
             return_value=(
+                "VRF name          state     mac address        flags            interfaces\n"
                 "--------          -----     -----------        -----            ----------\n"
                 "mgmt              up        aa:bb:cc:dd:ee:ff  noarp,master     eth0\n"
             )
