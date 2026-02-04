@@ -5,6 +5,7 @@ command outputs. This allows testing the parsing and validation logic
 without requiring a live VyOS instance.
 """
 
+import subprocess
 from unittest.mock import Mock
 
 from tests.validation_helpers import (
@@ -184,6 +185,27 @@ class TestCheckInterfaceIp:
         assert "192.168.1.2" in result.message
 
 
+    def test_interface_called_process_error(self) -> None:
+        """Test CalledProcessError with captured stdout/stderr."""
+        # Simulate subprocess.CalledProcessError with captured output
+        error = subprocess.CalledProcessError(
+            returncode=255,
+            cmd=["sshpass", "-p", "secret123", "ssh", "vyos@router"],
+            output="Connection refused\n",
+            stderr="ssh: connect to host router port 22: Connection refused\n"
+        )
+        mock_ssh = Mock(side_effect=error)
+
+        result = check_interface_ip(mock_ssh, "eth0", "192.168.1.1")
+
+        assert result.passed is False
+        assert "exit code 255" in result.message
+        assert "eth0" in result.message
+        # Should NOT contain the password from the command
+        assert "secret123" not in result.message
+        # raw_output should contain stdout/stderr for debugging
+        assert result.raw_output != ""
+
 class TestCheckHostname:
     """Test check_hostname helper function."""
 
@@ -270,6 +292,26 @@ class TestCheckHostname:
         assert "invalid" in result.message.lower() or "rfc" in result.message.lower()
         assert "test_router" in result.message  # Full hostname shown, not truncated
 
+
+    def test_hostname_called_process_error(self) -> None:
+        """Test CalledProcessError with captured stdout/stderr."""
+        # Simulate subprocess.CalledProcessError with captured output
+        error = subprocess.CalledProcessError(
+            returncode=1,
+            cmd=["sshpass", "-p", "password", "ssh", "vyos@router"],
+            output="",
+            stderr="Permission denied\n"
+        )
+        mock_ssh = Mock(side_effect=error)
+
+        result = check_hostname(mock_ssh, "test-router")
+
+        assert result.passed is False
+        assert "exit code 1" in result.message
+        # Should NOT contain the password from the command
+        assert "password" not in result.message
+        # raw_output should contain stderr for debugging
+        assert result.raw_output != ""
 
 class TestCheckSshKeyConfigured:
     """Test check_ssh_key_configured helper function."""
@@ -437,6 +479,26 @@ class TestCheckSshKeyConfigured:
         assert "key1" in result.message
         assert "key2" in result.message
 
+
+    def test_ssh_key_called_process_error(self) -> None:
+        """Test CalledProcessError with captured stdout/stderr."""
+        # Simulate subprocess.CalledProcessError with captured output
+        error = subprocess.CalledProcessError(
+            returncode=2,
+            cmd=["sshpass", "-p", "vyos", "ssh", "vyos@router"],
+            output="",
+            stderr="Host key verification failed\n"
+        )
+        mock_ssh = Mock(side_effect=error)
+
+        result = check_ssh_key_configured(mock_ssh)
+
+        assert result.passed is False
+        assert "exit code 2" in result.message
+        # Should NOT contain the password from the command
+        assert "vyos" not in result.message or "authentication public-keys" in result.message
+        # raw_output should contain stderr for debugging
+        assert result.raw_output != ""
 
 class TestCheckOspfEnabled:
     """Test check_ospf_enabled helper function."""
