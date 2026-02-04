@@ -235,6 +235,119 @@ ETH2_MASK="255.255.0.0"
             parse_context(str(context_file))
 
 
+class TestManagementInterface:
+    """Tests for management interface configuration."""
+
+    def test_mgt_iface_sets_management_flag(self, tmp_path: Path) -> None:
+        """Test that MGT_IFACE sets management flag on specified interface."""
+        context_file = tmp_path / "one_env"
+        content = """MGT_IFACE="eth0"
+ETH0_IP="10.0.1.1"
+ETH0_MASK="255.255.255.0"
+ETH1_IP="192.168.1.1"
+ETH1_MASK="255.255.255.0"
+"""
+        context_file.write_text(content)
+
+        config = parse_context(str(context_file))
+
+        assert len(config.interfaces) == 2
+        assert config.interfaces[0].name == "eth0"
+        assert config.interfaces[0].management is True
+        assert config.interfaces[1].name == "eth1"
+        assert config.interfaces[1].management is False
+
+    def test_mgt_iface_different_interface(self, tmp_path: Path) -> None:
+        """Test that MGT_IFACE works on non-eth0 interface."""
+        context_file = tmp_path / "one_env"
+        content = """MGT_IFACE="eth1"
+ETH0_IP="10.0.1.1"
+ETH0_MASK="255.255.255.0"
+ETH1_IP="192.168.1.1"
+ETH1_MASK="255.255.255.0"
+"""
+        context_file.write_text(content)
+
+        config = parse_context(str(context_file))
+
+        assert len(config.interfaces) == 2
+        assert config.interfaces[0].name == "eth0"
+        assert config.interfaces[0].management is False
+        assert config.interfaces[1].name == "eth1"
+        assert config.interfaces[1].management is True
+
+    def test_mgt_iface_and_vrouter_management_conflict(self, tmp_path: Path) -> None:
+        """Test that using both MGT_IFACE and ETHx_VROUTER_MANAGEMENT raises error."""
+        context_file = tmp_path / "one_env"
+        content = """MGT_IFACE="eth0"
+ETH0_IP="10.0.1.1"
+ETH0_MASK="255.255.255.0"
+ETH0_VROUTER_MANAGEMENT="YES"
+"""
+        context_file.write_text(content)
+
+        with pytest.raises(
+            ValueError,
+            match="Cannot use both MGT_IFACE.*and ETH0_VROUTER_MANAGEMENT=YES",
+        ):
+            parse_context(str(context_file))
+
+    def test_mgt_iface_conflict_with_different_interface(self, tmp_path: Path) -> None:
+        """Test conflict when MGT_IFACE and VROUTER_MANAGEMENT target different interfaces."""
+        context_file = tmp_path / "one_env"
+        content = """MGT_IFACE="eth0"
+ETH0_IP="10.0.1.1"
+ETH0_MASK="255.255.255.0"
+ETH1_IP="192.168.1.1"
+ETH1_MASK="255.255.255.0"
+ETH1_VROUTER_MANAGEMENT="YES"
+"""
+        context_file.write_text(content)
+
+        with pytest.raises(
+            ValueError,
+            match="Cannot use both MGT_IFACE.*and ETH1_VROUTER_MANAGEMENT=YES",
+        ):
+            parse_context(str(context_file))
+
+    def test_vrouter_management_still_works(self, tmp_path: Path) -> None:
+        """Test that ETHx_VROUTER_MANAGEMENT still works without MGT_IFACE."""
+        context_file = tmp_path / "one_env"
+        content = """ETH0_IP="10.0.1.1"
+ETH0_MASK="255.255.255.0"
+ETH0_VROUTER_MANAGEMENT="YES"
+ETH1_IP="192.168.1.1"
+ETH1_MASK="255.255.255.0"
+"""
+        context_file.write_text(content)
+
+        config = parse_context(str(context_file))
+
+        assert len(config.interfaces) == 2
+        assert config.interfaces[0].name == "eth0"
+        assert config.interfaces[0].management is True
+        assert config.interfaces[1].name == "eth1"
+        assert config.interfaces[1].management is False
+
+    def test_mgt_iface_no_match(self, tmp_path: Path) -> None:
+        """Test that MGT_IFACE with no matching interface doesn't cause errors."""
+        context_file = tmp_path / "one_env"
+        content = """MGT_IFACE="eth2"
+ETH0_IP="10.0.1.1"
+ETH0_MASK="255.255.255.0"
+ETH1_IP="192.168.1.1"
+ETH1_MASK="255.255.255.0"
+"""
+        context_file.write_text(content)
+
+        config = parse_context(str(context_file))
+
+        # Should parse successfully, just no interface gets management flag
+        assert len(config.interfaces) == 2
+        assert config.interfaces[0].management is False
+        assert config.interfaces[1].management is False
+
+
 class TestAliasParsing:
     """Tests for alias parsing."""
 
