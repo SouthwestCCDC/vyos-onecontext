@@ -522,6 +522,32 @@ FIREWALL_JSON='{json.dumps(firewall_data)}'
         assert "GAME" in config.firewall.groups.network
         assert "WAN" in config.firewall.zones
 
+    def test_conntrack_json(self, tmp_path: Path) -> None:
+        """Test CONNTRACK_JSON parsing."""
+        context_file = tmp_path / "one_env"
+        conntrack_data = {
+            "timeout_rules": [
+                {
+                    "description": "IP hopping - short idle timeout",
+                    "source_address": "10.60.0.0/14",
+                    "protocol": "tcp",
+                    "tcp_established": 60,
+                }
+            ]
+        }
+        # Need interface to satisfy RouterConfig validation
+        content = f"""ETH0_IP="10.0.1.1"
+ETH0_MASK="255.255.255.0"
+CONNTRACK_JSON='{json.dumps(conntrack_data)}'
+"""
+        context_file.write_text(content)
+
+        config = parse_context(str(context_file))
+
+        assert config.conntrack is not None
+        assert len(config.conntrack.timeout_rules) == 1
+        assert config.conntrack.timeout_rules[0].protocol == "tcp"
+
     def test_malformed_json(self, tmp_path: Path) -> None:
         """Test that malformed JSON raises error."""
         context_file = tmp_path / "one_env"
