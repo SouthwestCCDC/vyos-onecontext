@@ -99,7 +99,7 @@ class ConntrackTimeoutRule(BaseModel):
             if not any(getattr(self, field) is not None for field in udp_fields):
                 raise ValueError("At least one UDP timeout field must be set")
         elif self.protocol == "icmp" and self.icmp_timeout is None:
-            raise ValueError("ICMP timeout field must be set for ICMP protocol")
+            raise ValueError("ICMP timeout field must be set")
 
         return self
 
