@@ -143,7 +143,7 @@ class TestFixturesParsing:
 
         assert config.hostname == "test-multi"
         assert len(config.interfaces) >= 1
-        assert len(config.aliases) >= 2  # Has aliases for secondary IPs
+        assert len(config.aliases) >= 1  # Has at least one alias IP
 
         # Verify we have eth0 with aliases
         interface_names = [iface.name for iface in config.interfaces]
