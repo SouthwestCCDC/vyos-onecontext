@@ -1595,7 +1595,8 @@ def check_dhcp_server_running(
 
     # Check if DHCP server is listening on any interfaces
     # Look for "DHCP server listening on:" or "Pool:" in output
-    if "listening on:" in output.lower() or "Pool:" in output:
+    output_lower = output.lower()
+    if "listening on:" in output_lower or "pool:" in output_lower:
         return ValidationResult(
             passed=True,
             message="DHCP server is running",
@@ -1645,7 +1646,7 @@ def check_dhcp_pool(
         ValidationResult indicating whether DHCP pool exists and matches expectations
     """
     try:
-        output = ssh("show configuration commands | grep dhcp-server")
+        output = ssh("show configuration commands | grep dhcp-server || echo ''")
     except Exception as e:
         return ValidationResult(
             passed=False,
@@ -1720,7 +1721,7 @@ def check_dhcp_options(
         ValidationResult indicating whether DHCP options match expectations
     """
     try:
-        output = ssh("show configuration commands | grep dhcp-server")
+        output = ssh("show configuration commands | grep dhcp-server || echo ''")
     except Exception as e:
         return ValidationResult(
             passed=False,

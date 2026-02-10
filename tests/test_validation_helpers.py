@@ -2009,7 +2009,9 @@ class TestCheckDhcpPool:
         assert "exists with subnet" in result.message
         assert "dhcp-eth1" in result.message
         assert "10.1.1.0/24" in result.message
-        mock_ssh.assert_called_once_with("show configuration commands | grep dhcp-server")
+        mock_ssh.assert_called_once_with(
+            "show configuration commands | grep dhcp-server || echo ''"
+        )
 
     def test_dhcp_pool_exists_without_subnet_check(self) -> None:
         """Test when checking pool exists without specific subnet."""
@@ -2111,7 +2113,9 @@ class TestCheckDhcpOptions:
         assert "dhcp-eth1" in result.message
         assert "default-router=10.1.1.1" in result.message
         assert "dns=10.63.4.101,8.8.8.8" in result.message
-        mock_ssh.assert_called_once_with("show configuration commands | grep dhcp-server")
+        mock_ssh.assert_called_once_with(
+            "show configuration commands | grep dhcp-server || echo ''"
+        )
 
     def test_dhcp_options_only_router(self) -> None:
         """Test when checking only default-router."""
