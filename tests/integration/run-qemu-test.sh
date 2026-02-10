@@ -328,7 +328,7 @@ case "$CONTEXT_NAME" in
     multi-interface)
         assert_command_generated "set system host-name" "Hostname configuration"
         assert_command_generated "set interfaces ethernet eth0 address.*192.168.122.30" "Primary IP (192.168.122.30)"
-        # Verify alias IPs are configured (secondary addresses on eth0)
+        # Verify alias IP is configured (secondary address on eth0)
         assert_command_generated "set interfaces ethernet eth0 address.*192.168.122.31" "Alias IP (192.168.122.31)"
         ;;
     management-vrf)

@@ -193,6 +193,8 @@ def _format_called_process_error_output(e: subprocess.CalledProcessError) -> str
     if isinstance(stderr, bytes):
         stderr = stderr.decode(errors="replace")
 
+    if stdout and stderr:
+        return stdout + "\n" + stderr
     return stdout + stderr
 
 
@@ -282,10 +284,11 @@ def check_hostname(
     ssh: Callable[[str], str],
     expected: str,
 ) -> ValidationResult:
-    """Verify system hostname matches expected value.
+    """Verify system hostname matches expected value and is RFC 1123 compliant.
 
-    This function queries the VyOS configuration for the hostname setting
-    and validates it matches the expected value.
+    This function queries the VyOS configuration for the hostname setting,
+    validates it against RFC 1123 (alphanumeric + hyphens, 1-63 chars),
+    and checks it matches the expected value.
 
     VyOS Output Format:
         show configuration | grep host-name
