@@ -10,6 +10,12 @@ set -euo pipefail
 
 CONTEXT_FILE="${1:?Context file path required}"
 
+# Check for required dependencies
+if ! command -v sshpass >/dev/null 2>&1; then
+    echo "ERROR: sshpass is required but not found" >&2
+    exit 1
+fi
+
 # SSH configuration should be exported by the calling script
 if [ -z "${SSH_PORT:-}" ] || [ -z "${SSH_USER:-}" ] || [ -z "${SSH_HOST:-}" ]; then
     echo "ERROR: SSH configuration not set" >&2
@@ -73,25 +79,31 @@ fi
 APPLY_EOF
 )
 
-if ssh_command "bash -s -- $REMOTE_CONTEXT" <<< "$APPLY_SCRIPT" 2>&1 | tee /tmp/apply-output.log; then
-    if grep -q "APPLY_COMPLETE" /tmp/apply-output.log; then
+# Use unique temp file to avoid clobbering across concurrent runs
+APPLY_LOG=$(mktemp)
+
+if ssh_command "bash -s -- $REMOTE_CONTEXT" <<< "$APPLY_SCRIPT" 2>&1 | tee "$APPLY_LOG"; then
+    if grep -q "APPLY_COMPLETE" "$APPLY_LOG"; then
         echo "[PASS] Configuration applied successfully"
-        
-        # Clean up remote context file
+
+        # Clean up remote context file and local log
         ssh_command "rm -f $REMOTE_CONTEXT" || true
-        
-        return 0
+        rm -f "$APPLY_LOG"
+
+        exit 0
     else
         echo "[FAIL] Configuration application did not complete"
-        cat /tmp/apply-output.log
-        return 1
+        cat "$APPLY_LOG"
+        rm -f "$APPLY_LOG"
+        exit 1
     fi
 else
     EXIT_CODE=$?
     echo "[FAIL] Configuration application failed with exit code $EXIT_CODE"
-    cat /tmp/apply-output.log
-    
+    cat "$APPLY_LOG"
+    rm -f "$APPLY_LOG"
+
     # For error scenarios, exit code 1 might be expected
     # Let the calling script decide how to handle this
-    return $EXIT_CODE
+    exit $EXIT_CODE
 fi

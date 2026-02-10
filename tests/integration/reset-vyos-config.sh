@@ -1,10 +1,9 @@
-#!/bin/bash
 # Reset VyOS configuration to clean state
 #
 # This script removes all user-configured sections while preserving
 # system basics needed for SSH connectivity.
 #
-# Usage: reset-vyos-config.sh
+# Usage: source reset-vyos-config.sh
 
 # NOTE: Do not modify shell options here; this script is intended to be sourced.
 

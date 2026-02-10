@@ -231,8 +231,8 @@ echo "RESET_COMPLETE"
 RESET_EOF
 )
 
-    # Execute reset script via SSH
-    if ssh_command "sudo /bin/vbash -c '$RESET_SCRIPT'" 2>&1 | tee /tmp/reset-output.log; then
+    # Execute reset script via SSH - send script over stdin to avoid quoting issues
+    if ssh_command "sudo /bin/vbash -s" <<< "$RESET_SCRIPT" 2>&1 | tee /tmp/reset-output.log; then
         if grep -q "RESET_COMPLETE" /tmp/reset-output.log; then
             echo "[PASS] Configuration reset completed"
             return 0
