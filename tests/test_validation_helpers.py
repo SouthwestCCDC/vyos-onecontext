@@ -1582,6 +1582,10 @@ class TestCheckServiceVrf:
         assert result.passed is False
         assert "cannot parse VRF name" in result.message
 
+
+class TestCheckDnatRule:
+    """Test check_dnat_rule helper function."""
+
     def test_dnat_rule_translation_port_unquoted(self) -> None:
         """Test DNAT rule with unquoted translation port."""
         mock_ssh = Mock(
