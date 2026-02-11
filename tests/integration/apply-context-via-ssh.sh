@@ -94,13 +94,20 @@ if ssh_command "bash -s -- $REMOTE_CONTEXT" <<< "$APPLY_SCRIPT" 2>&1 | tee "$APP
     else
         echo "[FAIL] Configuration application did not complete"
         cat "$APPLY_LOG"
+
+        # Clean up remote context file and local log
+        ssh_command "rm -f $REMOTE_CONTEXT" || true
         rm -f "$APPLY_LOG"
+
         exit 1
     fi
 else
     EXIT_CODE=$?
     echo "[FAIL] Configuration application failed with exit code $EXIT_CODE"
     cat "$APPLY_LOG"
+
+    # Clean up remote context file and local log
+    ssh_command "rm -f $REMOTE_CONTEXT" || true
     rm -f "$APPLY_LOG"
 
     # For error scenarios, exit code 1 might be expected

@@ -126,27 +126,34 @@ TIMEOUT=180
 
 while true; do
     ELAPSED=$(($(date +%s) - START_TIME))
-    
+
     if [ $ELAPSED -ge $TIMEOUT ]; then
         echo "ERROR: Timeout waiting for initial boot"
         echo "=== Serial log ==="
         cat "$SERIAL_LOG" || echo "No serial log available"
         exit 1
     fi
-    
+
     if ! kill -0 "$QEMU_PID" 2>/dev/null; then
         echo "ERROR: QEMU process died unexpectedly"
         echo "=== Serial log ==="
         cat "$SERIAL_LOG" || echo "No serial log available"
         exit 1
     fi
-    
-    # Check for bootstrap contextualization completion
-    if [ -f "$SERIAL_LOG" ] && grep -q "vyos-onecontext.*completed successfully" "$SERIAL_LOG" 2>/dev/null; then
-        echo "[PASS] Bootstrap contextualization completed"
-        break
+
+    # Check for bootstrap contextualization completion or failure
+    if [ -f "$SERIAL_LOG" ]; then
+        if grep -q "vyos-onecontext.*completed successfully" "$SERIAL_LOG" 2>/dev/null; then
+            echo "[PASS] Bootstrap contextualization completed"
+            break
+        elif grep -q "vyos-onecontext.*failed" "$SERIAL_LOG" 2>/dev/null; then
+            echo "ERROR: Bootstrap contextualization failed"
+            echo "=== Serial log ==="
+            cat "$SERIAL_LOG"
+            exit 1
+        fi
     fi
-    
+
     sleep 2
 done
 

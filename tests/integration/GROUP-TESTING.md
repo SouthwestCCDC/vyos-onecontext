@@ -25,9 +25,8 @@ See [Design Document](../../docs/optimization/combine-test-scenarios-design.md) 
 
 ### Core Scripts
 
-- `run-qemu-group-test.sh` - Main group test runner
+- `run-qemu-group-test.sh` - Main group test runner (includes inline config reset function)
 - `apply-context-via-ssh.sh` - Apply context configuration to running VM
-- `reset-vyos-config.sh` - Reset VyOS config to clean state between tests
 
 ### Test Scripts
 
