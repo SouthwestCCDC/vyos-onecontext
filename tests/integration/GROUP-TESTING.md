@@ -166,13 +166,17 @@ Each test gets a clean configuration state:
 
 ### VM Boot Issues
 
-Check serial log:
+Check serial log (path is printed at test startup):
 ```bash
+# The serial log is under the per-run temp directory
+# Example path: /tmp/tmp.XXXXXX/serial.log
+# Look for the "Serial log: /tmp/tmp.XXXXXX/serial.log" line in test output
+
 # Look for contextualization errors
-grep "vyos-onecontext" /tmp/serial.log
+grep "vyos-onecontext" /tmp/tmp.XXXXXX/serial.log
 
 # Check for boot failures
-grep "ERROR\|FAIL" /tmp/serial.log
+grep "ERROR\|FAIL" /tmp/tmp.XXXXXX/serial.log
 ```
 
 ### SSH Connection Issues

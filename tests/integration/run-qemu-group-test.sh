@@ -200,7 +200,11 @@ sleep 2
 
 # Function to reset VyOS configuration (extracted from reset-vyos-config.sh)
 reset_vyos_config() {
+    local fixture_num="${1:-unknown}"
     echo "Resetting VyOS configuration to clean state..."
+
+    # Use per-run log file under test temp directory
+    local RESET_LOG="$TEST_DIR/reset-output-${fixture_num}.log"
 
     # Build reset commands as a multi-line script
     RESET_SCRIPT=$(cat <<'RESET_EOF'
@@ -211,8 +215,15 @@ source /opt/vyatta/etc/functions/script-template
 configure
 
 # Delete user-configured sections (preserve system basics)
-# Note: We keep system login, ssh, and eth0 address/DHCP for connectivity
+# Note: We keep system login, ssh, and eth0 connectivity
+# First delete all eth0 addresses (prevents IP state leakage from previous tests)
+delete interfaces ethernet eth0 address
 delete interfaces ethernet eth0 vrf
+
+# Re-apply the management IP address for SSH connectivity
+set interfaces ethernet eth0 address '192.168.122.99/24'
+
+# Delete other user configurations
 delete protocols
 delete nat
 delete service dhcp-server
@@ -232,8 +243,8 @@ RESET_EOF
 )
 
     # Execute reset script via SSH - send script over stdin to avoid quoting issues
-    if ssh_command "sudo /bin/vbash -s" <<< "$RESET_SCRIPT" 2>&1 | tee /tmp/reset-output.log; then
-        if grep -q "RESET_COMPLETE" /tmp/reset-output.log; then
+    if ssh_command "sudo /bin/vbash -s" <<< "$RESET_SCRIPT" 2>&1 | tee "$RESET_LOG"; then
+        if grep -q "RESET_COMPLETE" "$RESET_LOG"; then
             echo "[PASS] Configuration reset completed"
             return 0
         else
@@ -242,7 +253,7 @@ RESET_EOF
         fi
     else
         echo "[FAIL] Configuration reset failed"
-        cat /tmp/reset-output.log
+        cat "$RESET_LOG"
         return 1
     fi
 }
@@ -290,7 +301,7 @@ for i in "${!FIXTURES[@]}"; do
     if [ $fixture_num -lt $TOTAL_TESTS ]; then
         echo ""
         echo "Resetting configuration for next test..."
-        if reset_vyos_config; then
+        if reset_vyos_config "$fixture_num"; then
             echo "[PASS] Configuration reset"
         else
             echo "[WARN] Configuration reset failed - next test may be affected"
