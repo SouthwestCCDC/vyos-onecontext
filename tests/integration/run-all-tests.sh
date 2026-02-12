@@ -3,21 +3,36 @@
 #
 # This script runs all test scenarios with different context files.
 #
-# Usage: run-all-tests.sh <vyos-image.qcow2> [fixtures...]
+# Usage: run-all-tests.sh [--grouped] <vyos-image.qcow2> [fixtures...]
 #
 # Arguments:
+#   --grouped:        Use grouped test runner (multiple fixtures per VM boot)
 #   vyos-image.qcow2: Path to VyOS image
 #   fixtures...:      Optional list of specific fixtures to run (without .env)
 #                     If "all" or no fixtures specified, runs all fixtures
 #                     Example: run-all-tests.sh vyos.qcow2 simple dhcp nat-full
+#                     Example: run-all-tests.sh --grouped vyos.qcow2 all
 
 set -euo pipefail
+
+# Parse --grouped flag
+USE_GROUPED=0
+if [ "${1:-}" = "--grouped" ]; then
+    USE_GROUPED=1
+    shift
+fi
 
 VYOS_IMAGE="${1:?VyOS image path required}"
 shift  # Remove first argument, leaving optional fixture list
 SELECTED_FIXTURES=("$@")  # Remaining arguments are fixture names
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# If --grouped flag is set, delegate to run-grouped-tests.sh
+if [ $USE_GROUPED -eq 1 ]; then
+    echo "Using grouped test runner (multiple fixtures per VM boot)"
+    exec "$SCRIPT_DIR/run-grouped-tests.sh" "$VYOS_IMAGE" "${SELECTED_FIXTURES[@]}"
+fi
 
 # Validate VyOS image exists
 if [ ! -f "$VYOS_IMAGE" ]; then

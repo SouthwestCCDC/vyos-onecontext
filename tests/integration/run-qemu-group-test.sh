@@ -12,6 +12,11 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Source shared validation library
+# shellcheck source=tests/integration/lib/validate-fixture.sh
+source "$SCRIPT_DIR/lib/validate-fixture.sh"
+
 VYOS_IMAGE="${1:?VyOS image path required}"
 GROUP_NAME="${2:?Group name required}"
 shift 2  # Remove first two arguments
@@ -167,7 +172,7 @@ if ! command -v sshpass >/dev/null 2>&1; then
 fi
 
 SSH_TIMEOUT=60
-SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=5"
+SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=5 -o ServerAliveInterval=10 -o ServerAliveCountMax=3"
 SSH_USER="vyos"
 SSH_PASSWORD="vyos"
 SSH_HOST="localhost"
@@ -178,9 +183,11 @@ ssh_command() {
     sshpass -p "$SSH_PASSWORD" ssh $SSH_OPTS -p "$SSH_PORT" "${SSH_USER}@${SSH_HOST}" "$@"
 }
 
-# Export SSH config for helper scripts
+# Export SSH config for helper scripts and validation library
 export SSH_PORT SSH_OPTS SSH_USER SSH_HOST SSH_PASSWORD
 export -f ssh_command
+SSH_AVAILABLE=1
+export SSH_AVAILABLE
 
 # Wait for SSH to become available
 echo "Waiting for SSH to become ready (timeout: ${SSH_TIMEOUT}s)..."
@@ -218,19 +225,12 @@ reset_vyos_config() {
 #!/bin/vbash
 source /opt/vyatta/etc/functions/script-template
 
-# Enter configuration mode
+# Clean up any stale config session first
+/opt/vyatta/sbin/vyatta-cfg-cmd-wrapper end 2>/dev/null || true
+
 configure
 
-# Delete user-configured sections (preserve system basics)
-# Note: We keep system login, ssh, and eth0 connectivity
-# First delete all eth0 addresses (prevents IP state leakage from previous tests)
-delete interfaces ethernet eth0 address
-delete interfaces ethernet eth0 vrf
-
-# Re-apply the management IP address for SSH connectivity
-set interfaces ethernet eth0 address '192.168.122.99/24'
-
-# Delete other user configurations
+# Delete user-configured sections but preserve eth0 management connectivity
 delete protocols
 delete nat
 delete service dhcp-server
@@ -239,10 +239,7 @@ delete firewall
 delete vrf
 delete policy
 
-# Commit the clean state
 commit
-
-# Exit configuration mode
 exit
 
 echo "RESET_COMPLETE"
@@ -250,9 +247,14 @@ RESET_EOF
 )
 
     # Execute reset script via SSH - send script over stdin to avoid quoting issues
-    if ssh_command "sudo /bin/vbash -s" <<< "$RESET_SCRIPT" 2>&1 | tee "$RESET_LOG"; then
+    # Use timeout to prevent hanging on stale session prompts
+    if timeout 30 bash -c 'sshpass -p "$SSH_PASSWORD" ssh $SSH_OPTS -p "$SSH_PORT" "${SSH_USER}@${SSH_HOST}" "sudo /bin/vbash -s"' <<< "$RESET_SCRIPT" 2>&1 | tee "$RESET_LOG"; then
         if grep -q "RESET_COMPLETE" "$RESET_LOG"; then
             echo "[PASS] Configuration reset completed"
+
+            # Clean up start-script artifacts that may have been created
+            ssh_command "rm -f /tmp/start-script-marker" 2>/dev/null || true
+
             return 0
         else
             echo "[FAIL] Configuration reset did not complete properly"
@@ -279,31 +281,129 @@ FAILED_FIXTURES=()
 for i in "${!FIXTURES[@]}"; do
     fixture="${FIXTURES[$i]}"
     fixture_num=$((i + 1))
-    
+    CONTEXT_NAME="$fixture"  # Set context name for validation functions
+
     echo ""
     echo "========================================"
     echo "Test $fixture_num/$TOTAL_TESTS: $fixture"
     echo "========================================"
-    
+
     CONTEXT_FILE="$SCRIPT_DIR/contexts/${fixture}.env"
-    
-    # Apply the context configuration
-    echo "Applying configuration..."
-    if "$SCRIPT_DIR/apply-context-via-ssh.sh" "$CONTEXT_FILE"; then
-        echo "[PASS] Configuration applied"
-        
-        # TODO: Run validation assertions from original test
-        # For now, we just check that application succeeded
-        
-        ((PASSED++)) || true
-    else
-        echo "[FAIL] Configuration application failed"
-        FAILED_FIXTURES+=("$fixture")
-        ((FAILED++)) || true
-        
-        # Continue with other tests even if one fails
+
+    # Record serial log offset before applying context
+    # This allows validation to search only the new log entries
+    # Use 1-indexed offset so `tail -c +N` starts after the current end of file
+    SERIAL_LOG_OFFSET=$(( $(wc -c < "$SERIAL_LOG") + 1 ))
+    export SERIAL_LOG_OFFSET
+
+    # Apply the context configuration via SSH
+    echo "Applying configuration via SSH..."
+    if ! "$SCRIPT_DIR/apply-context-via-ssh.sh" "$CONTEXT_FILE"; then
+        # For error scenarios, exit code 1 is expected
+        case "$fixture" in
+            invalid-json|missing-required-fields|partial-valid)
+                echo "[INFO] Configuration application completed with expected errors"
+                echo "      This is expected for error scenario '$fixture'"
+                ;;
+            *)
+                echo "[FAIL] Configuration application failed unexpectedly"
+                FAILED_FIXTURES+=("$fixture")
+                ((FAILED++)) || true
+
+                # Skip validation for failed application
+                # Reset configuration for next test (skip reset after last test)
+                if [ $fixture_num -lt $TOTAL_TESTS ]; then
+                    echo ""
+                    echo "Resetting configuration for next test..."
+                    reset_vyos_config "$fixture_num" || echo "[WARN] Reset failed"
+                fi
+                continue
+                ;;
+        esac
     fi
-    
+
+    # Wait for contextualization to complete
+    # Check serial log (from offset) for completion markers
+    echo "Waiting for contextualization to complete..."
+    APPLY_START_TIME=$(date +%s)
+    APPLY_TIMEOUT=60
+    APPLY_COMPLETED=0
+
+    while true; do
+        APPLY_ELAPSED=$(($(date +%s) - APPLY_START_TIME))
+
+        if [ $APPLY_ELAPSED -ge $APPLY_TIMEOUT ]; then
+            echo "[FAIL] Timeout waiting for contextualization to complete"
+            FAILED_FIXTURES+=("$fixture")
+            ((FAILED++)) || true
+            break
+        fi
+
+        # Check serial log from offset for completion
+        if tail -c +${SERIAL_LOG_OFFSET} "$SERIAL_LOG" | grep -q "vyos-onecontext.*completed successfully" 2>/dev/null; then
+            echo "[PASS] Contextualization completed successfully"
+            APPLY_COMPLETED=1
+            break
+        elif tail -c +${SERIAL_LOG_OFFSET} "$SERIAL_LOG" | grep -q "vyos-onecontext.*failed with exit code 1" 2>/dev/null; then
+            # Exit code 1 is acceptable for error scenarios
+            case "$fixture" in
+                invalid-json|missing-required-fields|partial-valid)
+                    echo "[INFO] Contextualization completed with expected errors (exit code 1)"
+                    echo "      This is expected for error scenario '$fixture'"
+                    APPLY_COMPLETED=1
+                    break
+                    ;;
+                *)
+                    echo "[FAIL] Contextualization failed with exit code 1"
+                    FAILED_FIXTURES+=("$fixture")
+                    ((FAILED++)) || true
+                    break
+                    ;;
+            esac
+        elif tail -c +${SERIAL_LOG_OFFSET} "$SERIAL_LOG" | grep -q "vyos-onecontext.*failed" 2>/dev/null; then
+            echo "[FAIL] Contextualization failed"
+            FAILED_FIXTURES+=("$fixture")
+            ((FAILED++)) || true
+            break
+        fi
+
+        sleep 2
+    done
+
+    # Run validation if contextualization completed
+    if [ $APPLY_COMPLETED -eq 1 ]; then
+        echo ""
+        echo "=== Validation ==="
+
+        # Initialize validation state for this fixture
+        VALIDATION_FAILED=0
+
+        # Run common validation markers (with offset)
+        validate_common_markers "$SERIAL_LOG" "$CONTEXT_NAME"
+
+        # Run fixture-specific assertions (with offset)
+        validate_fixture_assertions "$CONTEXT_NAME"
+
+        # Run pytest SSH integration tests
+        REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+        run_pytest_ssh_tests "$REPO_ROOT"
+
+        # Check validation results
+        if [ $VALIDATION_FAILED -eq 0 ]; then
+            echo ""
+            echo "[PASS] All validation checks passed for $fixture"
+            ((PASSED++)) || true
+        else
+            echo ""
+            echo "[FAIL] Validation failed for $fixture"
+            echo ""
+            echo "=== Serial log (from offset $SERIAL_LOG_OFFSET) ==="
+            tail -c +${SERIAL_LOG_OFFSET} "$SERIAL_LOG"
+            FAILED_FIXTURES+=("$fixture")
+            ((FAILED++)) || true
+        fi
+    fi
+
     # Reset configuration for next test (skip reset after last test)
     if [ $fixture_num -lt $TOTAL_TESTS ]; then
         echo ""
@@ -314,7 +414,7 @@ for i in "${!FIXTURES[@]}"; do
             echo "[WARN] Configuration reset failed - next test may be affected"
         fi
     fi
-    
+
     echo ""
 done
 
@@ -334,6 +434,9 @@ if [ $FAILED -gt 0 ]; then
 fi
 
 echo ""
+
+# Emit machine-readable summary for dispatcher
+echo "GROUP_SUMMARY:PASSED=$PASSED:FAILED=$FAILED"
 
 if [ $FAILED -eq 0 ]; then
     echo "[PASS] All tests in group passed!"
