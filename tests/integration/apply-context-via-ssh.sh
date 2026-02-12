@@ -67,14 +67,32 @@ CONTEXT_FILE="$1"
 sudo mkdir -p /var/run/one-context
 sudo cp "$CONTEXT_FILE" /var/run/one-context/one_env
 
-# Run contextualization via sg vyattacfg (same as VyOS boot process)
-# The vyos user already has vyattacfg group membership on VyOS systems
-# Using sg instead of sudo ensures the boot script's internal sg call works correctly
-if sg vyattacfg -c '/opt/vyos-onecontext/boot.sh' 2>&1; then
+# Clean up any stale config session from initial boot
+# This is critical when re-applying context to a running VM
+sg vyattacfg -c '/opt/vyatta/sbin/vyatta-cfg-cmd-wrapper end' 2>/dev/null || true
+
+# Run the Python module directly (bypass boot.sh)
+# This shows the actual Python output (including any VyOS config errors) in the SSH session
+# Run with verbose flag to get detailed logging
+OUTPUT=$(sg vyattacfg -c '/opt/vyos-onecontext/venv/bin/python -m vyos_onecontext -v /var/run/one-context/one_env' 2>&1) || EXIT_CODE=$?
+EXIT_CODE=${EXIT_CODE:-0}
+
+# Echo output to stdout for debugging
+echo "$OUTPUT"
+
+# Write each line to serial port for validation assertions
+# Use sudo to write to /dev/ttyS0 (serial port requires elevated permissions)
+echo "$OUTPUT" | while IFS= read -r line; do
+    sudo sh -c "echo 'vyos-onecontext: $line' > /dev/ttyS0" 2>/dev/null || true
+done
+
+# Write completion/failure markers to serial port (matching what boot.sh normally writes)
+if [ $EXIT_CODE -eq 0 ]; then
+    sudo sh -c "echo 'vyos-onecontext: Contextualization completed successfully' > /dev/ttyS0" 2>/dev/null || true
     echo "APPLY_COMPLETE"
     exit 0
 else
-    EXIT_CODE=$?
+    sudo sh -c "echo 'vyos-onecontext: Contextualization failed with exit code $EXIT_CODE' > /dev/ttyS0" 2>/dev/null || true
     echo "APPLY_FAILED: exit code $EXIT_CODE"
     exit $EXIT_CODE
 fi

@@ -225,6 +225,9 @@ reset_vyos_config() {
 #!/bin/vbash
 source /opt/vyatta/etc/functions/script-template
 
+# Clean up any stale config session first
+/opt/vyatta/sbin/vyatta-cfg-cmd-wrapper end 2>/dev/null || true
+
 # Enter configuration mode
 configure
 
@@ -257,7 +260,8 @@ RESET_EOF
 )
 
     # Execute reset script via SSH - send script over stdin to avoid quoting issues
-    if ssh_command "sudo /bin/vbash -s" <<< "$RESET_SCRIPT" 2>&1 | tee "$RESET_LOG"; then
+    # Use timeout to prevent hanging on stale session prompts
+    if timeout 30 bash -c 'sshpass -p "$SSH_PASSWORD" ssh $SSH_OPTS -p "$SSH_PORT" "${SSH_USER}@${SSH_HOST}" "sudo /bin/vbash -s"' <<< "$RESET_SCRIPT" 2>&1 | tee "$RESET_LOG"; then
         if grep -q "RESET_COMPLETE" "$RESET_LOG"; then
             echo "[PASS] Configuration reset completed"
 
@@ -275,6 +279,19 @@ RESET_EOF
         return 1
     fi
 }
+
+# Reset initial bootstrap configuration before running tests
+echo ""
+echo "========================================"
+echo "  Initial Configuration Reset"
+echo "========================================"
+echo "Resetting bootstrap configuration to clean state..."
+if reset_vyos_config "bootstrap"; then
+    echo "[PASS] Initial configuration reset completed"
+else
+    echo "[FAIL] Initial configuration reset failed - tests may be affected"
+    # Continue anyway - some tests may still work
+fi
 
 echo ""
 echo "========================================"
