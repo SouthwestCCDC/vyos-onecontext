@@ -1938,7 +1938,7 @@ class TestCheckDhcpServerRunning:
 
         assert result.passed is True
         assert "DHCP server is running" in result.message
-        mock_ssh.assert_called_once_with("show service dhcp-server")
+        mock_ssh.assert_called_once_with("show service dhcp-server || echo ''")
 
     def test_dhcp_server_with_pool_only(self) -> None:
         """Test when output contains Pool information."""

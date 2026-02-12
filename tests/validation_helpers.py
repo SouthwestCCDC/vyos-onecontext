@@ -1585,7 +1585,7 @@ def check_dhcp_server_running(
         ValidationResult indicating whether DHCP server is running
     """
     try:
-        output = ssh("show service dhcp-server")
+        output = ssh("show service dhcp-server || echo ''")
     except Exception as e:
         return ValidationResult(
             passed=False,
