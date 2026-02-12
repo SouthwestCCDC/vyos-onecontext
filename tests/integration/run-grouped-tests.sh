@@ -124,10 +124,12 @@ for i in "${!GROUPS_TO_RUN[@]}"; do
     # Run the group test and capture output for parsing
     GROUP_LOG=$(mktemp)
     if "$SCRIPT_DIR/run-qemu-group-test.sh" "$VYOS_IMAGE" "$group_name" "${fixtures[@]}" 2>&1 | tee "$GROUP_LOG"; then
+        GROUP_EXIT=0
         echo ""
         echo "[PASS] Group $group_name passed"
         ((GROUPS_PASSED++)) || true
     else
+        GROUP_EXIT=$?
         echo ""
         echo "[FAIL] Group $group_name failed"
         ((GROUPS_FAILED++)) || true
@@ -140,9 +142,12 @@ for i in "${!GROUPS_TO_RUN[@]}"; do
         ((TOTAL_PASSED += GROUP_PASSED)) || true
         ((TOTAL_FAILED += GROUP_FAILED)) || true
     else
-        # Fallback if summary not found (e.g., old group runner or crash)
-        echo "[WARN] No GROUP_SUMMARY found in output - using group-level stats"
-        ((TOTAL_PASSED += ${#fixtures[@]})) || true
+        # Fallback: if no summary line found, count based on group exit status
+        if [ $GROUP_EXIT -eq 0 ]; then
+            ((TOTAL_PASSED += ${#fixtures[@]})) || true
+        else
+            ((TOTAL_FAILED += ${#fixtures[@]})) || true
+        fi
     fi
 
     ((TOTAL_TESTS += ${#fixtures[@]})) || true

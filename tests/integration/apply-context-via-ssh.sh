@@ -79,16 +79,16 @@ echo "$OUTPUT"
 
 # Write each line to serial port for validation assertions
 echo "$OUTPUT" | while IFS= read -r line; do
-    echo "vyos-onecontext: $line" > /dev/ttyS0 2>/dev/null || true
+    printf 'vyos-onecontext: %s\n' "$line" > /dev/ttyS0 2>/dev/null || true
 done
 
 # Write completion/failure markers to serial port
 if [ $EXIT_CODE -eq 0 ]; then
-    echo "vyos-onecontext: Contextualization completed successfully" > /dev/ttyS0 2>/dev/null || true
+    printf 'vyos-onecontext: Contextualization completed successfully\n' > /dev/ttyS0 2>/dev/null || true
     echo "APPLY_COMPLETE"
     exit 0
 else
-    echo "vyos-onecontext: Contextualization failed with exit code $EXIT_CODE" > /dev/ttyS0 2>/dev/null || true
+    printf 'vyos-onecontext: Contextualization failed with exit code %d\n' "$EXIT_CODE" > /dev/ttyS0 2>/dev/null || true
     echo "APPLY_FAILED: exit code $EXIT_CODE"
     exit $EXIT_CODE
 fi
