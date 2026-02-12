@@ -57,8 +57,8 @@ fi
 echo "Running vyos-onecontext to apply configuration..."
 
 APPLY_SCRIPT=$(cat <<'APPLY_EOF'
-#!/bin/vbash
-source /opt/vyatta/etc/functions/script-template
+#!/bin/bash
+set -euo pipefail
 
 CONTEXT_FILE="$1"
 
@@ -69,10 +69,9 @@ cp "$CONTEXT_FILE" /var/run/one-context/one_env
 # Clean up any stale config session from initial boot
 /opt/vyatta/sbin/vyatta-cfg-cmd-wrapper end 2>/dev/null || true
 
-# Run the Python module directly
-# No 'sg' needed - script-template sets up vyattacfg group access
-# Running in vbash with script-template ensures full VyOS environment (validators, PATH, etc.)
-OUTPUT=$(/opt/vyos-onecontext/venv/bin/python -m vyos_onecontext -v /var/run/one-context/one_env 2>&1) || EXIT_CODE=$?
+# Run the Python module through vbash with VyOS environment for validator support
+# script-template is needed so vyatta-cfg-cmd-wrapper can find validators
+OUTPUT=$(sudo /bin/vbash -c 'source /opt/vyatta/etc/functions/script-template; /opt/vyos-onecontext/venv/bin/python -m vyos_onecontext -v /var/run/one-context/one_env' 2>&1) || EXIT_CODE=$?
 EXIT_CODE=${EXIT_CODE:-0}
 
 # Echo output to stdout for debugging
@@ -99,7 +98,7 @@ APPLY_EOF
 # Use unique temp file to avoid clobbering across concurrent runs
 APPLY_LOG=$(mktemp)
 
-if ssh_command "sudo /bin/vbash -s -- $REMOTE_CONTEXT" <<< "$APPLY_SCRIPT" 2>&1 | tee "$APPLY_LOG"; then
+if ssh_command "sudo /bin/bash -s -- $REMOTE_CONTEXT" <<< "$APPLY_SCRIPT" 2>&1 | tee "$APPLY_LOG"; then
     if grep -q "APPLY_COMPLETE" "$APPLY_LOG"; then
         echo "[PASS] Configuration applied successfully"
 
