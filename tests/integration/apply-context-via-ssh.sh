@@ -57,26 +57,21 @@ fi
 echo "Running vyos-onecontext to apply configuration..."
 
 APPLY_SCRIPT=$(cat <<'APPLY_EOF'
-#!/bin/bash
-set -euo pipefail
+#!/bin/vbash
+source /opt/vyatta/etc/functions/script-template
 
 CONTEXT_FILE="$1"
 
 # vyos-onecontext expects the context file at a specific location
-# Copy it there temporarily
-sudo mkdir -p /var/run/one-context
-sudo cp "$CONTEXT_FILE" /var/run/one-context/one_env
+mkdir -p /var/run/one-context
+cp "$CONTEXT_FILE" /var/run/one-context/one_env
 
 # Clean up any stale config session from initial boot
-# This is critical when re-applying context to a running VM
-# No 'sg' needed - vyos user already has vyattacfg group from SSH login
 /opt/vyatta/sbin/vyatta-cfg-cmd-wrapper end 2>/dev/null || true
 
-# Run the Python module directly (bypass boot.sh)
-# This shows the actual Python output (including any VyOS config errors) in the SSH session
-# Run with verbose flag to get detailed logging
-# No 'sg' needed - vyos user already has vyattacfg in supplementary groups
-# Running without sg preserves the full VyOS environment (PATH, validators, etc.)
+# Run the Python module directly
+# No 'sg' needed - script-template sets up vyattacfg group access
+# Running in vbash with script-template ensures full VyOS environment (validators, PATH, etc.)
 OUTPUT=$(/opt/vyos-onecontext/venv/bin/python -m vyos_onecontext -v /var/run/one-context/one_env 2>&1) || EXIT_CODE=$?
 EXIT_CODE=${EXIT_CODE:-0}
 
@@ -84,18 +79,17 @@ EXIT_CODE=${EXIT_CODE:-0}
 echo "$OUTPUT"
 
 # Write each line to serial port for validation assertions
-# Use sudo to write to /dev/ttyS0 (serial port requires elevated permissions)
 echo "$OUTPUT" | while IFS= read -r line; do
-    sudo sh -c "echo 'vyos-onecontext: $line' > /dev/ttyS0" 2>/dev/null || true
+    echo "vyos-onecontext: $line" > /dev/ttyS0 2>/dev/null || true
 done
 
-# Write completion/failure markers to serial port (matching what boot.sh normally writes)
+# Write completion/failure markers to serial port
 if [ $EXIT_CODE -eq 0 ]; then
-    sudo sh -c "echo 'vyos-onecontext: Contextualization completed successfully' > /dev/ttyS0" 2>/dev/null || true
+    echo "vyos-onecontext: Contextualization completed successfully" > /dev/ttyS0 2>/dev/null || true
     echo "APPLY_COMPLETE"
     exit 0
 else
-    sudo sh -c "echo 'vyos-onecontext: Contextualization failed with exit code $EXIT_CODE' > /dev/ttyS0" 2>/dev/null || true
+    echo "vyos-onecontext: Contextualization failed with exit code $EXIT_CODE" > /dev/ttyS0 2>/dev/null || true
     echo "APPLY_FAILED: exit code $EXIT_CODE"
     exit $EXIT_CODE
 fi
@@ -105,7 +99,7 @@ APPLY_EOF
 # Use unique temp file to avoid clobbering across concurrent runs
 APPLY_LOG=$(mktemp)
 
-if ssh_command "bash -s -- $REMOTE_CONTEXT" <<< "$APPLY_SCRIPT" 2>&1 | tee "$APPLY_LOG"; then
+if ssh_command "sudo /bin/vbash -s -- $REMOTE_CONTEXT" <<< "$APPLY_SCRIPT" 2>&1 | tee "$APPLY_LOG"; then
     if grep -q "APPLY_COMPLETE" "$APPLY_LOG"; then
         echo "[PASS] Configuration applied successfully"
 
