@@ -5,11 +5,15 @@ command outputs. This allows testing the parsing and validation logic
 without requiring a live VyOS instance.
 """
 
+import subprocess
 from unittest.mock import Mock
+
+import pytest
 
 from tests.validation_helpers import (
     ValidationResult,
     check_default_route,
+    check_dnat_rule,
     check_hostname,
     check_interface_ip,
     check_ospf_enabled,
@@ -136,7 +140,7 @@ class TestCheckInterfaceIp:
         """Test when interface has multiple IPs and first one matches.
 
         Note: VyOS can have multiple IPs on one interface (secondary IPs).
-        This helper checks if the expected IP is present, matching the first found.
+        This helper checks if the expected IP is present in any position.
         """
         mock_ssh = Mock(
             return_value=(
@@ -151,6 +155,59 @@ class TestCheckInterfaceIp:
         result = check_interface_ip(mock_ssh, "eth0", "192.168.1.1")
         assert result.passed is True
 
+    def test_interface_multiple_ips_second_match(self) -> None:
+        """Test when interface has multiple IPs and secondary one matches."""
+        mock_ssh = Mock(
+            return_value=(
+                "eth0@NONE: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500\n"
+                "    link/ether 52:54:00:12:34:56 brd ff:ff:ff:ff:ff:ff\n"
+                "    inet 192.168.1.1/24 brd 192.168.1.255 scope global eth0\n"
+                "    inet 192.168.1.2/24 brd 192.168.1.255 scope global secondary eth0\n"
+            )
+        )
+
+        # Check for secondary IP
+        result = check_interface_ip(mock_ssh, "eth0", "192.168.1.2")
+        assert result.passed is True
+
+    def test_interface_multiple_ips_none_match(self) -> None:
+        """Test when interface has multiple IPs but none match expected."""
+        mock_ssh = Mock(
+            return_value=(
+                "eth0@NONE: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500\n"
+                "    link/ether 52:54:00:12:34:56 brd ff:ff:ff:ff:ff:ff\n"
+                "    inet 192.168.1.1/24 brd 192.168.1.255 scope global eth0\n"
+                "    inet 192.168.1.2/24 brd 192.168.1.255 scope global secondary eth0\n"
+            )
+        )
+
+        # Check for IP not in the list
+        result = check_interface_ip(mock_ssh, "eth0", "192.168.1.99")
+        assert result.passed is False
+        assert "192.168.1.1" in result.message  # Should show all found IPs
+        assert "192.168.1.2" in result.message
+
+
+    def test_interface_called_process_error(self) -> None:
+        """Test CalledProcessError with captured stdout/stderr."""
+        # Simulate subprocess.CalledProcessError with captured output
+        error = subprocess.CalledProcessError(
+            returncode=255,
+            cmd=["sshpass", "-p", "secret123", "ssh", "vyos@router"],
+            output="Connection refused\n",
+            stderr="ssh: connect to host router port 22: Connection refused\n"
+        )
+        mock_ssh = Mock(side_effect=error)
+
+        result = check_interface_ip(mock_ssh, "eth0", "192.168.1.1")
+
+        assert result.passed is False
+        assert "exit code 255" in result.message
+        assert "eth0" in result.message
+        # Should NOT contain the password from the command
+        assert "secret123" not in result.message
+        # raw_output should contain stdout/stderr for debugging
+        assert result.raw_output != ""
 
 class TestCheckHostname:
     """Test check_hostname helper function."""
@@ -164,7 +221,7 @@ class TestCheckHostname:
         assert result.passed is True
         assert "matches" in result.message.lower()
         assert "test-simple" in result.message
-        mock_ssh.assert_called_once_with("show configuration | grep host-name")
+        mock_ssh.assert_called_once_with("show configuration | grep host-name || echo ''")
 
     def test_hostname_matches_without_quotes(self) -> None:
         """Test when hostname matches (no quotes in config)."""
@@ -222,15 +279,42 @@ class TestCheckHostname:
         assert result.passed is True
 
     def test_hostname_with_underscores(self) -> None:
-        """Test that hostnames with underscores are accepted."""
+        """Test hostname validation rejects underscores (RFC 1123 compliance).
+
+
+        The project enforces RFC 1123 hostnames which do not allow underscores.
+        The validation helper should explicitly reject hostnames containing
+        underscores as RFC 1123 violations.
+        """
         mock_ssh = Mock(return_value="host-name 'test_router'\n")
 
         result = check_hostname(mock_ssh, "test_router")
 
-        # Underscores are allowed in VyOS hostnames
-        assert result.passed is True
-        assert "test_router" in result.message
+        # Should fail with RFC 1123 violation message
+        assert result.passed is False
+        assert "invalid" in result.message.lower() or "rfc" in result.message.lower()
+        assert "test_router" in result.message  # Full hostname shown, not truncated
 
+
+    def test_hostname_called_process_error(self) -> None:
+        """Test CalledProcessError with captured stdout/stderr."""
+        # Simulate subprocess.CalledProcessError with captured output
+        error = subprocess.CalledProcessError(
+            returncode=1,
+            cmd=["sshpass", "-p", "password", "ssh", "vyos@router"],
+            output="",
+            stderr="Permission denied\n"
+        )
+        mock_ssh = Mock(side_effect=error)
+
+        result = check_hostname(mock_ssh, "test-router")
+
+        assert result.passed is False
+        assert "exit code 1" in result.message
+        # Should NOT contain the password from the command
+        assert "password" not in result.message
+        # raw_output should contain stderr for debugging
+        assert result.raw_output != ""
 
 class TestCheckSshKeyConfigured:
     """Test check_ssh_key_configured helper function."""
@@ -239,10 +323,10 @@ class TestCheckSshKeyConfigured:
         """Test when SSH public keys are configured."""
         mock_ssh = Mock(
             return_value=(
-                "    public-keys test-key-1 {\n"
-                "        key AAAAB3NzaC1yc2EAAAADAQABAAABAQC...\n"
-                "        type ssh-rsa\n"
-                "    }\n"
+                "set system login user vyos authentication public-keys "
+                "'test-key-1' key 'AAAAB3NzaC1yc2EAAAADAQABAAABAQC...'\n"
+                "set system login user vyos authentication public-keys "
+                "'test-key-1' type 'ssh-rsa'\n"
             )
         )
 
@@ -250,7 +334,10 @@ class TestCheckSshKeyConfigured:
 
         assert result.passed is True
         assert "SSH public key(s) found" in result.message
-        mock_ssh.assert_called_once_with("show configuration | grep 'public-keys' || echo ''")
+        mock_ssh.assert_called_once_with(
+            "show configuration commands | grep "
+            "'set system login user vyos authentication public-keys' || echo ''"
+        )
 
     def test_ssh_key_not_configured(self) -> None:
         """Test when no SSH keys are configured."""
@@ -265,14 +352,14 @@ class TestCheckSshKeyConfigured:
         """Test when multiple SSH keys are configured."""
         mock_ssh = Mock(
             return_value=(
-                "    public-keys test-key-1 {\n"
-                "        key AAAAB3NzaC1yc2EAAAADAQABAAABAQC...\n"
-                "        type ssh-rsa\n"
-                "    }\n"
-                "    public-keys test-key-2 {\n"
-                "        key AAAAC3NzaC1lZDI1NTE5AAAAIN...\n"
-                "        type ssh-ed25519\n"
-                "    }\n"
+                "set system login user vyos authentication public-keys "
+                "'test-key-1' key 'AAAAB3NzaC1yc2EAAAADAQABAAABAQC...'\n"
+                "set system login user vyos authentication public-keys "
+                "'test-key-1' type 'ssh-rsa'\n"
+                "set system login user vyos authentication public-keys "
+                "'test-key-2' key 'AAAAC3NzaC1lZDI1NTE5AAAAIN...'\n"
+                "set system login user vyos authentication public-keys "
+                "'test-key-2' type 'ssh-ed25519'\n"
             )
         )
 
@@ -283,13 +370,34 @@ class TestCheckSshKeyConfigured:
 
     def test_ssh_key_malformed_config(self) -> None:
         """Test when public-keys stanza exists but is incomplete."""
-        # Stanza found but missing key data or type
-        mock_ssh = Mock(return_value="    public-keys test-key-1 {\n    }\n")
+        # Only type set command, missing key
+        mock_ssh = Mock(
+            return_value=(
+                "set system login user vyos authentication public-keys "
+                "'test-key-1' type 'ssh-rsa'\n"
+            )
+        )
 
         result = check_ssh_key_configured(mock_ssh)
 
         assert result.passed is False
-        assert "missing key data or type" in result.message
+        assert "missing" in result.message
+        assert "key data" in result.message
+
+    def test_ssh_key_missing_type(self) -> None:
+        """Test when key is present but type is missing."""
+        mock_ssh = Mock(
+            return_value=(
+                "set system login user vyos authentication public-keys "
+                "'test-key-1' key 'AAAAB3NzaC1yc2EAAAADAQABAAABAQC...'\n"
+            )
+        )
+
+        result = check_ssh_key_configured(mock_ssh)
+
+        assert result.passed is False
+        assert "missing" in result.message
+        assert "type" in result.message
 
     def test_ssh_key_query_fails(self) -> None:
         """Test when SSH command fails."""
@@ -305,10 +413,10 @@ class TestCheckSshKeyConfigured:
         """Test with ed25519 key type."""
         mock_ssh = Mock(
             return_value=(
-                "    public-keys test-ed25519 {\n"
-                "        key AAAAC3NzaC1lZDI1NTE5AAAAIN...\n"
-                "        type ssh-ed25519\n"
-                "    }\n"
+                "set system login user vyos authentication public-keys "
+                "'test-ed25519' key 'AAAAC3NzaC1lZDI1NTE5AAAAIN...'\n"
+                "set system login user vyos authentication public-keys "
+                "'test-ed25519' type 'ssh-ed25519'\n"
             )
         )
 
@@ -320,10 +428,10 @@ class TestCheckSshKeyConfigured:
         """Test with RSA key type."""
         mock_ssh = Mock(
             return_value=(
-                "    public-keys test-rsa {\n"
-                "        key AAAAB3NzaC1yc2EAAAADAQABAAABAQC...\n"
-                "        type ssh-rsa\n"
-                "    }\n"
+                "set system login user vyos authentication public-keys "
+                "'test-rsa' key 'AAAAB3NzaC1yc2EAAAADAQABAAABAQC...'\n"
+                "set system login user vyos authentication public-keys "
+                "'test-rsa' type 'ssh-rsa'\n"
             )
         )
 
@@ -331,30 +439,69 @@ class TestCheckSshKeyConfigured:
 
         assert result.passed is True
 
-    def test_ssh_key_with_full_config_output(self) -> None:
-        """Test with full VyOS config output containing other settings."""
+    def test_ssh_key_with_other_commands(self) -> None:
+        """Test with multiple set commands including SSH key configuration."""
         mock_ssh = Mock(
             return_value=(
-                "system {\n"
-                "    login {\n"
-                "        user vyos {\n"
-                "            authentication {\n"
-                "                public-keys test-key {\n"
-                "                    key AAAAB3NzaC1yc2EAAAADAQABAAABAQC...\n"
-                "                    type ssh-rsa\n"
-                "                }\n"
-                "            }\n"
-                "        }\n"
-                "    }\n"
-                "}\n"
+                "set system host-name 'vyos-router'\n"
+                "set system login user vyos authentication public-keys "
+                "'test-key' key 'AAAAB3NzaC1yc2EAAAADAQABAAABAQC...'\n"
+                "set system login user vyos authentication public-keys "
+                "'test-key' type 'ssh-rsa'\n"
+                "set interfaces ethernet eth0 address '192.168.1.1/24'\n"
             )
         )
 
         result = check_ssh_key_configured(mock_ssh)
 
         assert result.passed is True
-        assert "public-keys" in result.raw_output
+        assert "authentication public-keys" in result.raw_output
 
+    def test_ssh_key_cross_key_mismatch(self) -> None:
+        """Test that key data and type must belong to the same key name.
+
+        This is a critical test for a bug where the validator would incorrectly
+        pass if one key had key data and a different key had type, even though
+        no single key was complete.
+        """
+        mock_ssh = Mock(
+            return_value=(
+                "set system login user vyos authentication public-keys "
+                "'key1' key 'AAAAB3NzaC1yc2EAAAADAQABAAABAQC...'\n"
+                "set system login user vyos authentication public-keys "
+                "'key2' type 'ssh-rsa'\n"
+            )
+        )
+
+        result = check_ssh_key_configured(mock_ssh)
+
+        # Should fail because no single key has both properties
+        assert result.passed is False
+        assert "incomplete" in result.message
+        # Should mention both keys
+        assert "key1" in result.message
+        assert "key2" in result.message
+
+
+    def test_ssh_key_called_process_error(self) -> None:
+        """Test CalledProcessError with captured stdout/stderr."""
+        # Simulate subprocess.CalledProcessError with captured output
+        error = subprocess.CalledProcessError(
+            returncode=2,
+            cmd=["sshpass", "-p", "SECRET_PASSWORD_123", "ssh", "vyos@router"],
+            output="",
+            stderr="Host key verification failed\n"
+        )
+        mock_ssh = Mock(side_effect=error)
+
+        result = check_ssh_key_configured(mock_ssh)
+
+        assert result.passed is False
+        assert "exit code 2" in result.message
+        # Should NOT contain the password from the command
+        assert "SECRET_PASSWORD_123" not in result.message
+        # raw_output should contain stderr for debugging
+        assert result.raw_output != ""
 
 class TestCheckOspfEnabled:
     """Test check_ospf_enabled helper function."""
@@ -1434,3 +1581,333 @@ class TestCheckServiceVrf:
 
         assert result.passed is False
         assert "cannot parse VRF name" in result.message
+
+
+class TestCheckDnatRule:
+    """Test check_dnat_rule helper function."""
+
+    def test_dnat_rule_translation_port_unquoted(self) -> None:
+        """Test DNAT rule with unquoted translation port."""
+        mock_ssh = Mock(
+            return_value=(
+                "set nat destination rule 20 inbound-interface name eth0\n"
+                "set nat destination rule 20 destination port 443\n"
+                "set nat destination rule 20 protocol tcp\n"
+                "set nat destination rule 20 translation address 192.168.1.20\n"
+                "set nat destination rule 20 translation port 8443\n"
+            )
+        )
+
+        result = check_dnat_rule(
+            mock_ssh,
+            rule_num=20,
+            translation_port="8443",
+        )
+
+        assert result.passed is True
+        assert "20" in result.message
+
+    def test_dnat_rule_https_to_8443_remapping(self) -> None:
+        """Test DNAT rule for common HTTPS remapping (443 -> 8443)."""
+        mock_ssh = Mock(
+            return_value=(
+                "set nat destination rule 25 inbound-interface name 'eth0'\n"
+                "set nat destination rule 25 destination port '443'\n"
+                "set nat destination rule 25 protocol 'tcp'\n"
+                "set nat destination rule 25 translation address '10.0.1.100'\n"
+                "set nat destination rule 25 translation port '8443'\n"
+            )
+        )
+
+        result = check_dnat_rule(
+            mock_ssh,
+            rule_num=25,
+            inbound_interface="eth0",
+            protocol="tcp",
+            port="443",
+            translation_address="10.0.1.100",
+            translation_port="8443",
+        )
+
+        assert result.passed is True
+        assert "25" in result.message
+
+
+class TestHostnameRFC1123Validation:
+    """Test hostname validation enforces RFC 1123 compliance.
+
+    These tests verify the adversarial review fix for explicit RFC 1123
+    validation that rejects underscores and enforces length limits.
+    """
+
+    def test_hostname_rejects_underscore_explicit(self) -> None:
+        """Test that hostnames with underscores are explicitly rejected.
+
+        RFC 1123 does not allow underscores in hostnames. The validation
+        helper should extract the full hostname and explicitly detect
+        the RFC 1123 violation rather than silently truncating.
+        """
+        mock_ssh = Mock(return_value="host-name 'test_invalid'\n")
+
+        result = check_hostname(mock_ssh, "test_invalid")
+
+        # Should fail with explicit RFC 1123 violation message
+        assert result.passed is False
+        assert "invalid" in result.message.lower() or "rfc 1123" in result.message.lower()
+
+    def test_hostname_single_char_valid(self) -> None:
+        """Test single character hostname (edge case for RFC 1123)."""
+        mock_ssh = Mock(return_value="host-name 'a'\n")
+
+        result = check_hostname(mock_ssh, "a")
+
+        assert result.passed is True
+
+    def test_hostname_max_length_63_chars(self) -> None:
+        """Test hostname at RFC 1123 maximum length (63 characters)."""
+        # 63 chars: 'a' + 61 middle chars + 'z'
+        hostname_63 = "a" + "b" * 61 + "z"
+        mock_ssh = Mock(return_value=f"host-name '{hostname_63}'\n")
+
+        result = check_hostname(mock_ssh, hostname_63)
+
+        assert result.passed is True
+
+    def test_hostname_cannot_start_with_hyphen(self) -> None:
+        """Test that hostname starting with hyphen doesn't match RFC 1123."""
+        mock_ssh = Mock(return_value="host-name '-invalid'\n")
+
+        result = check_hostname(mock_ssh, "-invalid")
+
+        # Pattern requires alphanumeric start, so won't match
+        assert result.passed is False
+
+    def test_hostname_cannot_end_with_hyphen(self) -> None:
+        """Test that hostname ending with hyphen doesn't match RFC 1123."""
+        mock_ssh = Mock(return_value="host-name 'invalid-'\n")
+
+        result = check_hostname(mock_ssh, "invalid-")
+
+        # Pattern requires alphanumeric end, so won't match
+        assert result.passed is False
+
+    def test_hostname_hyphen_in_middle_valid(self) -> None:
+        """Test hostname with hyphens in middle positions (valid)."""
+        mock_ssh = Mock(return_value="host-name 'my-test-host-01'\n")
+
+        result = check_hostname(mock_ssh, "my-test-host-01")
+
+        assert result.passed is True
+
+
+class TestSshKeyQuoteHandling:
+    """Test SSH key validation handles quoted key names correctly.
+
+    These tests verify the adversarial review fix for balanced quote
+    matching that prevents unbalanced quotes from being accepted.
+    """
+
+    def test_ssh_key_single_quoted_name(self) -> None:
+        """Test SSH key with single-quoted key name."""
+        mock_ssh = Mock(
+            return_value=(
+                "set system login user vyos authentication public-keys "
+                "'my-key' key 'AAAAB3NzaC1...'\n"
+                "set system login user vyos authentication public-keys "
+                "'my-key' type 'ssh-rsa'\n"
+            )
+        )
+
+        result = check_ssh_key_configured(mock_ssh)
+
+        assert result.passed is True
+
+    def test_ssh_key_double_quoted_name(self) -> None:
+        """Test SSH key with double-quoted key name."""
+        mock_ssh = Mock(
+            return_value=(
+                'set system login user vyos authentication public-keys '
+                '"my-key" key "AAAAB3NzaC1..."\n'
+                'set system login user vyos authentication public-keys '
+                '"my-key" type "ssh-rsa"\n'
+            )
+        )
+
+        result = check_ssh_key_configured(mock_ssh)
+
+        assert result.passed is True
+
+    def test_ssh_key_unquoted_name(self) -> None:
+        """Test SSH key with unquoted key name (no spaces)."""
+        mock_ssh = Mock(
+            return_value=(
+                "set system login user vyos authentication public-keys "
+                "mykey key 'AAAAB3NzaC1...'\n"
+                "set system login user vyos authentication public-keys "
+                "mykey type 'ssh-rsa'\n"
+            )
+        )
+
+        result = check_ssh_key_configured(mock_ssh)
+
+        assert result.passed is True
+
+    def test_ssh_key_mixed_quote_styles(self) -> None:
+        """Test SSH key with mixed quote styles for name and values."""
+        mock_ssh = Mock(
+            return_value=(
+                "set system login user vyos authentication public-keys "
+                "'my-key' key \"AAAAB3NzaC1...\"\n"
+                "set system login user vyos authentication public-keys "
+                "'my-key' type \"ssh-rsa\"\n"
+            )
+        )
+
+        result = check_ssh_key_configured(mock_ssh)
+
+        assert result.passed is True
+
+    def test_ssh_key_name_with_hyphens_quoted(self) -> None:
+        """Test SSH key name containing hyphens (must be quoted)."""
+        mock_ssh = Mock(
+            return_value=(
+                "set system login user vyos authentication public-keys "
+                "'user-key-001' key 'AAAAB3NzaC1...'\n"
+                "set system login user vyos authentication public-keys "
+                "'user-key-001' type 'ssh-rsa'\n"
+            )
+        )
+
+        result = check_ssh_key_configured(mock_ssh)
+
+        assert result.passed is True
+
+    def test_ssh_key_names_extracted_without_quotes(self) -> None:
+        """Test that key names are extracted WITHOUT surrounding quotes.
+
+        This is a regression test for the missing closing quote in the regex
+        pattern. The pattern should extract 'my-key', not "'my-key'" or "my-key".
+        """
+        import re
+
+        # Test the actual pattern used in check_ssh_key_configured
+        key_pattern = re.compile(
+            r"authentication public-keys\s+(?:'([^']+)'|\"([^\"]+)\"|([^\s]+))"
+            r"\s+(key|type)\s+"
+        )
+
+        # Test single-quoted key name
+        line_single = (
+            "set system login user vyos authentication public-keys "
+            "'my-key' key 'AAAAB3...'"
+        )
+        match = key_pattern.search(line_single)
+        assert match is not None
+        key_name = match.group(1) or match.group(2) or match.group(3)
+        assert key_name == "my-key", f"Expected 'my-key', got '{key_name}'"
+
+        # Test double-quoted key name
+        line_double = (
+            'set system login user vyos authentication public-keys '
+            '"my-key" key "AAAAB3..."'
+        )
+        match = key_pattern.search(line_double)
+        assert match is not None
+        key_name = match.group(1) or match.group(2) or match.group(3)
+        assert key_name == "my-key", f"Expected 'my-key', got '{key_name}'"
+
+        # Test unquoted key name
+        line_unquoted = (
+            "set system login user vyos authentication public-keys "
+            "mykey key 'AAAAB3...'"
+        )
+        match = key_pattern.search(line_unquoted)
+        assert match is not None
+        key_name = match.group(1) or match.group(2) or match.group(3)
+        assert key_name == "mykey", f"Expected 'mykey', got '{key_name}'"
+
+
+class TestInterfaceIpOctetValidation:
+    """Test interface IP validation rejects invalid octets.
+
+    These tests verify the adversarial review fix for proper IP address
+    validation that rejects octets outside the 0-255 range.
+    """
+
+    def test_interface_ip_rejects_invalid_octet_999(self) -> None:
+        """Test that IP with octet value 999 is not matched."""
+        mock_ssh = Mock(
+            return_value=(
+                "eth0@NONE: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500\n"
+                "    link/ether 52:54:00:12:34:56 brd ff:ff:ff:ff:ff:ff\n"
+                "    inet 999.999.999.999/24 brd 192.168.122.255 scope global eth0\n"
+            )
+        )
+
+        # Should raise ValueError because input validation rejects invalid octets
+        with pytest.raises(ValueError, match=r"octet 1 \(999\) out of range"):
+            check_interface_ip(mock_ssh, "eth0", "999.999.999.999")
+
+    def test_interface_ip_accepts_valid_octet_255(self) -> None:
+        """Test that IP with maximum valid octet (255) is accepted."""
+        mock_ssh = Mock(
+            return_value=(
+                "eth0@NONE: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500\n"
+                "    link/ether 52:54:00:12:34:56 brd ff:ff:ff:ff:ff:ff\n"
+                "    inet 192.168.255.255/24 brd 192.168.255.255 scope global eth0\n"
+            )
+        )
+
+        result = check_interface_ip(mock_ssh, "eth0", "192.168.255.255")
+
+        assert result.passed is True
+
+    def test_interface_ip_accepts_valid_octet_0(self) -> None:
+        """Test that IP with minimum valid octet (0) is accepted."""
+        mock_ssh = Mock(
+            return_value=(
+                "eth0@NONE: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500\n"
+                "    link/ether 52:54:00:12:34:56 brd ff:ff:ff:ff:ff:ff\n"
+                "    inet 10.0.0.0/8 brd 10.255.255.255 scope global eth0\n"
+            )
+        )
+
+        result = check_interface_ip(mock_ssh, "eth0", "10.0.0.0")
+
+        assert result.passed is True
+
+    def test_interface_ip_rejects_octet_256(self) -> None:
+        """Test that IP with octet 256 (just outside range) is not matched."""
+        mock_ssh = Mock(
+            return_value=(
+                "eth0@NONE: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500\n"
+                "    link/ether 52:54:00:12:34:56 brd ff:ff:ff:ff:ff:ff\n"
+                "    inet 192.168.256.1/24 brd 192.168.255.255 scope global eth0\n"
+            )
+        )
+
+        # Should raise ValueError because input validation rejects invalid octets
+        with pytest.raises(ValueError, match=r"octet 3 \(256\) out of range"):
+            check_interface_ip(mock_ssh, "eth0", "192.168.256.1")
+
+    def test_interface_ip_mixed_valid_and_invalid(self) -> None:
+        """Test interface with both valid and invalid IP formats.
+
+        Only the valid IP should be extracted and matched.
+        """
+        mock_ssh = Mock(
+            return_value=(
+                "eth0@NONE: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500\n"
+                "    link/ether 52:54:00:12:34:56 brd ff:ff:ff:ff:ff:ff\n"
+                "    inet 192.168.1.10/24 brd 192.168.1.255 scope global eth0\n"
+                "    inet 999.999.999.999/24 scope global secondary eth0\n"
+            )
+        )
+
+        # Should find the valid IP
+        result = check_interface_ip(mock_ssh, "eth0", "192.168.1.10")
+        assert result.passed is True
+
+        # Should raise ValueError for invalid IP input
+        with pytest.raises(ValueError, match=r"octet 1 \(999\) out of range"):
+            check_interface_ip(mock_ssh, "eth0", "999.999.999.999")

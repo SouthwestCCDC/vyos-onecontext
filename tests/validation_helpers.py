@@ -13,7 +13,8 @@ Each helper function:
 VyOS Command Output Formats:
 - show interfaces: Contains "link/ether", "inet" lines with IP addresses
 - show configuration | grep host-name: Returns "host-name 'hostname'"
-- show configuration | grep public-keys: Returns public-keys stanzas if configured
+- show configuration commands | grep 'set system login user vyos authentication
+  public-keys': Returns flat set commands for SSH keys
 - show ip ospf: Shows OSPF instance status including router ID
 - show configuration commands | grep ospf: Shows OSPF config commands
 - show ip route: Returns routing table with protocol codes and next-hop info
@@ -25,6 +26,7 @@ VyOS Command Output Formats:
 
 import ipaddress
 import re
+import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -172,6 +174,30 @@ class ValidationResult:
     raw_output: str
 
 
+def _format_called_process_error_output(e: subprocess.CalledProcessError) -> str:
+    """Extract and format stdout/stderr from CalledProcessError.
+
+    Handles both text (str) and binary (bytes) outputs safely.
+
+    Args:
+        e: CalledProcessError exception from subprocess
+
+    Returns:
+        Concatenated stdout and stderr as a string
+    """
+    stdout = e.stdout or ""
+    stderr = e.stderr or ""
+
+    if isinstance(stdout, bytes):
+        stdout = stdout.decode(errors="replace")
+    if isinstance(stderr, bytes):
+        stderr = stderr.decode(errors="replace")
+
+    if stdout and stderr:
+        return stdout + "\n" + stderr
+    return stdout + stderr
+
+
 def check_interface_ip(
     ssh: Callable[[str], str],
     interface: str,
@@ -189,6 +215,11 @@ def check_interface_ip(
                 link/ether 52:54:00:12:34:56 brd ff:ff:ff:ff:ff:ff
                 inet 192.168.122.10/24 brd 192.168.122.255 scope global eth0
 
+    Note:
+        If the interface has multiple IP addresses configured, this function
+        checks if the expected IP is present among any of them. The validation
+        passes if the expected IP is found in any position (primary or secondary).
+
     Args:
         ssh: SSH connection callable from ssh_connection fixture
         interface: Interface name (e.g., "eth0", "eth1")
@@ -203,6 +234,13 @@ def check_interface_ip(
 
     try:
         output = ssh(f"show interfaces ethernet {interface}")
+    except subprocess.CalledProcessError as e:
+        raw_output = _format_called_process_error_output(e)
+        return ValidationResult(
+            passed=False,
+            message=f"Failed to query interface {interface} (exit code {e.returncode})",
+            raw_output=raw_output,
+        )
     except Exception as e:
         return ValidationResult(
             passed=False,
@@ -212,29 +250,32 @@ def check_interface_ip(
 
     # Look for "inet <ip>/<cidr>" pattern in output
     # Example: "inet 192.168.122.10/24 brd ..."
-    # Limit octets to 1-3 digits to prevent matching invalid IPs like 999.999.999.999
-    ip_pattern = re.compile(r"inet\s+(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/\d+")
-    match = ip_pattern.search(output)
+    # Use findall to collect all IPs (interfaces can have multiple IPs)
+    ip_pattern = re.compile(
+        r"inet\s+((?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}"
+        r"(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?))/\d+"
+    )
+    ip_matches = ip_pattern.findall(output)
 
-    if not match:
+    if not ip_matches:
         return ValidationResult(
             passed=False,
             message=f"No IP address found on interface {interface}",
             raw_output=output,
         )
 
-    actual_ip = match.group(1)
-
-    if actual_ip == expected_ip:
+    # Check if expected IP is in the set of found IPs
+    if expected_ip in ip_matches:
         return ValidationResult(
             passed=True,
             message=f"Interface {interface} has expected IP {expected_ip}",
             raw_output=output,
         )
     else:
+        found_ips = ", ".join(ip_matches)
         return ValidationResult(
             passed=False,
-            message=f"IP mismatch on {interface}: expected {expected_ip}, got {actual_ip}",
+            message=f"IP mismatch on {interface}: expected {expected_ip}, found {found_ips}",
             raw_output=output,
         )
 
@@ -243,10 +284,11 @@ def check_hostname(
     ssh: Callable[[str], str],
     expected: str,
 ) -> ValidationResult:
-    """Verify system hostname matches expected value.
+    """Verify system hostname matches expected value and is RFC 1123 compliant.
 
-    This function queries the VyOS configuration for the hostname setting
-    and validates it matches the expected value.
+    This function queries the VyOS configuration for the hostname setting,
+    validates it against RFC 1123 (alphanumeric + hyphens, 1-63 chars),
+    and checks it matches the expected value.
 
     VyOS Output Format:
         show configuration | grep host-name
@@ -261,7 +303,14 @@ def check_hostname(
         ValidationResult indicating whether hostname matches and diagnostic info
     """
     try:
-        output = ssh("show configuration | grep host-name")
+        output = ssh("show configuration | grep host-name || echo ''")
+    except subprocess.CalledProcessError as e:
+        raw_output = _format_called_process_error_output(e)
+        return ValidationResult(
+            passed=False,
+            message=f"Failed to query hostname (exit code {e.returncode})",
+            raw_output=raw_output,
+        )
     except Exception as e:
         return ValidationResult(
             passed=False,
@@ -269,22 +318,34 @@ def check_hostname(
             raw_output="",
         )
 
-    # Look for "host-name 'hostname'" or "host-name hostname" pattern
-    # VyOS config can use single quotes or no quotes
-    # Allow underscores in hostnames to match existing behavior and tests
-    hostname_pattern = re.compile(r"host-name\s+['\"]?([a-zA-Z0-9_-]+)['\"]?")
-    match = hostname_pattern.search(output)
+    # Extract the full hostname token (quoted or unquoted)
+    # First, get the raw hostname value from the output
+    hostname_extraction = re.compile(r"host-name\s+(?:'([^']+)'|\"([^\"]+)\"|([^\s]+))")
+    extract_match = hostname_extraction.search(output)
 
-    if not match:
+    if not extract_match:
         return ValidationResult(
             passed=False,
             message="No hostname found in configuration",
             raw_output=output,
         )
 
-    actual_hostname = match.group(1)
+    # Get the hostname (could be from single quotes, double quotes, or unquoted)
+    raw_hostname = extract_match.group(1) or extract_match.group(2) or extract_match.group(3)
 
-    if actual_hostname == expected:
+    # Validate hostname against RFC 1123 (alphanumeric + hyphens, no underscores)
+    # Must start and end with alphanumeric, hyphens only in middle, max 63 chars
+    rfc1123_pattern = re.compile(r"^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$")
+
+    if not rfc1123_pattern.fullmatch(raw_hostname):
+        return ValidationResult(
+            passed=False,
+            message=f"Invalid hostname in config: {raw_hostname} (violates RFC 1123)",
+            raw_output=output,
+        )
+
+    # Now check if it matches expected
+    if raw_hostname == expected:
         return ValidationResult(
             passed=True,
             message=f"Hostname matches expected value: {expected}",
@@ -293,7 +354,7 @@ def check_hostname(
     else:
         return ValidationResult(
             passed=False,
-            message=f"Hostname mismatch: expected {expected}, got {actual_hostname}",
+            message=f"Hostname mismatch: expected {expected}, got {raw_hostname}",
             raw_output=output,
         )
 
@@ -308,12 +369,10 @@ def check_ssh_key_configured(
     at least one key exists in the configuration.
 
     VyOS Output Format:
-        show configuration | grep 'public-keys'
-        Returns output like:
-                public-keys test-key-1 {
-                    key AAAAB3Nza...
-                    type ssh-rsa
-                }
+        show configuration commands | grep 'set system login user vyos authentication public-keys'
+        Returns flat set commands like:
+            set system login user vyos authentication public-keys 'User1' key "AAAAB3Nz..."
+            set system login user vyos authentication public-keys 'User1' type ssh-rsa
 
     Args:
         ssh: SSH connection callable from ssh_connection fixture
@@ -322,7 +381,17 @@ def check_ssh_key_configured(
         ValidationResult indicating whether SSH keys are configured
     """
     try:
-        output = ssh("show configuration | grep 'public-keys' || echo ''")
+        output = ssh(
+            "show configuration commands | grep "
+            "'set system login user vyos authentication public-keys' || echo ''"
+        )
+    except subprocess.CalledProcessError as e:
+        raw_output = _format_called_process_error_output(e)
+        return ValidationResult(
+            passed=False,
+            message=f"Failed to query SSH key configuration (exit code {e.returncode})",
+            raw_output=raw_output,
+        )
     except Exception as e:
         return ValidationResult(
             passed=False,
@@ -330,25 +399,68 @@ def check_ssh_key_configured(
             raw_output="",
         )
 
-    # Check if output contains "public-keys"
+    # Check if output contains "authentication public-keys"
     # Empty output or no match means no keys configured
-    if "public-keys" in output:
-        # Additional validation: should have key type and key data
-        has_key_data = "key" in output and "type" in output
+    if "authentication public-keys" not in output:
+        return ValidationResult(
+            passed=False,
+            message="No SSH public keys configured",
+            raw_output=output,
+        )
 
-        if has_key_data:
-            return ValidationResult(
-                passed=True,
-                message="SSH public key(s) found in configuration",
-                raw_output=output,
-            )
-        else:
-            return ValidationResult(
-                passed=False,
-                message="SSH public-keys stanza found but missing key data or type",
-                raw_output=output,
-            )
+    # Parse flat set commands to verify both key and type are present for the same key name
+    # Example lines:
+    #   set system login user vyos authentication public-keys 'keyname' key "AAAAB3..."
+    #   set system login user vyos authentication public-keys 'keyname' type ssh-rsa
+
+    # Extract key names and their properties
+    key_pattern = re.compile(
+        r"authentication public-keys\s+(?:'([^']+)'|\"([^\"]+)\"|([^\s]+))\s+(key|type)\s+"
+    )
+
+    # Group by key name to track which keys have both properties
+    key_data: dict[str, dict[str, bool]] = {}
+    for line in output.split("\n"):
+        match = key_pattern.search(line)
+        if match:
+            key_name = match.group(1) or match.group(2) or match.group(3)
+            property_type = match.group(4)
+
+            if key_name not in key_data:
+                key_data[key_name] = {"key": False, "type": False}
+
+            key_data[key_name][property_type] = True
+
+    # Check if at least one key has both key data and type
+    complete_keys = [
+        name for name, props in key_data.items()
+        if props["key"] and props["type"]
+    ]
+
+    if complete_keys:
+        return ValidationResult(
+            passed=True,
+            message="SSH public key(s) found in configuration",
+            raw_output=output,
+        )
+    elif key_data:
+        # Keys exist but none are complete
+        incomplete_info = []
+        for name, props in key_data.items():
+            missing = []
+            if not props["key"]:
+                missing.append("key data")
+            if not props["type"]:
+                missing.append("type")
+            incomplete_info.append(f"{name} (missing {' and '.join(missing)})")
+
+        return ValidationResult(
+            passed=False,
+            message=f"SSH public-keys found but incomplete: {', '.join(incomplete_info)}",
+            raw_output=output,
+        )
     else:
+        # No keys found (shouldn't happen since we checked for "authentication public-keys" earlier)
         return ValidationResult(
             passed=False,
             message="No SSH public keys configured",
