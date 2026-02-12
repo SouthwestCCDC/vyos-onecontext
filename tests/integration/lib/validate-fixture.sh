@@ -509,7 +509,7 @@ validate_fixture_assertions() {
                 search_cmd="tail -c +${SERIAL_LOG_OFFSET}"
             fi
 
-            KEY_COUNT=$($search_cmd "$SERIAL_LOG" | grep "VYOS_CMD:.*authentication public-keys" | \
+            KEY_COUNT=$($search_cmd "$SERIAL_LOG" | { grep "VYOS_CMD:.*authentication public-keys" || true; } | \
                         sed -n 's/.*authentication public-keys \([^ ]*\).*/\1/p' | \
                         sort -u | wc -l)
             if [ "$KEY_COUNT" -ge 2 ]; then
