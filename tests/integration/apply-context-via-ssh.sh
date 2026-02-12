@@ -69,12 +69,15 @@ sudo cp "$CONTEXT_FILE" /var/run/one-context/one_env
 
 # Clean up any stale config session from initial boot
 # This is critical when re-applying context to a running VM
-sg vyattacfg -c '/opt/vyatta/sbin/vyatta-cfg-cmd-wrapper end' 2>/dev/null || true
+# No 'sg' needed - vyos user already has vyattacfg group from SSH login
+/opt/vyatta/sbin/vyatta-cfg-cmd-wrapper end 2>/dev/null || true
 
 # Run the Python module directly (bypass boot.sh)
 # This shows the actual Python output (including any VyOS config errors) in the SSH session
 # Run with verbose flag to get detailed logging
-OUTPUT=$(sg vyattacfg -c '/opt/vyos-onecontext/venv/bin/python -m vyos_onecontext -v /var/run/one-context/one_env' 2>&1) || EXIT_CODE=$?
+# No 'sg' needed - vyos user already has vyattacfg in supplementary groups
+# Running without sg preserves the full VyOS environment (PATH, validators, etc.)
+OUTPUT=$(/opt/vyos-onecontext/venv/bin/python -m vyos_onecontext -v /var/run/one-context/one_env 2>&1) || EXIT_CODE=$?
 EXIT_CODE=${EXIT_CODE:-0}
 
 # Echo output to stdout for debugging
