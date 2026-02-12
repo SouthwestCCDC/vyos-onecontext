@@ -228,19 +228,9 @@ source /opt/vyatta/etc/functions/script-template
 # Clean up any stale config session first
 /opt/vyatta/sbin/vyatta-cfg-cmd-wrapper end 2>/dev/null || true
 
-# Enter configuration mode
 configure
 
-# Delete user-configured sections (preserve system basics)
-# Note: We keep system login, ssh, and eth0 connectivity
-# First delete all eth0 addresses (prevents IP state leakage from previous tests)
-delete interfaces ethernet eth0 address
-delete interfaces ethernet eth0 vrf
-
-# Re-apply the management IP address for SSH connectivity
-set interfaces ethernet eth0 address '192.168.122.99/24'
-
-# Delete other user configurations
+# Delete user-configured sections but preserve eth0 management connectivity
 delete protocols
 delete nat
 delete service dhcp-server
@@ -249,10 +239,7 @@ delete firewall
 delete vrf
 delete policy
 
-# Commit the clean state
 commit
-
-# Exit configuration mode
 exit
 
 echo "RESET_COMPLETE"
@@ -279,19 +266,6 @@ RESET_EOF
         return 1
     fi
 }
-
-# Reset initial bootstrap configuration before running tests
-echo ""
-echo "========================================"
-echo "  Initial Configuration Reset"
-echo "========================================"
-echo "Resetting bootstrap configuration to clean state..."
-if reset_vyos_config "bootstrap"; then
-    echo "[PASS] Initial configuration reset completed"
-else
-    echo "[FAIL] Initial configuration reset failed - tests may be affected"
-    # Continue anyway - some tests may still work
-fi
 
 echo ""
 echo "========================================"
