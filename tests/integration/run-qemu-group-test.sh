@@ -205,7 +205,7 @@ done
 # Give system a moment to settle
 sleep 2
 
-# Function to reset VyOS configuration (extracted from reset-vyos-config.sh)
+# Function to reset VyOS configuration between test fixtures
 reset_vyos_config() {
     local fixture_num="${1:-unknown}"
     echo "Resetting VyOS configuration to clean state..."

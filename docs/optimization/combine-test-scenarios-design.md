@@ -173,11 +173,12 @@ ETH0_ALIAS0_MASK="255.255.255.0"
      - Reset config state
      - Log results per-fixture
 
-2. Create helper script `tests/integration/reset-vyos-config.sh`:
+2. Create helper function for configuration reset:
    - SSH into running VM
    - Delete all user-configured nodes
    - Commit changes
    - Verify clean state
+   - **Note**: As of round 3, this logic is implemented as an inline function in `run-qemu-group-test.sh` rather than as a separate script file
 
 3. Create helper script `tests/integration/apply-context-commands.sh`:
    - Read fixture .env file
