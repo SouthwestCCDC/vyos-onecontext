@@ -116,11 +116,11 @@ jobs:
           FIXTURES="${{ steps.select-fixtures.outputs.fixtures }}"
 
           if [ "$FIXTURES" = "all" ]; then
-            echo "Running ALL integration test fixtures"
-            ./tests/integration/run-all-tests.sh packer/output/vyos-onecontext-test.qcow2
+            echo "Running ALL integration test fixtures (grouped mode)"
+            ./tests/integration/run-grouped-tests.sh packer/output/vyos-onecontext-test.qcow2
           else
-            echo "Running selected fixtures: $FIXTURES"
+            echo "Running selected fixtures (grouped mode): $FIXTURES"
             # shellcheck disable=SC2086
-            ./tests/integration/run-all-tests.sh packer/output/vyos-onecontext-test.qcow2 $FIXTURES
+            ./tests/integration/run-grouped-tests.sh packer/output/vyos-onecontext-test.qcow2 $FIXTURES
           fi
-        timeout-minutes: 35
+        timeout-minutes: 15
