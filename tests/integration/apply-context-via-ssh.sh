@@ -67,8 +67,10 @@ CONTEXT_FILE="$1"
 sudo mkdir -p /var/run/one-context
 sudo cp "$CONTEXT_FILE" /var/run/one-context/one_env
 
-# Run contextualization via the boot script (handles sg vyattacfg)
-if sudo /opt/vyos-onecontext/boot.sh 2>&1; then
+# Run contextualization via sg vyattacfg (same as VyOS boot process)
+# The vyos user already has vyattacfg group membership on VyOS systems
+# Using sg instead of sudo ensures the boot script's internal sg call works correctly
+if sg vyattacfg -c '/opt/vyos-onecontext/boot.sh' 2>&1; then
     echo "APPLY_COMPLETE"
     exit 0
 else

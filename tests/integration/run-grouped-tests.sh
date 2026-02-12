@@ -118,22 +118,32 @@ for i in "${!GROUPS_TO_RUN[@]}"; do
     echo "Fixtures: ${fixtures[*]}"
     echo ""
 
-    # Run the group test
-    if "$SCRIPT_DIR/run-qemu-group-test.sh" "$VYOS_IMAGE" "$group_name" "${fixtures[@]}"; then
+    # Run the group test and capture output for parsing
+    GROUP_LOG=$(mktemp)
+    if "$SCRIPT_DIR/run-qemu-group-test.sh" "$VYOS_IMAGE" "$group_name" "${fixtures[@]}" 2>&1 | tee "$GROUP_LOG"; then
         echo ""
         echo "[PASS] Group $group_name passed"
         ((GROUPS_PASSED++)) || true
-        ((TOTAL_PASSED += ${#fixtures[@]})) || true
     else
         echo ""
         echo "[FAIL] Group $group_name failed"
         ((GROUPS_FAILED++)) || true
-        # Individual fixture failures are tracked within run-qemu-group-test.sh
-        # We count the whole group as failed fixtures for overall stats
-        ((TOTAL_FAILED += ${#fixtures[@]})) || true
+    fi
+
+    # Parse per-fixture results from group summary
+    if grep -q "GROUP_SUMMARY:" "$GROUP_LOG"; then
+        GROUP_PASSED=$(grep "GROUP_SUMMARY:" "$GROUP_LOG" | sed -n 's/.*PASSED=\([0-9]*\).*/\1/p')
+        GROUP_FAILED=$(grep "GROUP_SUMMARY:" "$GROUP_LOG" | sed -n 's/.*FAILED=\([0-9]*\).*/\1/p')
+        ((TOTAL_PASSED += GROUP_PASSED)) || true
+        ((TOTAL_FAILED += GROUP_FAILED)) || true
+    else
+        # Fallback if summary not found (e.g., old group runner or crash)
+        echo "[WARN] No GROUP_SUMMARY found in output - using group-level stats"
+        ((TOTAL_PASSED += ${#fixtures[@]})) || true
     fi
 
     ((TOTAL_TESTS += ${#fixtures[@]})) || true
+    rm -f "$GROUP_LOG"
     echo ""
 done
 
@@ -142,6 +152,8 @@ echo "  Overall Test Results"
 echo "========================================"
 echo "Groups:        $TOTAL_GROUPS (passed: $GROUPS_PASSED, failed: $GROUPS_FAILED)"
 echo "Total tests:   $TOTAL_TESTS"
+echo "Passed tests:  $TOTAL_PASSED"
+echo "Failed tests:  $TOTAL_FAILED"
 echo ""
 
 if [ $GROUPS_FAILED -eq 0 ]; then

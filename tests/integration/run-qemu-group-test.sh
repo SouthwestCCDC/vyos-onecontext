@@ -301,7 +301,8 @@ for i in "${!FIXTURES[@]}"; do
 
     # Record serial log offset before applying context
     # This allows validation to search only the new log entries
-    SERIAL_LOG_OFFSET=$(wc -c < "$SERIAL_LOG")
+    # Use 1-indexed offset so `tail -c +N` starts after the current end of file
+    SERIAL_LOG_OFFSET=$(( $(wc -c < "$SERIAL_LOG") + 1 ))
     export SERIAL_LOG_OFFSET
 
     # Apply the context configuration via SSH
@@ -442,6 +443,9 @@ if [ $FAILED -gt 0 ]; then
 fi
 
 echo ""
+
+# Emit machine-readable summary for dispatcher
+echo "GROUP_SUMMARY:PASSED=$PASSED:FAILED=$FAILED"
 
 if [ $FAILED -eq 0 ]; then
     echo "[PASS] All tests in group passed!"

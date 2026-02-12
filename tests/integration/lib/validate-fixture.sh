@@ -29,13 +29,13 @@ assert_command_generated() {
 
     if $search_cmd "$SERIAL_LOG" | grep -q "VYOS_CMD:.*$pattern"; then
         echo "[PASS] $description"
-        return 0
     else
         echo "[FAIL] $description - command not generated"
         echo "       Expected pattern: $pattern"
         VALIDATION_FAILED=1
-        return 1
     fi
+    # Always return 0 to avoid aborting callers running with `set -e`
+    return 0
 }
 
 # Validate common markers in serial log (contextualization success/errors/exceptions)
@@ -565,11 +565,12 @@ run_pytest_ssh_tests() {
     if $pytest_cmd -m integration tests/test_ssh_integration.py -v; then
         echo ""
         echo "[PASS] Pytest integration tests passed"
-        return 0
     else
         echo ""
         echo "[FAIL] Pytest integration tests failed"
         VALIDATION_FAILED=1
-        return 1
     fi
+    # Always return 0 to avoid aborting callers running with `set -e`;
+    # overall failure is tracked via VALIDATION_FAILED.
+    return 0
 }
