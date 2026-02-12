@@ -29,9 +29,11 @@ fi
 
 # Define test groups based on design document (GROUP-TESTING.md)
 # Each group is defined as "name:fixture1,fixture2,fixture3"
+# Note: management-vrf is excluded from groups because VRF assignment
+# disrupts SSH connectivity. Test it via individual/boot-time mode instead.
 declare -a TEST_GROUPS=(
     "basic:simple,quotes,multi-interface"
-    "routing:static-routes,management-vrf,ospf"
+    "routing:static-routes,ospf"
     "nat:snat,dnat,nat-full,nat-with-firewall"
     "services:dhcp,start-script,ssh-keys"
     "errors:invalid-json,missing-required-fields,partial-valid"

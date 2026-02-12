@@ -123,4 +123,4 @@ jobs:
             # shellcheck disable=SC2086
             ./tests/integration/run-all-tests.sh packer/output/vyos-onecontext-test.qcow2 $FIXTURES
           fi
-        timeout-minutes: 20
+        timeout-minutes: 25

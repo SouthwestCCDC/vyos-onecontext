@@ -172,7 +172,7 @@ if ! command -v sshpass >/dev/null 2>&1; then
 fi
 
 SSH_TIMEOUT=60
-SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=5"
+SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=5 -o ServerAliveInterval=10 -o ServerAliveCountMax=3"
 SSH_USER="vyos"
 SSH_PASSWORD="vyos"
 SSH_HOST="localhost"

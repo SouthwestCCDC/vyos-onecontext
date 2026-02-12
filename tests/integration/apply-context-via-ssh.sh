@@ -98,7 +98,7 @@ APPLY_EOF
 # Use unique temp file to avoid clobbering across concurrent runs
 APPLY_LOG=$(mktemp)
 
-if ssh_command "sudo /bin/bash -s -- $REMOTE_CONTEXT" <<< "$APPLY_SCRIPT" 2>&1 | tee "$APPLY_LOG"; then
+if timeout 120 bash -c 'sshpass -p "$SSH_PASSWORD" ssh $SSH_OPTS -p "$SSH_PORT" "${SSH_USER}@${SSH_HOST}" "sudo /bin/bash -s -- '"$REMOTE_CONTEXT"'"' <<< "$APPLY_SCRIPT" 2>&1 | tee "$APPLY_LOG"; then
     if grep -q "APPLY_COMPLETE" "$APPLY_LOG"; then
         echo "[PASS] Configuration applied successfully"
 
