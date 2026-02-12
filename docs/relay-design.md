@@ -243,7 +243,6 @@ The relay configuration is validated using Pydantic models with automatic schema
 ```python
 from pydantic import BaseModel, field_validator, model_validator
 from ipaddress import ip_address, ip_network
-from typing import Literal
 
 class RelayTarget(BaseModel):
     """A single relay target (relay prefix -> target network)."""
@@ -403,18 +402,18 @@ def generate_config(config: RouterConfig) -> list[str]:
     commands = []
 
     # Standard generators (unchanged)
-    commands.extend(SystemGenerator().generate(config))
-    commands.extend(InterfaceGenerator().generate(config))
+    commands.extend(SystemGenerator(config).generate())
+    commands.extend(InterfaceGenerator(config).generate())
 
     # Relay generator (new - only runs if RELAY_JSON present)
     if config.relay:
-        commands.extend(RelayGenerator().generate(config.relay))
+        commands.extend(RelayGenerator(config.relay).generate())
 
     # Standard generators continue (NAT, routing, etc.)
     if config.nat:
-        commands.extend(NatGenerator().generate(config))
+        commands.extend(NatGenerator(config.nat).generate())
     if config.routes:
-        commands.extend(RoutingGenerator().generate(config))
+        commands.extend(RoutingGenerator(config.routes).generate())
 
     return commands
 ```
@@ -422,7 +421,7 @@ def generate_config(config: RouterConfig) -> list[str]:
 ### RelayGenerator Implementation
 
 ```python
-class RelayGenerator:
+class RelayGenerator(BaseGenerator):
     """Generate VyOS commands for VRF-based relay configuration."""
 
     BASE_TABLE_ID = 200  # Start VRF table IDs at 200
@@ -430,23 +429,26 @@ class RelayGenerator:
     SNAT_RULE_START = 1000
     PBR_RULE_INCREMENT = 10
 
-    def generate(self, relay: RelayConfig) -> list[str]:
+    def __init__(self, relay: RelayConfig) -> None:
+        self.relay = relay
+
+    def generate(self) -> list[str]:
         """Generate all relay commands."""
         commands = []
 
-        commands.extend(self._generate_vrfs(relay))
-        commands.extend(self._generate_pbr(relay))
-        commands.extend(self._generate_dnat(relay))
-        commands.extend(self._generate_snat(relay))
-        commands.extend(self._generate_proxy_arp(relay))
-        commands.extend(self._generate_static_routes(relay))
+        commands.extend(self._generate_vrfs())
+        commands.extend(self._generate_pbr())
+        commands.extend(self._generate_dnat())
+        commands.extend(self._generate_snat())
+        commands.extend(self._generate_proxy_arp())
+        commands.extend(self._generate_static_routes())
 
         return commands
 
-    def _generate_vrfs(self, relay: RelayConfig) -> list[str]:
+    def _generate_vrfs(self) -> list[str]:
         """Create VRFs and bind interfaces."""
         commands = []
-        for idx, pivot in enumerate(relay.pivots):
+        for idx, pivot in enumerate(self.relay.pivots):
             vrf_name = f"relay_{pivot.egress_interface}"
             table_id = self.BASE_TABLE_ID + idx
 
@@ -458,7 +460,7 @@ class RelayGenerator:
 
         return commands
 
-    def _generate_pbr(self, relay: RelayConfig) -> list[str]:
+    def _generate_pbr(self) -> list[str]:
         """Generate policy-based routing rules."""
         commands = []
         rule_num = 10
@@ -466,11 +468,11 @@ class RelayGenerator:
         # Build VRF table ID mapping
         vrf_table_map = {
             pivot.egress_interface: self.BASE_TABLE_ID + idx
-            for idx, pivot in enumerate(relay.pivots)
+            for idx, pivot in enumerate(self.relay.pivots)
         }
 
         # Create PBR rules for each target
-        for pivot in relay.pivots:
+        for pivot in self.relay.pivots:
             table_id = vrf_table_map[pivot.egress_interface]
             for target in pivot.targets:
                 commands.append(
@@ -485,22 +487,22 @@ class RelayGenerator:
 
         # Apply policy to ingress interface
         commands.append(
-            f"set interfaces ethernet {relay.ingress_interface} "
+            f"set interfaces ethernet {self.relay.ingress_interface} "
             f"policy route relay-pbr"
         )
 
         return commands
 
-    def _generate_dnat(self, relay: RelayConfig) -> list[str]:
+    def _generate_dnat(self) -> list[str]:
         """Generate destination NAT (subnet-to-subnet)."""
         commands = []
         rule_num = self.DNAT_RULE_START
 
-        for pivot in relay.pivots:
+        for pivot in self.relay.pivots:
             for target in pivot.targets:
                 commands.append(
                     f"set nat destination rule {rule_num} "
-                    f"inbound-interface name {relay.ingress_interface}"
+                    f"inbound-interface name {self.relay.ingress_interface}"
                 )
                 commands.append(
                     f"set nat destination rule {rule_num} "
@@ -514,12 +516,12 @@ class RelayGenerator:
 
         return commands
 
-    def _generate_snat(self, relay: RelayConfig) -> list[str]:
+    def _generate_snat(self) -> list[str]:
         """Generate source NAT (masquerade per egress)."""
         commands = []
         rule_num = self.SNAT_RULE_START
 
-        for pivot in relay.pivots:
+        for pivot in self.relay.pivots:
             commands.append(
                 f"set nat source rule {rule_num} "
                 f"outbound-interface name {pivot.egress_interface}"
@@ -532,18 +534,18 @@ class RelayGenerator:
 
         return commands
 
-    def _generate_proxy_arp(self, relay: RelayConfig) -> list[str]:
+    def _generate_proxy_arp(self) -> list[str]:
         """Enable proxy-ARP on ingress interface."""
         return [
-            f"set interfaces ethernet {relay.ingress_interface} "
+            f"set interfaces ethernet {self.relay.ingress_interface} "
             f"ip enable-proxy-arp"
         ]
 
-    def _generate_static_routes(self, relay: RelayConfig) -> list[str]:
+    def _generate_static_routes(self) -> list[str]:
         """Generate static routes in VRF context."""
         commands = []
 
-        for pivot in relay.pivots:
+        for pivot in self.relay.pivots:
             vrf_name = f"relay_{pivot.egress_interface}"
             for target in pivot.targets:
                 commands.append(
