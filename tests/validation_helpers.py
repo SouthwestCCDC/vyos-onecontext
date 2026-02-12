@@ -1558,3 +1558,229 @@ def check_service_vrf(
                 message=f"Service '{service}' VRF configuration found but cannot parse VRF name",
                 raw_output=output,
             )
+def check_dhcp_server_running(
+    ssh: Callable[[str], str],
+) -> ValidationResult:
+    """Verify DHCP server process is active.
+
+    This function checks if the DHCP server is running by querying the
+    service status via VyOS operational commands.
+
+    VyOS Output Format:
+        show service dhcp-server
+        Returns output like:
+            DHCP server listening on:
+                eth1
+
+            Pool: dhcp-eth1
+                Failover state: N/A
+                Status: active
+                Leases: 5
+                Available: 95
+
+    Args:
+        ssh: SSH connection callable from ssh_connection fixture
+
+    Returns:
+        ValidationResult indicating whether DHCP server is running
+    """
+    try:
+        output = ssh("show service dhcp-server || echo ''")
+    except Exception as e:
+        return ValidationResult(
+            passed=False,
+            message=f"Failed to query DHCP server status: {e}",
+            raw_output="",
+        )
+
+    # Check if DHCP server is listening on any interfaces
+    # Look for "DHCP server listening on:" or "Pool:" in output
+    output_lower = output.lower()
+    if "listening on:" in output_lower or "pool:" in output_lower:
+        return ValidationResult(
+            passed=True,
+            message="DHCP server is running",
+            raw_output=output,
+        )
+    else:
+        # Check if output indicates service is not configured
+        if "not configured" in output.lower() or output.strip() == "":
+            return ValidationResult(
+                passed=False,
+                message="DHCP server is not configured or not running",
+                raw_output=output,
+            )
+        else:
+            # Unknown output format
+            return ValidationResult(
+                passed=False,
+                message="Unable to determine DHCP server status from output",
+                raw_output=output,
+            )
+
+
+def check_dhcp_pool(
+    ssh: Callable[[str], str],
+    network_name: str,
+    subnet: str | None,
+) -> ValidationResult:
+    """Verify DHCP pool exists in configuration.
+
+    This function checks that a DHCP shared-network exists and optionally
+    validates that it contains the expected subnet.
+
+    VyOS Output Format:
+        show configuration commands | grep dhcp-server
+        Returns output like:
+            set service dhcp-server shared-network-name dhcp-eth1 subnet 10.1.1.0/24 \
+                range 0 start 10.1.1.100
+            set service dhcp-server shared-network-name dhcp-eth1 subnet 10.1.1.0/24 \
+                range 0 stop 10.1.1.200
+
+    Args:
+        ssh: SSH connection callable from ssh_connection fixture
+        network_name: Shared-network name (e.g., "dhcp-eth1")
+        subnet: Expected subnet in CIDR notation (e.g., "10.1.1.0/24"), None to skip check
+
+    Returns:
+        ValidationResult indicating whether DHCP pool exists and matches expectations
+    """
+    try:
+        output = ssh("show configuration commands | grep dhcp-server || echo ''")
+    except Exception as e:
+        return ValidationResult(
+            passed=False,
+            message=f"Failed to query DHCP server configuration: {e}",
+            raw_output="",
+        )
+
+    # Check if the shared-network-name exists in configuration
+    network_pattern = re.compile(rf"shared-network-name\s+{re.escape(network_name)}\s+")
+    network_matches = network_pattern.search(output)
+
+    if not network_matches:
+        return ValidationResult(
+            passed=False,
+            message=f"DHCP shared-network '{network_name}' not found in configuration",
+            raw_output=output,
+        )
+
+    # If subnet is provided, verify it matches
+    if subnet is not None:
+        subnet_pattern = re.compile(
+            rf"shared-network-name\s+{re.escape(network_name)}\s+subnet\s+{re.escape(subnet)}\s+"
+        )
+        subnet_matches = subnet_pattern.search(output)
+
+        if not subnet_matches:
+            return ValidationResult(
+                passed=False,
+                message=f"DHCP pool '{network_name}' found but subnet '{subnet}' not configured",
+                raw_output=output,
+            )
+
+        return ValidationResult(
+            passed=True,
+            message=f"DHCP pool '{network_name}' exists with subnet '{subnet}'",
+            raw_output=output,
+        )
+    else:
+        return ValidationResult(
+            passed=True,
+            message=f"DHCP pool '{network_name}' exists",
+            raw_output=output,
+        )
+
+
+def check_dhcp_options(
+    ssh: Callable[[str], str],
+    network_name: str,
+    default_router: str | None,
+    dns_servers: list[str] | None,
+) -> ValidationResult:
+    """Verify DHCP options are configured correctly.
+
+    This function checks that DHCP options (default-router, DNS servers)
+    are configured for the specified shared-network.
+
+    VyOS Output Format:
+        show configuration commands | grep dhcp-server
+        Returns output like:
+            set service dhcp-server shared-network-name dhcp-eth1 subnet 10.1.1.0/24 \
+                default-router 10.1.1.1
+            set service dhcp-server shared-network-name dhcp-eth1 subnet 10.1.1.0/24 \
+                name-server 10.63.4.101
+
+    Args:
+        ssh: SSH connection callable from ssh_connection fixture
+        network_name: Shared-network name (e.g., "dhcp-eth1")
+        default_router: Expected default gateway IP (None to skip check)
+        dns_servers: Expected DNS server IPs (None to skip check)
+
+    Returns:
+        ValidationResult indicating whether DHCP options match expectations
+    """
+    try:
+        output = ssh("show configuration commands | grep dhcp-server || echo ''")
+    except Exception as e:
+        return ValidationResult(
+            passed=False,
+            message=f"Failed to query DHCP server configuration: {e}",
+            raw_output="",
+        )
+
+    # Build list of failed checks
+    failures = []
+
+    # Check if the shared-network-name exists in configuration
+    network_pattern = re.compile(rf"shared-network-name\s+{re.escape(network_name)}\s+")
+    if not network_pattern.search(output):
+        return ValidationResult(
+            passed=False,
+            message=f"DHCP shared-network '{network_name}' not found in configuration",
+            raw_output=output,
+        )
+
+    # Check default-router if provided
+    if default_router is not None:
+        router_pattern = re.compile(
+            rf"shared-network-name\s+{re.escape(network_name)}\s+subnet\s+\S+\s+default-router\s+{re.escape(default_router)}"
+        )
+        if not router_pattern.search(output):
+            failures.append(f"default-router '{default_router}' not found")
+
+    # Check DNS servers if provided
+    if dns_servers is not None:
+        for dns in dns_servers:
+            dns_pattern = re.compile(
+                rf"shared-network-name\s+{re.escape(network_name)}\s+subnet\s+\S+\s+name-server\s+{re.escape(dns)}"
+            )
+            if not dns_pattern.search(output):
+                failures.append(f"name-server '{dns}' not found")
+
+    # Return result
+    if failures:
+        return ValidationResult(
+            passed=False,
+            message=f"DHCP options for '{network_name}' incomplete: {', '.join(failures)}",
+            raw_output=output,
+        )
+    else:
+        options_checked = []
+        if default_router is not None:
+            options_checked.append(f"default-router={default_router}")
+        if dns_servers is not None:
+            options_checked.append(f"dns={','.join(dns_servers)}")
+
+        if options_checked:
+            return ValidationResult(
+                passed=True,
+                message=f"DHCP options for '{network_name}' correct: {'; '.join(options_checked)}",
+                raw_output=output,
+            )
+        else:
+            return ValidationResult(
+                passed=True,
+                message=f"DHCP shared-network '{network_name}' exists (no options checked)",
+                raw_output=output,
+            )
