@@ -12,6 +12,7 @@ from vyos_onecontext.generators.firewall import FirewallGenerator
 from vyos_onecontext.generators.interface import InterfaceGenerator
 from vyos_onecontext.generators.nat import NatGenerator
 from vyos_onecontext.generators.ospf import OspfGenerator
+from vyos_onecontext.generators.relay import RelayGenerator
 from vyos_onecontext.generators.routing import RoutingGenerator, StaticRoutesGenerator
 from vyos_onecontext.generators.service import SshServiceGenerator
 from vyos_onecontext.generators.system import ConntrackGenerator, HostnameGenerator, SshKeyGenerator
@@ -97,6 +98,7 @@ __all__ = [
     "InterfaceGenerator",
     "NatGenerator",
     "OspfGenerator",
+    "RelayGenerator",
     "RoutingGenerator",
     "SshKeyGenerator",
     "SshServiceGenerator",
