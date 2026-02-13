@@ -39,7 +39,7 @@ class TestVyOSConfigSession:
 
     @patch("subprocess.run")
     def test_begin_failure(self, mock_run: MagicMock) -> None:
-        """Test session begin failure."""
+        """Test session begin failure after all retries exhausted."""
         mock_run.return_value = MagicMock(
             returncode=1,
             stdout="",
@@ -47,10 +47,31 @@ class TestVyOSConfigSession:
         )
         session = VyOSConfigSession(wrapper_path="/test/wrapper")
 
-        with pytest.raises(VyOSConfigError, match="Session already active"):
-            session.begin()
+        with pytest.raises(VyOSConfigError, match="Failed to begin configuration session"):
+            session.begin(max_retries=3, initial_delay=0.01)
 
+        # Should have retried 3 times
+        assert mock_run.call_count == 3
         assert session._in_session is False
+
+    @patch("time.sleep")
+    @patch("subprocess.run")
+    def test_begin_retry_success(self, mock_run: MagicMock, mock_sleep: MagicMock) -> None:
+        """Test session begin succeeds after retries."""
+        # First attempt fails, second succeeds
+        mock_run.side_effect = [
+            MagicMock(returncode=1, stdout="", stderr="Backend not ready"),
+            MagicMock(returncode=0, stdout="", stderr=""),
+        ]
+        session = VyOSConfigSession(wrapper_path="/test/wrapper")
+
+        session.begin(max_retries=3, initial_delay=0.01)
+
+        # Should have tried twice
+        assert mock_run.call_count == 2
+        assert session._in_session is True
+        # Should have slept once between attempts
+        mock_sleep.assert_called_once_with(0.01)
 
     @patch("subprocess.run")
     def test_begin_already_in_session(self, mock_run: MagicMock) -> None:
@@ -184,6 +205,39 @@ class TestVyOSConfigSession:
 
         with pytest.raises(VyOSConfigError, match="outside of a session"):
             session.commit()
+
+    @patch("time.sleep")
+    @patch("subprocess.run")
+    def test_commit_retry_success(self, mock_run: MagicMock, mock_sleep: MagicMock) -> None:
+        """Test commit succeeds after retries."""
+        # First two attempts fail with "Unknown error", third succeeds
+        mock_run.side_effect = [
+            MagicMock(returncode=1, stdout="", stderr=""),  # Unknown error
+            MagicMock(returncode=1, stdout="", stderr=""),  # Unknown error
+            MagicMock(returncode=0, stdout="", stderr=""),  # Success
+        ]
+        session = VyOSConfigSession(wrapper_path="/test/wrapper")
+        session._in_session = True
+
+        session.commit(max_retries=3, initial_delay=0.01)
+
+        # Should have tried 3 times
+        assert mock_run.call_count == 3
+        # Should have slept twice between attempts
+        assert mock_sleep.call_count == 2
+
+    @patch("subprocess.run")
+    def test_commit_failure_after_retries(self, mock_run: MagicMock) -> None:
+        """Test commit fails after all retries exhausted."""
+        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="")
+        session = VyOSConfigSession(wrapper_path="/test/wrapper")
+        session._in_session = True
+
+        with pytest.raises(VyOSConfigError, match="Failed to commit configuration"):
+            session.commit(max_retries=3, initial_delay=0.01)
+
+        # Should have retried 3 times
+        assert mock_run.call_count == 3
 
     @patch("subprocess.run")
     def test_save_success(self, mock_run: MagicMock) -> None:

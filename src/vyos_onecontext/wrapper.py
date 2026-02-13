@@ -13,6 +13,7 @@ import logging
 import os
 import shlex
 import subprocess
+import time
 from typing import Self
 
 logger = logging.getLogger(__name__)
@@ -146,19 +147,66 @@ class VyOSConfigSession:
 
         return result
 
-    def begin(self) -> None:
-        """Begin a configuration session.
+    def begin(self, max_retries: int = 5, initial_delay: float = 0.5) -> None:
+        """Begin a configuration session with retry logic for backend readiness.
+
+        The VyOS configuration backend (configd) may not be fully ready immediately
+        after boot. This method implements exponential backoff retry to wait for
+        the backend to become responsive.
+
+        Args:
+            max_retries: Maximum number of attempts to begin a session (default: 5)
+            initial_delay: Initial delay between retries in seconds (default: 0.5)
 
         Raises:
-            VyOSConfigError: If session cannot be started.
+            VyOSConfigError: If session cannot be started after all retries.
         """
         if self._in_session:
             logger.warning("begin() called while already in session")
             return
 
         logger.info("Beginning VyOS configuration session")
-        self._run_wrapper("begin")
-        self._in_session = True
+
+        # Safety: VyOS begin retry is safe. If the config backend isn't ready,
+        # no session is created. Retrying simply attempts to open a new session.
+        # Retry logic for config backend readiness
+        last_error = None
+        delay = initial_delay
+
+        for attempt in range(1, max_retries + 1):
+            try:
+                self._run_wrapper("begin")
+                self._in_session = True
+                if attempt > 1:
+                    logger.info(
+                        "Configuration session started successfully on attempt %d/%d",
+                        attempt,
+                        max_retries,
+                    )
+                return
+            except VyOSConfigError as e:
+                last_error = e
+                if attempt < max_retries:
+                    logger.warning(
+                        "Failed to begin config session (attempt %d/%d): %s. "
+                        "Retrying in %.1fs...",
+                        attempt,
+                        max_retries,
+                        e,
+                        delay,
+                    )
+                    time.sleep(delay)
+                    delay *= 2  # Exponential backoff
+                else:
+                    logger.error(
+                        "Failed to begin config session after %d attempts", max_retries
+                    )
+
+        # All retries exhausted
+        raise VyOSConfigError(
+            f"Failed to begin configuration session after {max_retries} attempts. "
+            f"VyOS config backend may not be ready. Last error: {last_error}"
+        ) from last_error
 
     def end(self) -> None:
         """End the configuration session.
@@ -214,20 +262,63 @@ class VyOSConfigSession:
         logger.debug("Deleting: %s", " ".join(path))
         self._run_wrapper("delete", *path)
 
-    def commit(self) -> None:
-        """Commit the current configuration changes.
+    def commit(self, max_retries: int = 3, initial_delay: float = 1.0) -> None:
+        """Commit the current configuration changes with retry logic.
 
-        This applies changes to the running configuration but does not save
-        them to persistent storage.
+        Implements retry with exponential backoff to handle transient failures
+        where the commit command fails silently (no stderr/stdout). This can
+        occur when the config backend is under load or not fully initialized.
+
+        Args:
+            max_retries: Maximum number of commit attempts (default: 3)
+            initial_delay: Initial delay between retries in seconds (default: 1.0)
 
         Raises:
-            VyOSConfigError: If the commit fails.
+            VyOSConfigError: If the commit fails after all retries.
         """
         if not self._in_session:
             raise VyOSConfigError("Cannot commit configuration outside of a session")
 
         logger.info("Committing VyOS configuration")
-        self._run_wrapper("commit")
+
+        # Safety: VyOS commit retry is safe. On failure, staged changes (from prior
+        # `set` commands) remain in the session. Retrying commit re-applies the same
+        # staged changeset — it does not double-apply. This handles transient failures
+        # where the config backend (configd) isn't fully ready during early boot.
+        # Retry logic for commit failures
+        last_error = None
+        delay = initial_delay
+
+        for attempt in range(1, max_retries + 1):
+            try:
+                self._run_wrapper("commit")
+                if attempt > 1:
+                    logger.info(
+                        "Configuration committed successfully on attempt %d/%d",
+                        attempt,
+                        max_retries,
+                    )
+                return
+            except VyOSConfigError as e:
+                last_error = e
+                if attempt < max_retries:
+                    logger.warning(
+                        "Commit failed (attempt %d/%d): %s. Retrying in %.1fs...",
+                        attempt,
+                        max_retries,
+                        e,
+                        delay,
+                    )
+                    time.sleep(delay)
+                    delay *= 2  # Exponential backoff
+                else:
+                    logger.error("Commit failed after %d attempts", max_retries)
+
+        # All retries exhausted
+        raise VyOSConfigError(
+            f"Failed to commit configuration after {max_retries} attempts. "
+            f"Last error: {last_error}"
+        ) from last_error
 
     def save(self) -> None:
         """Save the current configuration to persistent storage.
