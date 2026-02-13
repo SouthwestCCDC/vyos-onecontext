@@ -167,6 +167,8 @@ class VyOSConfigSession:
 
         logger.info("Beginning VyOS configuration session")
 
+        # Safety: VyOS begin retry is safe. If the config backend isn't ready,
+        # no session is created. Retrying simply attempts to open a new session.
         # Retry logic for config backend readiness
         last_error = None
         delay = initial_delay
@@ -279,6 +281,10 @@ class VyOSConfigSession:
 
         logger.info("Committing VyOS configuration")
 
+        # Safety: VyOS commit retry is safe. On failure, staged changes (from prior
+        # `set` commands) remain in the session. Retrying commit re-applies the same
+        # staged changeset — it does not double-apply. This handles transient failures
+        # where the config backend (configd) isn't fully ready during early boot.
         # Retry logic for commit failures
         last_error = None
         delay = initial_delay
