@@ -20,6 +20,7 @@ from vyos_onecontext.models.nat import (
     NatConfig,
     SourceNatRule,
 )
+from vyos_onecontext.models.relay import PivotConfig, RelayConfig, RelayTarget
 from vyos_onecontext.models.routing import (
     OspfConfig,
     OspfDefaultInformation,
@@ -51,6 +52,10 @@ __all__ = [
     "DestinationNatRule",
     "NatConfig",
     "SourceNatRule",
+    # relay
+    "PivotConfig",
+    "RelayConfig",
+    "RelayTarget",
     # routing
     "OspfConfig",
     "OspfDefaultInformation",
