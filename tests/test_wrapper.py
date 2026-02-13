@@ -34,6 +34,7 @@ class TestVyOSConfigSession:
             capture_output=True,
             text=True,
             check=False,
+            timeout=30,
         )
         assert session._in_session is True
 
@@ -78,6 +79,7 @@ class TestVyOSConfigSession:
             capture_output=True,
             text=True,
             check=False,
+            timeout=30,
         )
         assert session._in_session is False
 
@@ -105,6 +107,7 @@ class TestVyOSConfigSession:
             capture_output=True,
             text=True,
             check=False,
+            timeout=30,
         )
 
     @patch("subprocess.run")
@@ -142,6 +145,7 @@ class TestVyOSConfigSession:
             capture_output=True,
             text=True,
             check=False,
+            timeout=30,
         )
 
     @patch("subprocess.run")
@@ -175,6 +179,7 @@ class TestVyOSConfigSession:
             capture_output=True,
             text=True,
             check=False,
+            timeout=120,
         )
 
     @patch("subprocess.run")
@@ -198,6 +203,7 @@ class TestVyOSConfigSession:
             capture_output=True,
             text=True,
             check=False,
+            timeout=30,
         )
 
     @patch("subprocess.run")
