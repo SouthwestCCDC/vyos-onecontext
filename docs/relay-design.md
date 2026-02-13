@@ -317,7 +317,9 @@ class RelayConfig(BaseModel):
         # Check unique egress interfaces
         egress_ifaces = [p.egress_interface for p in self.pivots]
         if len(egress_ifaces) != len(set(egress_ifaces)):
-            duplicates = [i for i in egress_ifaces if egress_ifaces.count(i) > 1]
+            duplicates = sorted(
+                {iface for iface in egress_ifaces if egress_ifaces.count(iface) > 1}
+            )
             raise ValueError(f"Duplicate egress interfaces: {duplicates}")
 
         # Check ingress != egress
@@ -401,19 +403,21 @@ def generate_config(config: RouterConfig) -> list[str]:
     """Generate all VyOS commands from parsed config."""
     commands = []
 
-    # Standard generators (unchanged)
-    commands.extend(SystemGenerator(config).generate())
-    commands.extend(InterfaceGenerator(config).generate())
+    # System configuration
+    commands.extend(HostnameGenerator(config.hostname).generate())
+    commands.extend(SshKeyGenerator(config.ssh_public_key).generate())
+
+    # VRF configuration (management VRF)
+    commands.extend(VrfGenerator(config.interfaces).generate())
+
+    # Interface configuration
+    commands.extend(InterfaceGenerator(config.interfaces, config.aliases).generate())
 
     # Relay generator (new - only runs if RELAY_JSON present)
     if config.relay:
         commands.extend(RelayGenerator(config.relay).generate())
 
-    # Standard generators continue (NAT, routing, etc.)
-    if config.nat:
-        commands.extend(NatGenerator(config.nat).generate())
-    if config.routes:
-        commands.extend(RoutingGenerator(config.routes).generate())
+    # ... (standard generators: routing, SSH service, OSPF, DHCP, NAT, firewall, conntrack, custom config)
 
     return commands
 ```
@@ -564,22 +568,26 @@ The relay generator integrates into the existing boot flow after interface confi
 
 ```
 1. System configuration (hostname, SSH keys)
-2. Interface configuration (IP addresses, MTU, VRFs if VROUTER_MANAGEMENT)
-3. Relay configuration (if RELAY_JSON present)
+2. VRF configuration (management VRF - must come before interface IP configuration)
+3. Interface configuration (IP addresses, MTU)
+4. Relay configuration (if RELAY_JSON present)
    ├─ VRFs for relay pivots
    ├─ Interface-to-VRF bindings
    ├─ Policy-based routing
    ├─ Relay NAT (DNAT + SNAT)
    ├─ Proxy-ARP
    └─ Static routes in VRF context
-4. Standard routing (ROUTES_JSON, default gateway)
-5. Standard NAT (NAT_JSON - rules 100+)
-6. OSPF (OSPF_JSON)
-7. DHCP (DHCP_JSON)
-8. Firewall (FIREWALL_JSON)
-9. Custom commands (START_CONFIG)
-10. Commit configuration
-11. Custom scripts (START_SCRIPT)
+5. Routing (default gateway selection for non-management interfaces)
+6. Static routes (ROUTES_JSON)
+7. SSH service (VRF binding)
+8. OSPF (OSPF_JSON)
+9. DHCP (DHCP_JSON)
+10. NAT (NAT_JSON - rules 100+)
+11. Firewall (FIREWALL_JSON)
+12. Conntrack timeouts
+13. Custom commands (START_CONFIG)
+14. Commit configuration
+15. Custom scripts (START_SCRIPT)
 ```
 
 ### Why This Order?
@@ -597,16 +605,19 @@ class RouterConfig(BaseModel):
     """Complete router configuration."""
     hostname: str | None = None
     ssh_public_key: str | None = None
-    interfaces: list[InterfaceConfig]
+    onecontext_mode: OnecontextMode = OnecontextMode.STATELESS
+    interfaces: list[InterfaceConfig] = Field(default_factory=list)
+    aliases: list[AliasConfig] = Field(default_factory=list)
     routes: RoutesConfig | None = None
     ospf: OspfConfig | None = None
-    nat: NatConfig | None = None
     dhcp: DhcpConfig | None = None
+    nat: NatConfig | None = None
     firewall: FirewallConfig | None = None
+    conntrack: ConntrackConfig | None = None
     relay: RelayConfig | None = None  # NEW
     start_config: str | None = None
     start_script: str | None = None
-    onecontext_mode: OnecontextMode = OnecontextMode.STATELESS
+    start_script_timeout: int = 300
 ```
 
 ## Interaction with Standard Config
