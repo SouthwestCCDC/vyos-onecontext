@@ -172,21 +172,21 @@ set interfaces ethernet eth1 policy route relay-pbr
 **Translate relay addresses to target addresses:**
 
 ```
-set nat destination rule 1000 inbound-interface name eth1
-set nat destination rule 1000 destination address 10.32.5.0/24
-set nat destination rule 1000 translation address 192.168.144.0/24
-set nat destination rule 1010 inbound-interface name eth1
-set nat destination rule 1010 destination address 10.33.5.0/24
-set nat destination rule 1010 translation address 10.123.105.0/24
-set nat destination rule 1020 inbound-interface name eth1
-set nat destination rule 1020 destination address 10.36.5.0/24
-set nat destination rule 1020 translation address 10.101.105.0/24
-set nat destination rule 1030 inbound-interface name eth1
-set nat destination rule 1030 destination address 10.36.105.0/25
-set nat destination rule 1030 translation address 10.127.105.0/25
+set nat destination rule 5000 inbound-interface name eth1
+set nat destination rule 5000 destination address 10.32.5.0/24
+set nat destination rule 5000 translation address 192.168.144.0/24
+set nat destination rule 5010 inbound-interface name eth1
+set nat destination rule 5010 destination address 10.33.5.0/24
+set nat destination rule 5010 translation address 10.123.105.0/24
+set nat destination rule 5020 inbound-interface name eth1
+set nat destination rule 5020 destination address 10.36.5.0/24
+set nat destination rule 5020 translation address 10.101.105.0/24
+set nat destination rule 5030 inbound-interface name eth1
+set nat destination rule 5030 destination address 10.36.105.0/25
+set nat destination rule 5030 translation address 10.127.105.0/25
 ```
 
-**Rule numbering:** Starts at 1000, increments by 10 (avoiding conflict with standard NAT_JSON rules in 100+ range)
+**Rule numbering:** Starts at 5000, increments by 10 (avoiding conflict with standard NAT_JSON rules which use idx*100 scheme)
 
 **NAT type:** Subnet-to-subnet (netmap) - one rule per target regardless of prefix size
 
@@ -197,13 +197,13 @@ set nat destination rule 1030 translation address 10.127.105.0/25
 **Masquerade outbound traffic on each egress interface:**
 
 ```
-set nat source rule 1000 outbound-interface name eth2
-set nat source rule 1000 translation address masquerade
-set nat source rule 1010 outbound-interface name eth3
-set nat source rule 1010 translation address masquerade
+set nat source rule 5000 outbound-interface name eth2
+set nat source rule 5000 translation address masquerade
+set nat source rule 5010 outbound-interface name eth3
+set nat source rule 5010 translation address masquerade
 ```
 
-**Rule numbering:** Starts at 1000, increments by 10 (parallel with DNAT numbering)
+**Rule numbering:** Starts at 5000, increments by 10 (parallel with DNAT numbering)
 
 **One rule per pivot:** All targets using the same egress interface share one masquerade rule
 
@@ -242,7 +242,7 @@ The relay configuration is validated using Pydantic models with automatic schema
 
 ```python
 from pydantic import BaseModel, field_validator, model_validator
-from ipaddress import ip_address, ip_network
+from ipaddress import IPv4Address, IPv4Network
 
 class RelayTarget(BaseModel):
     """A single relay target (relay prefix -> target network)."""
@@ -253,22 +253,22 @@ class RelayTarget(BaseModel):
     @field_validator('relay_prefix', 'target_prefix')
     @classmethod
     def validate_prefix(cls, v: str) -> str:
-        """Validate CIDR notation."""
-        ip_network(v, strict=False)
+        """Validate IPv4 CIDR notation."""
+        IPv4Network(v, strict=False)
         return v
 
     @field_validator('gateway')
     @classmethod
     def validate_gateway(cls, v: str) -> str:
         """Validate IPv4 address."""
-        ip_address(v)
+        IPv4Address(v)
         return v
 
     @model_validator(mode='after')
     def validate_prefix_lengths_match(self) -> 'RelayTarget':
         """Ensure relay_prefix and target_prefix have matching lengths."""
-        relay_net = ip_network(self.relay_prefix, strict=False)
-        target_net = ip_network(self.target_prefix, strict=False)
+        relay_net = IPv4Network(self.relay_prefix, strict=False)
+        target_net = IPv4Network(self.target_prefix, strict=False)
         if relay_net.prefixlen != target_net.prefixlen:
             raise ValueError(
                 f"relay_prefix ({self.relay_prefix}) and target_prefix "
@@ -335,8 +335,8 @@ class RelayConfig(BaseModel):
             for pivot in self.pivots
             for target in pivot.targets
         ]
-        # Convert to ip_network for overlap detection
-        relay_networks = [ip_network(p, strict=False) for p in relay_prefixes]
+        # Convert to IPv4Network for overlap detection
+        relay_networks = [IPv4Network(p, strict=False) for p in relay_prefixes]
         for i, net1 in enumerate(relay_networks):
             for net2 in relay_networks[i+1:]:
                 if net1.overlaps(net2):
@@ -391,7 +391,7 @@ Relay NAT is structurally different from standard NAT:
 | Scope | Global routing table | VRF-aware |
 | NAT type | Per-rule: masquerade, port forwarding, 1:1 | Subnet-to-subnet (netmap) |
 | Configuration | Explicit rules in JSON | Derived from pivot/target mappings |
-| Rule numbering | 100+ range | 1000+ range (avoids conflicts) |
+| Rule numbering | 100+ range | 5000+ range (avoids conflicts) |
 
 Attempting to reuse the standard NAT generator would require extensive conditional logic and risk breaking existing NAT functionality. A separate generator provides clean separation of concerns.
 
@@ -429,8 +429,8 @@ class RelayGenerator(BaseGenerator):
     """Generate VyOS commands for VRF-based relay configuration."""
 
     BASE_TABLE_ID = 200  # Start VRF table IDs at 200
-    DNAT_RULE_START = 1000  # Avoid conflict with standard NAT
-    SNAT_RULE_START = 1000
+    DNAT_RULE_START = 5000  # Avoid conflict with standard NAT (idx*100 scheme)
+    SNAT_RULE_START = 5000
     PBR_RULE_INCREMENT = 10
 
     def __init__(self, relay: RelayConfig) -> None:
@@ -593,7 +593,7 @@ The relay generator integrates into the existing boot flow after interface confi
 ### Why This Order?
 
 1. **Interfaces before VRFs**: Interfaces must exist before binding to VRFs
-2. **Relay NAT before standard NAT**: Relay NAT uses 1000+ rule range; standard NAT uses 100+ range. Order doesn't matter functionally, but grouping relay config together is clearer.
+2. **Relay NAT before standard NAT**: Relay NAT uses 5000+ rule range; standard NAT uses 100+ range. Order doesn't matter functionally, but grouping relay config together is clearer.
 3. **Relay routes before standard routes**: VRF static routes are isolated from global routing table, so order doesn't matter functionally, but logical grouping.
 
 ### RouterConfig Changes
@@ -632,7 +632,7 @@ Relay configuration can coexist with standard vrouter-infra configuration on the
 |-------|---------|
 | 1-99 | Reserved for manual rules via START_CONFIG |
 | 100-999 | Standard NAT_JSON rules (masquerade, port forwards, binat) |
-| 1000+ | Relay NAT rules (subnet-to-subnet DNAT/SNAT) |
+| 5000+ | Relay NAT rules (subnet-to-subnet DNAT/SNAT) |
 
 **VRF table IDs:**
 
@@ -647,7 +647,7 @@ Relay routers typically don't use FIREWALL_JSON. If needed, firewall rules are p
 
 ### Compatibility Notes
 
-- **RELAY_JSON + NAT_JSON**: Both can be present. Relay NAT rules (1000+) won't collide with standard NAT rules (100+).
+- **RELAY_JSON + NAT_JSON**: Both can be present. Relay NAT rules (5000+) won't collide with standard NAT rules (100+).
 - **RELAY_JSON + VROUTER_MANAGEMENT**: Both can be present. Management VRF uses table 100; relay VRFs use 200+.
 - **RELAY_JSON + ROUTES_JSON**: Standard routes go in global routing table; relay routes go in VRF tables. No conflict.
 - **RELAY_JSON + OSPF_JSON**: OSPF would run in global routing table, not in relay VRFs. Unlikely combination, but technically compatible.
@@ -745,8 +745,8 @@ The following aspects need verification on a real VyOS Sagitta instance before i
 **Question:** Does VyOS Sagitta support netmap syntax as shown below?
 
 ```
-set nat destination rule 1000 destination address 10.32.5.0/24
-set nat destination rule 1000 translation address 192.168.144.0/24
+set nat destination rule 5000 destination address 10.32.5.0/24
+set nat destination rule 5000 translation address 192.168.144.0/24
 ```
 
 **Expected behavior:** Traffic destined for 10.32.5.X is translated to 192.168.144.X (subnet-wide mapping).
