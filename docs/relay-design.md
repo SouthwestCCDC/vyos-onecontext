@@ -592,9 +592,16 @@ The relay generator integrates into the existing boot flow after interface confi
 
 ### Why This Order?
 
-1. **Interfaces before VRFs**: Interfaces must exist before binding to VRFs
-2. **Relay NAT before standard NAT**: Relay NAT uses 5000+ rule range; standard NAT uses 100+ range. Order doesn't matter functionally, but grouping relay config together is clearer.
-3. **Relay routes before standard routes**: VRF static routes are isolated from global routing table, so order doesn't matter functionally, but logical grouping.
+VyOS uses a transactional commit model: all `set` commands are staged in working
+configuration and committed atomically. VyOS resolves ordering dependencies during
+commit, so the sequence of `set` commands doesn't affect correctness.
+
+The ordering above reflects **logical grouping**, not a required execution sequence:
+
+1. **System and network fundamentals first**: Hostname, VRFs, and interface IPs establish the base configuration
+2. **Relay config as a unit**: All relay-derived commands (VRFs, PBR, NAT, routing) are grouped together for clarity
+3. **Standard features after relay**: Standard routing, NAT, OSPF, etc. operate in the global routing table and don't interact with relay VRF config
+4. **Escape hatches last**: START_CONFIG and START_SCRIPT run after all structured configuration, allowing manual overrides
 
 ### RouterConfig Changes
 
@@ -631,8 +638,14 @@ Relay configuration can coexist with standard vrouter-infra configuration on the
 | Range | Purpose |
 |-------|---------|
 | 1-99 | Reserved for manual rules via START_CONFIG |
-| 100-999 | Standard NAT_JSON rules (masquerade, port forwards, binat) |
+| 100+ | Standard NAT_JSON source/destination rules (`idx * 100`, no upper bound) |
+| 500+ | Standard NAT_JSON binat rules (`500 + idx * 100`, shares namespace with above) |
 | 5000+ | Relay NAT rules (subnet-to-subnet DNAT/SNAT) |
+
+Standard NAT uses `idx * 100` numbering with no cap. In practice, relay routers are
+dedicated appliances unlikely to also have extensive standard NAT rules. With 5000 as
+the relay base, a collision would require 50+ standard NAT rules on the same router —
+an unrealistic scenario for a relay appliance.
 
 **VRF table IDs:**
 
@@ -647,7 +660,7 @@ Relay routers typically don't use FIREWALL_JSON. If needed, firewall rules are p
 
 ### Compatibility Notes
 
-- **RELAY_JSON + NAT_JSON**: Both can be present. Relay NAT rules (5000+) won't collide with standard NAT rules (100+).
+- **RELAY_JSON + NAT_JSON**: Both can be present. Relay NAT rules (5000+) are unlikely to collide with standard NAT rules (100+, incrementing by 100) on a dedicated relay appliance. A collision would require 50+ standard NAT rules.
 - **RELAY_JSON + VROUTER_MANAGEMENT**: Both can be present. Management VRF uses table 100; relay VRFs use 200+.
 - **RELAY_JSON + ROUTES_JSON**: Standard routes go in global routing table; relay routes go in VRF tables. No conflict.
 - **RELAY_JSON + OSPF_JSON**: OSPF would run in global routing table, not in relay VRFs. Unlikely combination, but technically compatible.
