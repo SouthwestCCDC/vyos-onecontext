@@ -65,8 +65,9 @@ class TestRelayGenerator:
         assert "set nat source rule 5000 outbound-interface name eth2" in commands
         assert "set nat source rule 5000 translation address masquerade" in commands
 
-        # 5. Proxy-ARP
+        # 5. Proxy-ARP and loopback routes
         assert "set interfaces ethernet eth1 ip enable-proxy-arp" in commands
+        assert "set protocols static route 10.32.5.0/24 interface lo" in commands
 
         # 6. Static routes in VRF
         assert (
@@ -133,11 +134,21 @@ class TestRelayGenerator:
         assert "10.32.5.0/24" in " ".join(dnat_5000)
         assert "10.33.5.0/24" in " ".join(dnat_5010)
 
-        # Static routes: Two routes (one per target)
-        static_routes = [cmd for cmd in commands if "protocols static route" in cmd]
-        assert len(static_routes) == 2
-        assert any("192.168.144.0/24" in cmd for cmd in static_routes)
-        assert any("10.123.105.0/24" in cmd for cmd in static_routes)
+        # Proxy-ARP loopback routes: Two routes (one per relay prefix)
+        proxy_arp_routes = [
+            cmd for cmd in commands if "protocols static route" in cmd and "interface lo" in cmd
+        ]
+        assert len(proxy_arp_routes) == 2
+        assert "set protocols static route 10.32.5.0/24 interface lo" in commands
+        assert "set protocols static route 10.33.5.0/24 interface lo" in commands
+
+        # VRF static routes: Two routes (one per target)
+        vrf_static_routes = [
+            cmd for cmd in commands if "vrf name" in cmd and "protocols static route" in cmd
+        ]
+        assert len(vrf_static_routes) == 2
+        assert any("192.168.144.0/24" in cmd for cmd in vrf_static_routes)
+        assert any("10.123.105.0/24" in cmd for cmd in vrf_static_routes)
 
     def test_generate_multiple_pivots_multiple_targets(self):
         """Test relay config with multiple pivots and multiple targets.
@@ -216,7 +227,17 @@ class TestRelayGenerator:
         assert any("rule 5000 outbound-interface name eth2" in cmd for cmd in snat_rules)
         assert any("rule 5010 outbound-interface name eth3" in cmd for cmd in snat_rules)
 
-        # Static routes: Four routes in correct VRFs
+        # Proxy-ARP loopback routes: Four routes (one per relay prefix)
+        proxy_arp_routes = [
+            cmd for cmd in commands if "protocols static route" in cmd and "interface lo" in cmd
+        ]
+        assert len(proxy_arp_routes) == 4
+        assert "set protocols static route 10.32.5.0/24 interface lo" in commands
+        assert "set protocols static route 10.33.5.0/24 interface lo" in commands
+        assert "set protocols static route 10.36.5.0/24 interface lo" in commands
+        assert "set protocols static route 10.36.105.0/25 interface lo" in commands
+
+        # VRF static routes: Four routes in correct VRFs
         assert (
             "set vrf name relay_eth2 protocols static route 192.168.144.0/24 next-hop 192.168.100.1"
             in commands
@@ -276,8 +297,13 @@ class TestRelayGenerator:
         proxy_arp_idx = commands.index(
             "set interfaces ethernet eth1 ip enable-proxy-arp"
         )
-        static_route_idx = next(
-            i for i, cmd in enumerate(commands) if "protocols static route" in cmd
+        loopback_route_idx = commands.index(
+            "set protocols static route 10.32.5.0/24 interface lo"
+        )
+        vrf_static_route_idx = next(
+            i
+            for i, cmd in enumerate(commands)
+            if "vrf name" in cmd and "protocols static route" in cmd
         )
 
         # Verify ordering constraints
@@ -285,8 +311,9 @@ class TestRelayGenerator:
         assert vrf_bind_idx < pbr_rule_idx, "Interface binding before PBR"
         assert pbr_rule_idx < dnat_idx, "PBR before NAT"
         assert dnat_idx < snat_idx, "DNAT before SNAT"
-        assert snat_idx < proxy_arp_idx, "SNAT before proxy-ARP"
-        assert proxy_arp_idx < static_route_idx, "Proxy-ARP before static routes"
+        assert snat_idx < proxy_arp_idx, "SNAT before proxy-ARP enable"
+        assert proxy_arp_idx < loopback_route_idx, "Proxy-ARP enable before loopback routes"
+        assert loopback_route_idx < vrf_static_route_idx, "Loopback routes before VRF static routes"
 
     def test_vrf_naming_convention(self):
         """Test VRF naming follows 'relay_{interface}' convention."""
