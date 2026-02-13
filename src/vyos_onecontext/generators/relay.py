@@ -85,6 +85,38 @@ class RelayGenerator(BaseGenerator):
 
         return commands
 
+    def generate_vrf_commands(self) -> list[str]:
+        """Generate VRF creation and interface binding commands.
+
+        Must be called BEFORE interface IP configuration.
+
+        Returns:
+            List of VyOS 'set' commands for VRF configuration
+        """
+        if self.relay is None:
+            return []
+        return self._generate_vrfs()
+
+    def generate_relay_commands(self) -> list[str]:
+        """Generate PBR, NAT, proxy-ARP, and static route commands.
+
+        Must be called AFTER interface IP configuration.
+
+        Returns:
+            List of VyOS 'set' commands for relay configuration (excluding VRF creation)
+        """
+        if self.relay is None:
+            return []
+
+        commands: list[str] = []
+        commands.extend(self._generate_pbr())
+        commands.extend(self._generate_dnat())
+        commands.extend(self._generate_snat())
+        commands.extend(self._generate_proxy_arp())
+        commands.extend(self._generate_static_routes())
+
+        return commands
+
     def _generate_vrfs(self) -> list[str]:
         """Create VRFs and bind interfaces.
 
