@@ -3827,3 +3827,137 @@ class TestNatGeneratorAddressMapping:
 
         assert "set nat source rule 100 translation options address-mapping random" in commands
         assert "set nat source rule 100 description 'IP hopping for scoring traffic'" in commands
+
+
+class TestGenerateConfigWithRelay:
+    """Tests for relay configuration boot flow integration."""
+
+    def test_generate_config_with_relay(self):
+        """Test that relay commands are generated when relay config is present."""
+        from vyos_onecontext.models.relay import PivotConfig, RelayConfig, RelayTarget
+
+        config = RouterConfig(
+            interfaces=[
+                InterfaceConfig(
+                    name="eth1",
+                    ip=IPv4Address("10.0.1.1"),
+                    mask="255.255.255.0",
+                ),
+                InterfaceConfig(
+                    name="eth2",
+                    ip=IPv4Address("192.168.100.2"),
+                    mask="255.255.255.0",
+                ),
+            ],
+            relay=RelayConfig(
+                ingress_interface="eth1",
+                pivots=[
+                    PivotConfig(
+                        egress_interface="eth2",
+                        targets=[
+                            RelayTarget(
+                                relay_prefix="10.32.5.0/24",
+                                target_prefix="192.168.144.0/24",
+                                gateway="192.168.100.1",
+                            )
+                        ],
+                    )
+                ],
+            ),
+        )
+        commands = generate_config(config)
+
+        # Check VRF commands are present
+        assert any("set vrf name relay_eth2 table 200" in cmd for cmd in commands)
+        assert any("set interfaces ethernet eth2 vrf relay_eth2" in cmd for cmd in commands)
+
+        # Check PBR commands are present
+        assert any("set policy route relay-pbr" in cmd for cmd in commands)
+
+        # Check NAT commands are present
+        assert any("set nat destination rule 5000" in cmd for cmd in commands)
+        assert any("set nat source rule 5000" in cmd for cmd in commands)
+
+        # Check proxy-ARP is enabled
+        assert any("set interfaces ethernet eth1 ip enable-proxy-arp" in cmd for cmd in commands)
+
+        # Check static route in VRF
+        assert any(
+            "set vrf name relay_eth2 protocols static route 192.168.144.0/24" in cmd
+            for cmd in commands
+        )
+
+    def test_generate_config_without_relay(self):
+        """Test that no relay commands are generated when relay config is absent."""
+        config = RouterConfig(
+            interfaces=[
+                InterfaceConfig(
+                    name="eth0",
+                    ip=IPv4Address("10.0.1.1"),
+                    mask="255.255.255.0",
+                )
+            ]
+        )
+        commands = generate_config(config)
+
+        # Ensure no relay commands are present
+        assert not any("relay" in cmd.lower() for cmd in commands)
+        assert not any("vrf name relay_" in cmd for cmd in commands)
+
+    def test_generate_config_relay_command_order(self):
+        """Test that relay commands are in correct order (VRF before IPs, rest after IPs)."""
+        from vyos_onecontext.models.relay import PivotConfig, RelayConfig, RelayTarget
+
+        config = RouterConfig(
+            interfaces=[
+                InterfaceConfig(
+                    name="eth1",
+                    ip=IPv4Address("10.0.1.1"),
+                    mask="255.255.255.0",
+                ),
+                InterfaceConfig(
+                    name="eth2",
+                    ip=IPv4Address("192.168.100.2"),
+                    mask="255.255.255.0",
+                ),
+            ],
+            relay=RelayConfig(
+                ingress_interface="eth1",
+                pivots=[
+                    PivotConfig(
+                        egress_interface="eth2",
+                        targets=[
+                            RelayTarget(
+                                relay_prefix="10.32.5.0/24",
+                                target_prefix="192.168.144.0/24",
+                                gateway="192.168.100.1",
+                            )
+                        ],
+                    )
+                ],
+            ),
+        )
+        commands = generate_config(config)
+
+        # Find indices of key command types
+        vrf_create_idx = next(
+            i for i, cmd in enumerate(commands) if "set vrf name relay_eth2 table" in cmd
+        )
+        vrf_bind_idx = next(
+            i for i, cmd in enumerate(commands) if "set interfaces ethernet eth2 vrf" in cmd
+        )
+        interface_ip_idx = next(
+            i for i, cmd in enumerate(commands) if "set interfaces ethernet eth2 address" in cmd
+        )
+        pbr_idx = next(i for i, cmd in enumerate(commands) if "set policy route relay-pbr" in cmd)
+        nat_idx = next(
+            i for i, cmd in enumerate(commands) if "set nat destination rule 5000" in cmd
+        )
+
+        # VRF creation and binding MUST come before interface IPs
+        assert vrf_create_idx < interface_ip_idx
+        assert vrf_bind_idx < interface_ip_idx
+
+        # PBR and NAT MUST come after interface IPs
+        assert interface_ip_idx < pbr_idx
+        assert interface_ip_idx < nat_idx

@@ -26,15 +26,18 @@ def generate_config(config: RouterConfig) -> list[str]:
     Generates commands in the correct order for VyOS commit:
     1. System configuration (hostname, SSH keys)
     2. VRF configuration (must happen BEFORE interface IP configuration)
-    3. Network interfaces (IP addresses)
-    4. Routing (default gateway selection for non-management interfaces)
-    5. Static routes (ROUTES_JSON; may reference VRFs)
-    6. Services (SSH VRF binding)
-    7. Dynamic routing (OSPF)
-    8. DHCP server
-    9. NAT (source, destination, binat)
-    10. Firewall
-    11. Custom start config (START_CONFIG)
+    3. Relay VRF configuration (if RELAY_JSON present - must come BEFORE interface IP configuration)
+    4. Network interfaces (IP addresses)
+    5. Relay configuration continued (if RELAY_JSON present - PBR, NAT, proxy-ARP, static routes)
+    6. Routing (default gateway selection for non-management interfaces)
+    7. Static routes (ROUTES_JSON; may reference VRFs)
+    8. Services (SSH VRF binding)
+    9. Dynamic routing (OSPF)
+    10. DHCP server
+    11. NAT (source, destination, binat)
+    12. Firewall
+    13. Conntrack timeout rules
+    14. Custom start config (START_CONFIG)
 
     Args:
         config: Complete router configuration
@@ -52,9 +55,18 @@ def generate_config(config: RouterConfig) -> list[str]:
     # VyOS requires VRF assignment on bare interfaces (no IPs configured yet)
     commands.extend(VrfGenerator(config.interfaces).generate())
 
+    # Relay VRF configuration - must come BEFORE interface IP configuration
+    # Creates VRFs and binds egress interfaces to them
+    relay_gen = RelayGenerator(config.relay)
+    commands.extend(relay_gen.generate_vrf_commands())
+
     # Interfaces (IP addresses, MTU)
     # This comes AFTER VRF assignment to avoid VyOS rejection
     commands.extend(InterfaceGenerator(config.interfaces, config.aliases).generate())
+
+    # Relay configuration continued - must come AFTER interface IP configuration
+    # Generates PBR, NAT, proxy-ARP, and static routes for relay
+    commands.extend(relay_gen.generate_relay_commands())
 
     # Routing (default gateway selection for non-management interfaces)
     commands.extend(RoutingGenerator(config.interfaces).generate())
