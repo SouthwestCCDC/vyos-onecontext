@@ -1069,6 +1069,144 @@ class TestValidationEnhancements:
             aliases=[AliasConfig(interface="eth0", ip="10.0.1.2", mask="255.255.255.0")],
         )
 
+    def test_relay_invalid_ingress_interface(self) -> None:
+        """Test that relay ingress_interface must exist."""
+        from vyos_onecontext.models.relay import PivotConfig, RelayConfig, RelayTarget
+
+        with pytest.raises(ValidationError, match="ingress_interface.*references non-existent"):
+            RouterConfig(
+                interfaces=[
+                    InterfaceConfig(name="eth0", ip="10.0.1.1", mask="255.255.255.0"),
+                    InterfaceConfig(name="eth2", ip="192.168.100.2", mask="255.255.255.0"),
+                ],
+                relay=RelayConfig(
+                    ingress_interface="eth99",
+                    pivots=[
+                        PivotConfig(
+                            egress_interface="eth2",
+                            targets=[
+                                RelayTarget(
+                                    relay_prefix="10.32.5.0/24",
+                                    target_prefix="192.168.144.0/24",
+                                    gateway="192.168.100.1",
+                                )
+                            ],
+                        )
+                    ],
+                ),
+            )
+
+    def test_relay_invalid_egress_interface(self) -> None:
+        """Test that relay pivot egress_interface must exist."""
+        from vyos_onecontext.models.relay import PivotConfig, RelayConfig, RelayTarget
+
+        with pytest.raises(ValidationError, match="egress_interface.*references non-existent"):
+            RouterConfig(
+                interfaces=[
+                    InterfaceConfig(name="eth1", ip="10.0.1.1", mask="255.255.255.0"),
+                ],
+                relay=RelayConfig(
+                    ingress_interface="eth1",
+                    pivots=[
+                        PivotConfig(
+                            egress_interface="eth99",
+                            targets=[
+                                RelayTarget(
+                                    relay_prefix="10.32.5.0/24",
+                                    target_prefix="192.168.144.0/24",
+                                    gateway="192.168.100.1",
+                                )
+                            ],
+                        )
+                    ],
+                ),
+            )
+
+    def test_relay_management_interface_ingress(self) -> None:
+        """Test that relay ingress_interface cannot be a management interface."""
+        from vyos_onecontext.models.relay import PivotConfig, RelayConfig, RelayTarget
+
+        with pytest.raises(ValidationError, match="ingress_interface.*cannot be a management"):
+            RouterConfig(
+                interfaces=[
+                    InterfaceConfig(
+                        name="eth0", ip="10.0.1.1", mask="255.255.255.0", management=True
+                    ),
+                    InterfaceConfig(name="eth1", ip="192.168.100.2", mask="255.255.255.0"),
+                ],
+                relay=RelayConfig(
+                    ingress_interface="eth0",
+                    pivots=[
+                        PivotConfig(
+                            egress_interface="eth1",
+                            targets=[
+                                RelayTarget(
+                                    relay_prefix="10.32.5.0/24",
+                                    target_prefix="192.168.144.0/24",
+                                    gateway="192.168.100.1",
+                                )
+                            ],
+                        )
+                    ],
+                ),
+            )
+
+    def test_relay_management_interface_egress(self) -> None:
+        """Test that relay pivot egress_interface cannot be a management interface."""
+        from vyos_onecontext.models.relay import PivotConfig, RelayConfig, RelayTarget
+
+        with pytest.raises(ValidationError, match="egress_interface.*cannot be a management"):
+            RouterConfig(
+                interfaces=[
+                    InterfaceConfig(name="eth0", ip="10.0.1.1", mask="255.255.255.0"),
+                    InterfaceConfig(
+                        name="eth1", ip="192.168.100.2", mask="255.255.255.0", management=True
+                    ),
+                ],
+                relay=RelayConfig(
+                    ingress_interface="eth0",
+                    pivots=[
+                        PivotConfig(
+                            egress_interface="eth1",
+                            targets=[
+                                RelayTarget(
+                                    relay_prefix="10.32.5.0/24",
+                                    target_prefix="192.168.144.0/24",
+                                    gateway="192.168.100.1",
+                                )
+                            ],
+                        )
+                    ],
+                ),
+            )
+
+    def test_relay_valid_configuration(self) -> None:
+        """Test that relay with valid interfaces passes validation."""
+        from vyos_onecontext.models.relay import PivotConfig, RelayConfig, RelayTarget
+
+        # Should pass validation
+        RouterConfig(
+            interfaces=[
+                InterfaceConfig(name="eth1", ip="10.0.1.1", mask="255.255.255.0"),
+                InterfaceConfig(name="eth2", ip="192.168.100.2", mask="255.255.255.0"),
+            ],
+            relay=RelayConfig(
+                ingress_interface="eth1",
+                pivots=[
+                    PivotConfig(
+                        egress_interface="eth2",
+                        targets=[
+                            RelayTarget(
+                                relay_prefix="10.32.5.0/24",
+                                target_prefix="192.168.144.0/24",
+                                gateway="192.168.100.1",
+                            )
+                        ],
+                    )
+                ],
+            ),
+        )
+
 
 class TestStartScriptTimeout:
     """Tests for START_SCRIPT_TIMEOUT default and validation (issue #106)."""
