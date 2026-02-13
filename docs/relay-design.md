@@ -398,7 +398,7 @@ Attempting to reuse the standard NAT generator would require extensive condition
 ### Generator Composition
 
 ```python
-# In vyos_onecontext/generators/__init__.py
+# Proposed change to vyos_onecontext/generators/__init__.py
 def generate_config(config: RouterConfig) -> list[str]:
     """Generate all VyOS commands from parsed config."""
     commands = []
@@ -603,6 +603,8 @@ The ordering above reflects **logical grouping**, not a required execution seque
 3. **Standard features after relay**: Standard routing, NAT, OSPF, etc. operate in the global routing table and don't interact with relay VRF config
 4. **Escape hatches last**: START_CONFIG and START_SCRIPT run after all structured configuration, allowing manual overrides
 
+**Note:** The existing codebase conservatively orders management VRF creation before interface IP configuration, and the relay generator follows the same convention. While VyOS's transactional commit resolves dependencies atomically (making strict ordering unnecessary), maintaining this convention avoids surprising implementers familiar with the codebase.
+
 ### RouterConfig Changes
 
 The `RouterConfig` model gains an optional `relay` field:
@@ -642,10 +644,7 @@ Relay configuration can coexist with standard vrouter-infra configuration on the
 | 500+ | Standard NAT_JSON binat rules (`500 + idx * 100`, shares namespace with above) |
 | 5000+ | Relay NAT rules (subnet-to-subnet DNAT/SNAT) |
 
-Standard NAT uses `idx * 100` numbering with no cap. In practice, relay routers are
-dedicated appliances unlikely to also have extensive standard NAT rules. With 5000 as
-the relay base, a collision would require 50+ standard NAT rules on the same router —
-an unrealistic scenario for a relay appliance.
+Standard source/destination NAT uses `idx * 100` numbering with no cap. Binat rules start at `500 + idx * 100`. In practice, relay routers are dedicated appliances unlikely to also have extensive standard NAT rules. With 5000 as the relay base, a collision would require 50+ standard source/destination NAT rules or 46+ binat rules on the same router — unrealistic for a dedicated relay appliance.
 
 **VRF table IDs:**
 
@@ -660,7 +659,7 @@ Relay routers typically don't use FIREWALL_JSON. If needed, firewall rules are p
 
 ### Compatibility Notes
 
-- **RELAY_JSON + NAT_JSON**: Both can be present. Relay NAT rules (5000+) are unlikely to collide with standard NAT rules (100+, incrementing by 100) on a dedicated relay appliance. A collision would require 50+ standard NAT rules.
+- **RELAY_JSON + NAT_JSON**: Both can be present. Relay NAT rules (5000+) are unlikely to collide with standard NAT rules (source/destination at `idx * 100`, binat at `500 + idx * 100`) on a dedicated relay appliance. A collision would require 50+ standard rules or 46+ binat rules.
 - **RELAY_JSON + VROUTER_MANAGEMENT**: Both can be present. Management VRF uses table 100; relay VRFs use 200+.
 - **RELAY_JSON + ROUTES_JSON**: Standard routes go in global routing table; relay routes go in VRF tables. No conflict.
 - **RELAY_JSON + OSPF_JSON**: OSPF would run in global routing table, not in relay VRFs. Unlikely combination, but technically compatible.
