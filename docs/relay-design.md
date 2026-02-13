@@ -215,7 +215,7 @@ set nat source rule 5010 translation address masquerade
 set interfaces ethernet eth1 ip enable-proxy-arp
 ```
 
-**Behavior:** Router responds to ARP requests for any address in relay_prefix ranges, even though those addresses aren't directly configured on the interface.
+**Expected behavior:** Router responds to ARP requests for any address in relay_prefix ranges, even though those addresses aren't directly configured on the interface. (Needs validation on Sagitta - see Open Questions section.)
 
 **Why needed:** Relay addresses and the ingress interface's home IP are all on the same large /12 network. Proxy-ARP allows the router to claim ownership of relay addresses without explicit secondary IPs.
 
@@ -248,20 +248,13 @@ class RelayTarget(BaseModel):
     """A single relay target (relay prefix -> target network)."""
     relay_prefix: str
     target_prefix: str
-    gateway: str
+    gateway: IPv4Address
 
     @field_validator('relay_prefix', 'target_prefix')
     @classmethod
     def validate_prefix(cls, v: str) -> str:
         """Validate IPv4 CIDR notation."""
         IPv4Network(v, strict=False)
-        return v
-
-    @field_validator('gateway')
-    @classmethod
-    def validate_gateway(cls, v: str) -> str:
-        """Validate IPv4 address."""
-        IPv4Address(v)
         return v
 
     @model_validator(mode='after')
@@ -569,41 +562,37 @@ The relay generator integrates into the existing boot flow after interface confi
 ```
 1. System configuration (hostname, SSH keys)
 2. VRF configuration (management VRF - must come before interface IP configuration)
-3. Interface configuration (IP addresses, MTU)
-4. Relay configuration (if RELAY_JSON present)
-   ├─ VRFs for relay pivots
-   ├─ Interface-to-VRF bindings
+3. Relay VRFs and interface bindings (if RELAY_JSON present - must come before interface IP configuration)
+4. Interface configuration (IP addresses, MTU)
+5. Relay configuration continued (if RELAY_JSON present)
    ├─ Policy-based routing
    ├─ Relay NAT (DNAT + SNAT)
    ├─ Proxy-ARP
    └─ Static routes in VRF context
-5. Routing (default gateway selection for non-management interfaces)
-6. Static routes (ROUTES_JSON)
-7. SSH service (VRF binding)
-8. OSPF (OSPF_JSON)
-9. DHCP (DHCP_JSON)
-10. NAT (NAT_JSON - rules 100+)
-11. Firewall (FIREWALL_JSON)
-12. Conntrack timeouts
-13. Custom commands (START_CONFIG)
-14. Commit configuration
-15. Custom scripts (START_SCRIPT)
+6. Routing (default gateway selection for non-management interfaces)
+7. Static routes (ROUTES_JSON)
+8. SSH service (VRF binding)
+9. OSPF (OSPF_JSON)
+10. DHCP (DHCP_JSON)
+11. NAT (NAT_JSON - rules 100+)
+12. Firewall (FIREWALL_JSON)
+13. Conntrack timeouts
+14. Custom commands (START_CONFIG)
+15. Commit configuration
+16. Custom scripts (START_SCRIPT)
 ```
 
 ### Why This Order?
 
-VyOS Sagitta uses a **priority-based execution system** where configuration scripts
-run in numeric priority order defined in XML templates. The `set` command ordering
-matters because VyOS does **not** resolve ordering dependencies automatically during
-commit. Referencing undefined objects (e.g., assigning an interface to a non-existent
-VRF, or referencing a firewall group that hasn't been created yet) causes commit failure.
+In this project, configuration is generated and applied by Python: the relay generators build an ordered list of `set` commands, which are then executed via `VyOSConfigSession.run_commands`. The command ordering matters because VyOS does **not** resolve ordering dependencies automatically during commit. Referencing undefined objects (e.g., assigning an interface to a non-existent VRF, or referencing a firewall group that hasn't been created yet) causes commit failure.
 
 The ordering above reflects **correctness requirements**, not just logical grouping:
 
-1. **System and network fundamentals first**: Hostname, VRFs, and interface IPs establish the base configuration
-2. **Relay config as a unit**: All relay-derived commands (VRFs, PBR, NAT, routing) are grouped together for clarity
-3. **Standard features after relay**: Standard routing, NAT, OSPF, etc. operate in the global routing table and don't interact with relay VRF config
-4. **Escape hatches last**: START_CONFIG and START_SCRIPT run after all structured configuration, allowing manual overrides
+1. **System and network fundamentals first**: Hostname and VRFs establish the base configuration before interfaces reference them
+2. **VRFs before interface IPs**: VRFs (both management and relay) must be created before interfaces are assigned to them
+3. **Relay VRFs split across steps**: VRF creation and interface binding happen before interface IP configuration (step 3), while PBR/NAT/routing happen after (step 5)
+4. **Standard features after relay**: Standard routing, NAT, OSPF, etc. operate in the global routing table and don't interact with relay VRF config
+5. **Escape hatches last**: START_CONFIG and START_SCRIPT run after all structured configuration, allowing manual overrides
 
 **Note:** The existing codebase orders management VRF creation before interface IP
 configuration because **VRFs must be defined before interfaces can reference them**.
@@ -612,10 +601,7 @@ generator follows the same ordering for the same reason.
 
 > **Implementation Note — VyOS ordering constraints:**
 >
-> VyOS Sagitta does NOT resolve ordering dependencies automatically during commit.
-> Configuration scripts execute in priority order defined in XML templates, and
-> referencing undefined objects (e.g., assigning an interface to a non-existent VRF)
-> causes commit failure. This ordering is a correctness requirement.
+> VyOS does not resolve ordering dependencies automatically during commit. Referencing undefined objects (e.g., assigning an interface to a non-existent VRF, or referencing a firewall group that hasn't been created yet) causes commit failure. This ordering is a correctness requirement.
 >
 > References:
 > - VRF docs: https://docs.vyos.io/en/1.4/configuration/vrf/index.html
