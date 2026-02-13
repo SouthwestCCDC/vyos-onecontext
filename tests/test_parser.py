@@ -661,6 +661,54 @@ CONNTRACK_JSON='{json.dumps(conntrack_data)}'
         assert len(config.conntrack.timeout_rules) == 1
         assert config.conntrack.timeout_rules[0].protocol == "tcp"
 
+    def test_relay_json(self, tmp_path: Path) -> None:
+        """Test RELAY_JSON parsing."""
+        context_file = tmp_path / "one_env"
+        relay_data = {
+            "ingress_interface": "eth1",
+            "pivots": [
+                {
+                    "egress_interface": "eth2",
+                    "targets": [
+                        {
+                            "relay_prefix": "10.32.5.0/24",
+                            "target_prefix": "192.168.144.0/24",
+                            "gateway": "192.168.100.1",
+                        }
+                    ],
+                }
+            ],
+        }
+        # Need interfaces to satisfy RouterConfig validation
+        content = f"""ETH1_IP="10.0.1.1"
+ETH1_MASK="255.255.255.0"
+ETH2_IP="192.168.100.2"
+ETH2_MASK="255.255.255.0"
+RELAY_JSON='{json.dumps(relay_data)}'
+"""
+        context_file.write_text(content)
+
+        config = parse_context(str(context_file))
+
+        assert config.relay is not None
+        assert config.relay.ingress_interface == "eth1"
+        assert len(config.relay.pivots) == 1
+        assert config.relay.pivots[0].egress_interface == "eth2"
+        assert len(config.relay.pivots[0].targets) == 1
+        assert config.relay.pivots[0].targets[0].relay_prefix == "10.32.5.0/24"
+
+    def test_relay_json_not_present(self, tmp_path: Path) -> None:
+        """Test that config without RELAY_JSON has relay=None."""
+        context_file = tmp_path / "one_env"
+        content = """ETH0_IP="10.0.1.1"
+ETH0_MASK="255.255.255.0"
+"""
+        context_file.write_text(content)
+
+        config = parse_context(str(context_file))
+
+        assert config.relay is None
+
     def test_malformed_json(self, tmp_path: Path) -> None:
         """Test that malformed JSON raises error."""
         context_file = tmp_path / "one_env"
