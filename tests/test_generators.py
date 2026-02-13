@@ -3961,3 +3961,64 @@ class TestGenerateConfigWithRelay:
         # PBR and NAT MUST come after interface IPs
         assert interface_ip_idx < pbr_idx
         assert interface_ip_idx < nat_idx
+
+    def test_generate_config_management_and_relay_vrf_ordering(self):
+        """Test that management VRF comes before relay VRF when both are present."""
+        from vyos_onecontext.models.relay import PivotConfig, RelayConfig, RelayTarget
+
+        config = RouterConfig(
+            interfaces=[
+                InterfaceConfig(
+                    name="eth0",
+                    ip=IPv4Address("10.0.0.1"),
+                    mask="255.255.255.0",
+                    management=True,
+                ),
+                InterfaceConfig(
+                    name="eth1",
+                    ip=IPv4Address("10.0.1.1"),
+                    mask="255.255.255.0",
+                ),
+                InterfaceConfig(
+                    name="eth2",
+                    ip=IPv4Address("192.168.100.2"),
+                    mask="255.255.255.0",
+                ),
+            ],
+            relay=RelayConfig(
+                ingress_interface="eth1",
+                pivots=[
+                    PivotConfig(
+                        egress_interface="eth2",
+                        targets=[
+                            RelayTarget(
+                                relay_prefix="10.32.5.0/24",
+                                target_prefix="192.168.144.0/24",
+                                gateway="192.168.100.1",
+                            )
+                        ],
+                    )
+                ],
+            ),
+        )
+        commands = generate_config(config)
+
+        # Find indices of key command types
+        mgmt_vrf_idx = next(
+            i for i, cmd in enumerate(commands) if "set vrf name management" in cmd
+        )
+        relay_vrf_idx = next(
+            i for i, cmd in enumerate(commands) if "set vrf name relay_eth2 table" in cmd
+        )
+        interface_ip_idx = next(
+            i
+            for i, cmd in enumerate(commands)
+            if "set interfaces ethernet eth" in cmd and " address " in cmd
+        )
+
+        # Management VRF MUST come before relay VRF
+        assert mgmt_vrf_idx < relay_vrf_idx
+
+        # Both VRFs MUST come before interface IPs
+        assert mgmt_vrf_idx < interface_ip_idx
+        assert relay_vrf_idx < interface_ip_idx

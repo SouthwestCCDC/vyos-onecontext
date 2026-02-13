@@ -709,6 +709,48 @@ ETH0_MASK="255.255.255.0"
 
         assert config.relay is None
 
+    def test_relay_json_malformed_without_error_collector(self, tmp_path: Path) -> None:
+        """Test that malformed RELAY_JSON raises error without error collector."""
+        context_file = tmp_path / "one_env"
+        # Valid JSON but fails Pydantic validation (missing required fields)
+        content = """ETH0_IP="10.0.1.1"
+ETH0_MASK="255.255.255.0"
+RELAY_JSON='{"invalid": true}'
+"""
+        context_file.write_text(content)
+
+        # Without error collector, should raise ValueError
+        with pytest.raises(ValueError, match="Validation error"):
+            parse_context(str(context_file))
+
+    def test_relay_json_malformed_with_error_collector(self, tmp_path: Path) -> None:
+        """Test that malformed RELAY_JSON is collected gracefully with error collector."""
+        from vyos_onecontext.errors import ErrorCollector
+
+        context_file = tmp_path / "one_env"
+        # Valid JSON but fails Pydantic validation (missing required fields)
+        content = """ETH0_IP="10.0.1.1"
+ETH0_MASK="255.255.255.0"
+RELAY_JSON='{"invalid": true}'
+"""
+        context_file.write_text(content)
+
+        error_collector = ErrorCollector()
+        config = parse_context(str(context_file), error_collector=error_collector)
+
+        # Valid interface should still be parsed
+        assert config.interfaces
+        assert len(config.interfaces) == 1
+
+        # Relay should be None due to validation error
+        assert config.relay is None
+
+        # Validation error should be collected
+        assert error_collector.has_errors()
+        assert error_collector.get_error_count() == 1
+        assert error_collector.errors[0].section == "RELAY_JSON"
+        assert "Validation error" in error_collector.errors[0].message
+
     def test_malformed_json(self, tmp_path: Path) -> None:
         """Test that malformed JSON raises error."""
         context_file = tmp_path / "one_env"
