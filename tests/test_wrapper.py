@@ -260,6 +260,33 @@ class TestVyOSConfigSession:
             session.begin()
 
     @patch("subprocess.run")
+    def test_wrapper_timeout(self, mock_run: MagicMock) -> None:
+        """Test handling of subprocess timeout."""
+        import subprocess
+
+        mock_run.side_effect = subprocess.TimeoutExpired(
+            cmd=[
+                "/test/wrapper",
+                "set",
+                "interfaces",
+                "ethernet",
+                "eth0",
+                "address",
+                "10.0.0.1/24",
+            ],
+            timeout=30,
+        )
+        session = VyOSConfigSession(wrapper_path="/test/wrapper")
+        session._in_session = True
+
+        with pytest.raises(
+            VyOSConfigError,
+            match=r"timed out after 30s: /test/wrapper set interfaces ethernet "
+            r"eth0 address 10\.0\.0\.1/24",
+        ):
+            session.set(["interfaces", "ethernet", "eth0", "address", "10.0.0.1/24"])
+
+    @patch("subprocess.run")
     def test_run_commands(self, mock_run: MagicMock) -> None:
         """Test run_commands method."""
         mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")

@@ -137,7 +137,7 @@ class VyOSConfigSession:
             )
         except subprocess.TimeoutExpired as e:
             raise VyOSConfigError(
-                f"VyOS wrapper command timed out after {timeout}s: {' '.join(args)}"
+                f"VyOS wrapper command timed out after {timeout}s: {' '.join(cmd)}"
             ) from e
         except FileNotFoundError:
             raise VyOSConfigError(
