@@ -592,18 +592,36 @@ The relay generator integrates into the existing boot flow after interface confi
 
 ### Why This Order?
 
-VyOS uses a transactional commit model: all `set` commands are staged in working
-configuration and committed atomically. VyOS resolves ordering dependencies during
-commit, so the sequence of `set` commands doesn't affect correctness.
+VyOS Sagitta uses a **priority-based execution system** where configuration scripts
+run in numeric priority order defined in XML templates. The `set` command ordering
+matters because VyOS does **not** resolve ordering dependencies automatically during
+commit. Referencing undefined objects (e.g., assigning an interface to a non-existent
+VRF, or referencing a firewall group that hasn't been created yet) causes commit failure.
 
-The ordering above reflects **logical grouping**, not a required execution sequence:
+The ordering above reflects **correctness requirements**, not just logical grouping:
 
 1. **System and network fundamentals first**: Hostname, VRFs, and interface IPs establish the base configuration
 2. **Relay config as a unit**: All relay-derived commands (VRFs, PBR, NAT, routing) are grouped together for clarity
 3. **Standard features after relay**: Standard routing, NAT, OSPF, etc. operate in the global routing table and don't interact with relay VRF config
 4. **Escape hatches last**: START_CONFIG and START_SCRIPT run after all structured configuration, allowing manual overrides
 
-**Note:** The existing codebase conservatively orders management VRF creation before interface IP configuration, and the relay generator follows the same convention. While VyOS's transactional commit resolves dependencies atomically (making strict ordering unnecessary), maintaining this convention avoids surprising implementers familiar with the codebase.
+**Note:** The existing codebase orders management VRF creation before interface IP
+configuration because **VRFs must be defined before interfaces can reference them**.
+This is a correctness requirement in VyOS Sagitta, not just a convention. The relay
+generator follows the same ordering for the same reason.
+
+> **Implementation Note — VyOS ordering constraints:**
+>
+> VyOS Sagitta does NOT resolve ordering dependencies automatically during commit.
+> Configuration scripts execute in priority order defined in XML templates, and
+> referencing undefined objects (e.g., assigning an interface to a non-existent VRF)
+> causes commit failure. This ordering is a correctness requirement.
+>
+> References:
+> - VRF docs: https://docs.vyos.io/en/1.4/configuration/vrf/index.html
+> - Phabricator T6423 (mandatory priorities): https://vyos.dev/T6423
+> - Phabricator T6559 (dependency errors): https://vyos.dev/T6559
+> - Forum discussion: https://forum.vyos.io/t/order-of-command-in-a-command-set/15576
 
 ### RouterConfig Changes
 
