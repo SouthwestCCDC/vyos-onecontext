@@ -118,10 +118,15 @@ class VyOSConfigSession:
             CompletedProcess with stdout and stderr.
 
         Raises:
-            VyOSConfigError: If the wrapper command fails.
+            VyOSConfigError: If the wrapper command fails or times out.
         """
         cmd = [self.wrapper_path, *args]
         logger.debug("Running wrapper command: %s", " ".join(cmd))
+
+        # Set timeout based on command type
+        # 'commit' can take a long time with complex configs
+        # Other commands should be fast
+        timeout = 120 if args and args[0] == "commit" else 30
 
         try:
             result = subprocess.run(
@@ -129,7 +134,12 @@ class VyOSConfigSession:
                 capture_output=True,
                 text=True,
                 check=False,
+                timeout=timeout,
             )
+        except subprocess.TimeoutExpired as e:
+            raise VyOSConfigError(
+                f"VyOS wrapper command timed out after {timeout}s: {' '.join(cmd)}"
+            ) from e
         except FileNotFoundError:
             raise VyOSConfigError(
                 f"VyOS wrapper not found at {self.wrapper_path}. Is this running on a VyOS system?"
