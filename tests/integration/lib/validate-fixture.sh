@@ -521,6 +521,35 @@ validate_fixture_assertions() {
                 VALIDATION_FAILED=1
             fi
             ;;
+        relay)
+            assert_command_generated "set system host-name" "Hostname configuration"
+            # Management VRF
+            assert_command_generated "set vrf name management table 100" "Management VRF creation"
+            assert_command_generated "set interfaces ethernet eth0 vrf management" "Management interface VRF assignment"
+            # Relay VRF
+            assert_command_generated "set vrf name relay_eth2 table 200" "Relay VRF creation (table 200)"
+            assert_command_generated "set interfaces ethernet eth2 vrf relay_eth2" "Egress interface VRF binding"
+            # PBR (policy-based routing)
+            assert_command_generated "set policy route relay-pbr rule 10" "PBR rule for relay traffic"
+            assert_command_generated "set policy route relay-pbr rule 10 destination address 10.40.5.0/24" "PBR destination match"
+            assert_command_generated "set policy route relay-pbr rule 10 set table 200" "PBR table assignment"
+            assert_command_generated "set interfaces ethernet eth1 policy route relay-pbr" "PBR applied to ingress interface"
+            # DNAT (netmap - subnet-to-subnet translation)
+            assert_command_generated "set nat destination rule 5000" "Relay DNAT rule"
+            assert_command_generated "set nat destination rule 5000 inbound-interface name eth1" "DNAT inbound interface"
+            assert_command_generated "set nat destination rule 5000 destination address 10.40.5.0/24" "DNAT destination match"
+            assert_command_generated "set nat destination rule 5000 translation address 192.168.5.0/24" "DNAT netmap translation"
+            # SNAT (masquerade on egress)
+            assert_command_generated "set nat source rule 5000" "Relay SNAT rule"
+            assert_command_generated "set nat source rule 5000 outbound-interface name eth2" "SNAT outbound interface"
+            assert_command_generated "set nat source rule 5000 translation address masquerade" "SNAT masquerade"
+            # Proxy-ARP
+            assert_command_generated "set interfaces ethernet eth1 ip enable-proxy-arp" "Proxy-ARP on ingress"
+            # Loopback route for proxy-ARP
+            assert_command_generated "set protocols static route 10.40.5.0/24 interface lo" "Loopback route for proxy-ARP"
+            # VRF-scoped static route
+            assert_command_generated "set vrf name relay_eth2 protocols static route 192.168.5.0/24 next-hop 192.168.100.254" "VRF static route to target"
+            ;;
         *)
             echo "[WARN] Unknown context '$context_name' - no specific assertions"
             ;;

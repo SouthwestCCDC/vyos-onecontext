@@ -62,6 +62,7 @@ declare -a TEST_SCENARIOS=(
     # SKIP: vrf-with-routing test disabled due to VRF command ordering bug (issue #171)
     # "vrf-with-routing:VRF with routing (VRF+static+OSPF)"
     "nat-with-firewall:NAT with firewall zones"
+    "relay:VRF-based scoring relay (VRF+PBR+NAT+proxy-ARP)"
     "start-script:START_SCRIPT execution"
     "invalid-json:Error scenario - Invalid JSON"
     "missing-required-fields:Error scenario - Missing required fields"

@@ -73,6 +73,7 @@ mappings:
       - "nat-full"
       - "vrf-with-routing"
       - "nat-with-firewall"
+      - "relay"
       - "start-script"
     description: "Interface config - used by all valid contexts"
 
@@ -81,6 +82,7 @@ mappings:
     fixtures:
       - "management-vrf"
       - "vrf-with-routing"
+      - "relay"
     description: "VRF configuration"
 
   # Generator: Static Routes
@@ -88,6 +90,7 @@ mappings:
     fixtures:
       - "static-routes"
       - "vrf-with-routing"
+      - "relay"
     description: "Static routing configuration"
 
   # Generator: OSPF
@@ -110,6 +113,7 @@ mappings:
       - "dnat"
       - "nat-full"
       - "nat-with-firewall"
+      - "relay"
     description: "NAT configuration (SNAT/DNAT/binat)"
 
   # Generator: Firewall
@@ -117,6 +121,12 @@ mappings:
     fixtures:
       - "nat-with-firewall"
     description: "Zone-based firewall configuration"
+
+  # Generator: Relay
+  - pattern: "src/vyos_onecontext/generators/relay.py"
+    fixtures:
+      - "relay"
+    description: "Relay VRF-based routing configuration"
 
   # Generator: Services (SSH management VRF)
   - pattern: "src/vyos_onecontext/generators/service.py"
