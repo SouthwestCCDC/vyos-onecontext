@@ -300,22 +300,29 @@ class TestRelayConfiguration:
         output = ssh_connection("show vrf || echo 'No VRF support'")
         if "No VRF support" in output:
             pytest.skip("VRF not available")
-        # Check for relay VRF - skip if not configured
+        # Check for relay VRF configuration - skip if not configured
         config = ssh_connection(
             "show configuration commands | grep 'vrf name relay' || echo 'No relay VRF'"
         )
         if "No relay VRF" in config:
             pytest.skip("Context does not have relay VRF")
         assert "relay_eth2" in config
+        # Also verify the relay VRF is present in runtime state
+        vrf_runtime = ssh_connection("show vrf")
+        assert "relay_eth2" in vrf_runtime
 
     def test_relay_nat_rules_exist(self, ssh_connection: Callable[[str], str]) -> None:
         """Verify relay NAT rules were applied."""
-        config = ssh_connection(
-            "show configuration commands | grep 'nat.*rule 5000' || echo 'No relay NAT'"
+        config_dnat = ssh_connection(
+            "show configuration commands | grep 'nat destination rule 5000' || echo 'No relay DNAT'"
         )
-        if "No relay NAT" in config:
+        config_snat = ssh_connection(
+            "show configuration commands | grep 'nat source rule 5000' || echo 'No relay SNAT'"
+        )
+        if "No relay DNAT" in config_dnat and "No relay SNAT" in config_snat:
             pytest.skip("Context does not have relay NAT")
-        assert "5000" in config
+        assert "nat destination rule 5000" in config_dnat
+        assert "nat source rule 5000" in config_snat
 
     def test_relay_pbr_applied(self, ssh_connection: Callable[[str], str]) -> None:
         """Verify PBR policy applied to ingress interface."""
