@@ -118,6 +118,10 @@ qemu-system-x86_64 \
     -nographic \
     -netdev user,id=net0,hostfwd=tcp::${SSH_PORT}-:22 \
     -device virtio-net-pci,netdev=net0 \
+    -netdev user,id=net1,restrict=on \
+    -device virtio-net-pci,netdev=net1 \
+    -netdev user,id=net2,restrict=on \
+    -device virtio-net-pci,netdev=net2 \
     -display none \
     &
 
