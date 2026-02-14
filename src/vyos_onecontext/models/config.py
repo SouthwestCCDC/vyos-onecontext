@@ -10,6 +10,7 @@ from vyos_onecontext.models.dhcp import DhcpConfig
 from vyos_onecontext.models.firewall import FirewallConfig
 from vyos_onecontext.models.interface import AliasConfig, InterfaceConfig
 from vyos_onecontext.models.nat import NatConfig
+from vyos_onecontext.models.relay import RelayConfig
 from vyos_onecontext.models.routing import OspfConfig, RoutesConfig
 from vyos_onecontext.models.system import ConntrackConfig
 
@@ -161,6 +162,9 @@ class RouterConfig(BaseModel):
     conntrack: Annotated[
         ConntrackConfig | None, Field(None, description="Conntrack timeout configuration")
     ]
+
+    # Relay
+    relay: Annotated[RelayConfig | None, Field(None, description="VRF-based relay configuration")]
 
     # Escape hatches
     start_config: Annotated[
@@ -383,6 +387,45 @@ class RouterConfig(BaseModel):
                 raise ValueError(
                     f"Alias IP '{alias.ip}' references non-existent parent interface: "
                     f"'{alias.interface}'"
+                )
+
+        return self
+
+    @model_validator(mode="after")
+    def validate_relay_interface_references(self) -> "RouterConfig":
+        """Validate that relay configuration references existing, non-management interfaces."""
+        if self.relay is None:
+            return self
+
+        # Build set of interface names and management interface names
+        interface_names = {iface.name for iface in self.interfaces}
+        mgmt_interfaces = {iface.name for iface in self.interfaces if iface.management}
+
+        # Check ingress_interface exists and is not management
+        if self.relay.ingress_interface not in interface_names:
+            raise ValueError(
+                f"Relay ingress_interface '{self.relay.ingress_interface}' "
+                f"references non-existent interface"
+            )
+
+        if self.relay.ingress_interface in mgmt_interfaces:
+            raise ValueError(
+                f"Relay ingress_interface '{self.relay.ingress_interface}' "
+                f"cannot be a management interface"
+            )
+
+        # Check each pivot's egress_interface
+        for pivot in self.relay.pivots:
+            if pivot.egress_interface not in interface_names:
+                raise ValueError(
+                    f"Relay pivot egress_interface '{pivot.egress_interface}' "
+                    f"references non-existent interface"
+                )
+
+            if pivot.egress_interface in mgmt_interfaces:
+                raise ValueError(
+                    f"Relay pivot egress_interface '{pivot.egress_interface}' "
+                    f"cannot be a management interface"
                 )
 
         return self

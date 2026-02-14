@@ -17,6 +17,7 @@ from vyos_onecontext.models.dhcp import DhcpConfig
 from vyos_onecontext.models.firewall import FirewallConfig
 from vyos_onecontext.models.interface import AliasConfig, InterfaceConfig
 from vyos_onecontext.models.nat import NatConfig
+from vyos_onecontext.models.relay import RelayConfig
 from vyos_onecontext.models.routing import OspfConfig, RoutesConfig
 from vyos_onecontext.models.system import ConntrackConfig
 
@@ -66,6 +67,7 @@ class ContextParser:
         nat = self._parse_nat()
         firewall = self._parse_firewall()
         conntrack = self._parse_conntrack()
+        relay = self._parse_relay()
 
         # Parse operational variables
         hostname = self.variables.get("HOSTNAME")
@@ -90,6 +92,7 @@ class ContextParser:
             nat=nat,
             firewall=firewall,
             conntrack=conntrack,
+            relay=relay,
             start_config=start_config,
             start_script=start_script,
             start_script_timeout=start_script_timeout,
@@ -499,6 +502,14 @@ class ContextParser:
             ConntrackConfig or None if not present
         """
         return self._parse_json_variable("CONNTRACK_JSON", ConntrackConfig)
+
+    def _parse_relay(self) -> RelayConfig | None:
+        """Parse RELAY_JSON variable.
+
+        Returns:
+            RelayConfig or None if not present
+        """
+        return self._parse_json_variable("RELAY_JSON", RelayConfig)
 
 
 def parse_context(
