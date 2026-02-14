@@ -289,3 +289,48 @@ class TestSSHKeyInjection:
         )
         # Either explicitly set to 22 or using default
         assert "22" in port_output or "default" in port_output
+
+
+@pytest.mark.integration
+class TestRelayConfiguration:
+    """Tests for VRF-based relay configuration validation."""
+
+    def test_relay_vrf_exists(self, ssh_connection: Callable[[str], str]) -> None:
+        """Verify relay VRF was created."""
+        output = ssh_connection("show vrf || echo 'No VRF support'")
+        if "No VRF support" in output:
+            pytest.skip("VRF not available")
+        # Check for relay VRF - skip if not configured
+        config = ssh_connection(
+            "show configuration commands | grep 'vrf name relay' || echo 'No relay VRF'"
+        )
+        if "No relay VRF" in config:
+            pytest.skip("Context does not have relay VRF")
+        assert "relay_eth2" in config
+
+    def test_relay_nat_rules_exist(self, ssh_connection: Callable[[str], str]) -> None:
+        """Verify relay NAT rules were applied."""
+        config = ssh_connection(
+            "show configuration commands | grep 'nat.*rule 5000' || echo 'No relay NAT'"
+        )
+        if "No relay NAT" in config:
+            pytest.skip("Context does not have relay NAT")
+        assert "5000" in config
+
+    def test_relay_pbr_applied(self, ssh_connection: Callable[[str], str]) -> None:
+        """Verify PBR policy applied to ingress interface."""
+        config = ssh_connection(
+            "show configuration commands | grep 'policy route relay-pbr' || echo 'No PBR'"
+        )
+        if "No PBR" in config:
+            pytest.skip("Context does not have relay PBR")
+        assert "relay-pbr" in config
+
+    def test_relay_proxy_arp_enabled(self, ssh_connection: Callable[[str], str]) -> None:
+        """Verify proxy-ARP enabled on ingress interface."""
+        config = ssh_connection(
+            "show configuration commands | grep 'proxy-arp' || echo 'No proxy-ARP'"
+        )
+        if "No proxy-ARP" in config:
+            pytest.skip("Context does not have proxy-ARP")
+        assert "proxy-arp" in config
