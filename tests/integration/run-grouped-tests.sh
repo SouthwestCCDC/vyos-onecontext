@@ -32,6 +32,8 @@ fi
 # Note: management-vrf and ssh-keys are excluded from groups because they
 # modify active SSH session config (VRF assignment / SSH daemon reconfiguration),
 # causing commit failures. Test them via individual/boot-time mode instead.
+# Note: relay is excluded because it requires extra NICs (eth1, eth2) that
+# cause config reset timeouts in grouped mode. Test via individual mode.
 declare -a TEST_GROUPS=(
     "basic:simple,quotes,multi-interface"
     "routing:static-routes,ospf"
