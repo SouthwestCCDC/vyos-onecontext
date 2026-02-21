@@ -3868,7 +3868,7 @@ class TestGenerateConfigWithRelay:
         commands = generate_config(config)
 
         # Check VRF commands are present
-        assert any("set vrf name relay_eth2 table 200" in cmd for cmd in commands)
+        assert any("set vrf name relay_eth2 table 150" in cmd for cmd in commands)
         assert any("set interfaces ethernet eth2 vrf relay_eth2" in cmd for cmd in commands)
 
         # Check PBR commands are present
