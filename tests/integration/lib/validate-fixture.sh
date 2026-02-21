@@ -527,12 +527,12 @@ validate_fixture_assertions() {
             assert_command_generated "set vrf name management table 100" "Management VRF creation"
             assert_command_generated "set interfaces ethernet eth0 vrf management" "Management interface VRF assignment"
             # Relay VRF
-            assert_command_generated "set vrf name relay_eth2 table 200" "Relay VRF creation (table 200)"
+            assert_command_generated "set vrf name relay_eth2 table 150" "Relay VRF creation (table 150)"
             assert_command_generated "set interfaces ethernet eth2 vrf relay_eth2" "Egress interface VRF binding"
             # PBR (policy-based routing)
             assert_command_generated "set policy route relay-pbr rule 10" "PBR rule for relay traffic"
             assert_command_generated "set policy route relay-pbr rule 10 destination address 10.40.5.0/24" "PBR destination match"
-            assert_command_generated "set policy route relay-pbr rule 10 set table 200" "PBR table assignment"
+            assert_command_generated "set policy route relay-pbr rule 10 set table 150" "PBR table assignment"
             assert_command_generated "set interfaces ethernet eth1 policy route relay-pbr" "PBR applied to ingress interface"
             # DNAT (netmap - subnet-to-subnet translation)
             assert_command_generated "set nat destination rule 5000" "Relay DNAT rule"

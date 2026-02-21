@@ -29,19 +29,19 @@ class RelayGenerator(BaseGenerator):
     - Static routes in VRF context for target networks
 
     Rule numbering:
-    - VRF table IDs: 200, 201, 202... (sequential per pivot)
+    - VRF table IDs: 150, 151, 152... (sequential per pivot)
     - PBR rules: 10, 20, 30... (sequential per target)
     - DNAT rules: 5000, 5010, 5020... (sequential per target)
     - SNAT rules: 5000, 5010, 5020... (sequential per pivot)
 
     Design decisions:
-    - VRF table IDs start at 200 to avoid conflict with management VRF (table 100)
+    - VRF table IDs start at 150 (management VRF uses 100, VyOS max is 200)
     - NAT rules start at 5000 to avoid conflict with standard NAT (100+ range)
     - PBR rules use increment of 10 to allow manual rule insertion if needed
     - SNAT is per-pivot (not per-target) since all targets in a pivot share egress
     """
 
-    BASE_TABLE_ID = 200  # Start VRF table IDs at 200 (management VRF uses 100)
+    BASE_TABLE_ID = 150  # Start VRF table IDs at 150 (management VRF uses 100, VyOS max is 200)
     DNAT_RULE_START = 5000  # Avoid conflict with standard NAT (idx*100 scheme)
     SNAT_RULE_START = 5000
     PBR_RULE_START = 10
@@ -121,7 +121,7 @@ class RelayGenerator(BaseGenerator):
         """Create VRFs and bind interfaces.
 
         Creates one VRF per pivot (egress interface) with sequential table IDs
-        starting at 200. Binds each egress interface to its corresponding VRF.
+        starting at 150. Binds each egress interface to its corresponding VRF.
 
         Returns:
             List of VyOS 'set' commands for VRF configuration

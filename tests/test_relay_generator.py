@@ -48,12 +48,12 @@ class TestRelayGenerator:
 
         # Expected commands (in order):
         # 1. VRF creation and interface binding
-        assert "set vrf name relay_eth2 table 200" in commands
+        assert "set vrf name relay_eth2 table 150" in commands
         assert "set interfaces ethernet eth2 vrf relay_eth2" in commands
 
         # 2. Policy-based routing
         assert "set policy route relay-pbr rule 10 destination address 10.32.5.0/24" in commands
-        assert "set policy route relay-pbr rule 10 set table 200" in commands
+        assert "set policy route relay-pbr rule 10 set table 150" in commands
         assert "set interfaces ethernet eth1 policy route relay-pbr" in commands
 
         # 3. Destination NAT
@@ -155,7 +155,7 @@ class TestRelayGenerator:
 
         This is the full-featured scenario: multiple egress interfaces,
         each with multiple targets. Verifies:
-        - VRF table IDs are sequential (200, 201, ...)
+        - VRF table IDs are sequential (150, 151, ...)
         - PBR rules are sequential across all targets (10, 20, 30, 40)
         - DNAT rules are sequential across all targets (5000, 5010, 5020, 5030)
         - SNAT rules are per-pivot, not per-target
@@ -200,20 +200,20 @@ class TestRelayGenerator:
         commands = gen.generate()
 
         # VRF creation: Two VRFs with sequential table IDs
-        assert "set vrf name relay_eth2 table 200" in commands
-        assert "set vrf name relay_eth3 table 201" in commands
+        assert "set vrf name relay_eth2 table 150" in commands
+        assert "set vrf name relay_eth3 table 151" in commands
         assert "set interfaces ethernet eth2 vrf relay_eth2" in commands
         assert "set interfaces ethernet eth3 vrf relay_eth3" in commands
 
         # PBR: Four rules (one per target) with correct table routing
         assert "set policy route relay-pbr rule 10 destination address 10.32.5.0/24" in commands
-        assert "set policy route relay-pbr rule 10 set table 200" in commands
+        assert "set policy route relay-pbr rule 10 set table 150" in commands
         assert "set policy route relay-pbr rule 20 destination address 10.33.5.0/24" in commands
-        assert "set policy route relay-pbr rule 20 set table 200" in commands
+        assert "set policy route relay-pbr rule 20 set table 150" in commands
         assert "set policy route relay-pbr rule 30 destination address 10.36.5.0/24" in commands
-        assert "set policy route relay-pbr rule 30 set table 201" in commands
+        assert "set policy route relay-pbr rule 30 set table 151" in commands
         assert "set policy route relay-pbr rule 40 destination address 10.36.105.0/25" in commands
-        assert "set policy route relay-pbr rule 40 set table 201" in commands
+        assert "set policy route relay-pbr rule 40 set table 151" in commands
 
         # DNAT: Four rules (one per target) with sequential numbering
         dnat_rules = [cmd for cmd in commands if cmd.startswith("set nat destination rule")]
@@ -285,7 +285,7 @@ class TestRelayGenerator:
         commands = gen.generate()
 
         # Find indices of key commands
-        vrf_create_idx = commands.index("set vrf name relay_eth2 table 200")
+        vrf_create_idx = commands.index("set vrf name relay_eth2 table 150")
         vrf_bind_idx = commands.index("set interfaces ethernet eth2 vrf relay_eth2")
         pbr_rule_idx = next(
             i for i, cmd in enumerate(commands) if "policy route relay-pbr rule" in cmd
@@ -337,14 +337,14 @@ class TestRelayGenerator:
         commands = gen.generate()
 
         # Verify VRF name follows convention
-        assert "set vrf name relay_eth5 table 200" in commands
+        assert "set vrf name relay_eth5 table 150" in commands
         assert "set interfaces ethernet eth5 vrf relay_eth5" in commands
         assert any("vrf name relay_eth5 protocols static route" in cmd for cmd in commands)
 
     def test_rule_number_ranges(self):
         """Test that rule numbers fall in expected ranges.
 
-        - VRF table IDs: 200+
+        - VRF table IDs: 150+
         - PBR rules: 10+, increment by 10
         - DNAT rules: 5000+, increment by 10
         - SNAT rules: 5000+, increment by 10
@@ -383,9 +383,9 @@ class TestRelayGenerator:
         gen = RelayGenerator(relay)
         commands = gen.generate()
 
-        # VRF table IDs: 200, 201
-        assert "table 200" in " ".join(commands)
-        assert "table 201" in " ".join(commands)
+        # VRF table IDs: 150, 151
+        assert "table 150" in " ".join(commands)
+        assert "table 151" in " ".join(commands)
 
         # PBR rules: 10, 20, 30
         assert "rule 10 " in " ".join(commands)

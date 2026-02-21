@@ -135,28 +135,28 @@ From the JSON schema, the relay generator derives all VyOS configuration automat
 **One VRF per unique egress interface:**
 
 ```
-set vrf name relay_eth2 table 200
-set vrf name relay_eth3 table 201
+set vrf name relay_eth2 table 150
+set vrf name relay_eth3 table 151
 set interfaces ethernet eth2 vrf relay_eth2
 set interfaces ethernet eth3 vrf relay_eth3
 ```
 
 **VRF naming:** `relay_{interface_name}` (e.g., `relay_eth2`, `relay_eth3`)
 
-**Table ID assignment:** Sequential allocation starting at 200 (avoiding table 100 reserved for management VRF)
+**Table ID assignment:** Sequential allocation starting at 150 (avoiding table 100 reserved for management VRF, respecting VyOS max of 200)
 
 ### Policy-Based Routing (PBR)
 
 **Route relay traffic to appropriate VRF based on destination:**
 
 ```
-set policy route relay-pbr rule 10 set table 200
+set policy route relay-pbr rule 10 set table 150
 set policy route relay-pbr rule 10 destination address 10.32.5.0/24
-set policy route relay-pbr rule 20 set table 200
+set policy route relay-pbr rule 20 set table 150
 set policy route relay-pbr rule 20 destination address 10.33.5.0/24
-set policy route relay-pbr rule 30 set table 201
+set policy route relay-pbr rule 30 set table 151
 set policy route relay-pbr rule 30 destination address 10.36.5.0/24
-set policy route relay-pbr rule 40 set table 201
+set policy route relay-pbr rule 40 set table 151
 set policy route relay-pbr rule 40 destination address 10.36.105.0/25
 set interfaces ethernet eth1 policy route relay-pbr
 ```
@@ -421,7 +421,7 @@ def generate_config(config: RouterConfig) -> list[str]:
 class RelayGenerator(BaseGenerator):
     """Generate VyOS commands for VRF-based relay configuration."""
 
-    BASE_TABLE_ID = 200  # Start VRF table IDs at 200
+    BASE_TABLE_ID = 150  # Start VRF table IDs at 150
     DNAT_RULE_START = 5000  # Avoid conflict with standard NAT (idx*100 scheme)
     SNAT_RULE_START = 5000
     PBR_RULE_INCREMENT = 10
@@ -655,7 +655,7 @@ Standard source/destination NAT uses `idx * 100` numbering with no cap. Binat ru
 | Range | Purpose |
 |-------|---------|
 | 100 | Management VRF (if VROUTER_MANAGEMENT=YES) |
-| 200+ | Relay VRFs (auto-assigned) |
+| 150-200 | Relay VRFs (auto-assigned, max 50 pivots) |
 
 **Firewall rules:**
 
@@ -664,7 +664,7 @@ Relay routers typically don't use FIREWALL_JSON. If needed, firewall rules are p
 ### Compatibility Notes
 
 - **RELAY_JSON + NAT_JSON**: Both can be present. Relay NAT rules (5000+) are unlikely to collide with standard NAT rules (source/destination at `idx * 100`, binat at `500 + idx * 100`) on a dedicated relay appliance. A collision would require 50+ standard rules or 46+ binat rules.
-- **RELAY_JSON + VROUTER_MANAGEMENT**: Both can be present. Management VRF uses table 100; relay VRFs use 200+.
+- **RELAY_JSON + VROUTER_MANAGEMENT**: Both can be present. Management VRF uses table 100; relay VRFs use 150-200.
 - **RELAY_JSON + ROUTES_JSON**: Standard routes go in global routing table; relay routes go in VRF tables. No conflict.
 - **RELAY_JSON + OSPF_JSON**: OSPF would run in global routing table, not in relay VRFs. Unlikely combination, but technically compatible.
 
@@ -784,12 +784,12 @@ If netmap isn't supported, we would need to generate per-IP DNAT rules, which is
 **Question:** Is the PBR syntax correct for routing to VRF tables?
 
 ```
-set policy route relay-pbr rule 10 set table 200
+set policy route relay-pbr rule 10 set table 150
 set policy route relay-pbr rule 10 destination address 10.32.5.0/24
 set interfaces ethernet eth1 policy route relay-pbr
 ```
 
-**Expected behavior:** Traffic matching destination address is routed to table 200 (VRF routing table).
+**Expected behavior:** Traffic matching destination address is routed to table 150 (VRF routing table).
 
 **Verification needed:**
 - Confirm `set table` syntax is correct (not `set vrf` or other variant)
