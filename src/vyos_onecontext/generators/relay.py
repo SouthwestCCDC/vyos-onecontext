@@ -182,8 +182,7 @@ class RelayGenerator(BaseGenerator):
 
         # Apply policy to ingress interface
         commands.append(
-            f"set interfaces ethernet {self.relay.ingress_interface} "
-            f"policy route relay-pbr"
+            f"set policy route relay-pbr interface {self.relay.ingress_interface}"
         )
 
         return commands
