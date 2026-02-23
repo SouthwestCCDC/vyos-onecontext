@@ -1184,10 +1184,10 @@ class TestValidationEnhancements:
         """Test that relay with valid interfaces passes validation."""
         from vyos_onecontext.models.relay import PivotConfig, RelayConfig, RelayTarget
 
-        # Should pass validation
+        # Should pass validation - relay prefix within ingress interface subnet
         RouterConfig(
             interfaces=[
-                InterfaceConfig(name="eth1", ip="10.0.1.1", mask="255.255.255.0"),
+                InterfaceConfig(name="eth1", ip="10.40.17.1", mask="255.240.0.0"),  # /12
                 InterfaceConfig(name="eth2", ip="192.168.100.2", mask="255.255.255.0"),
             ],
             relay=RelayConfig(
@@ -1197,7 +1197,7 @@ class TestValidationEnhancements:
                         egress_interface="eth2",
                         targets=[
                             RelayTarget(
-                                relay_prefix="10.32.5.0/24",
+                                relay_prefix="10.40.5.0/24",  # Within 10.40.0.0/12
                                 target_prefix="192.168.144.0/24",
                                 gateway="192.168.100.1",
                             )
@@ -1206,6 +1206,121 @@ class TestValidationEnhancements:
                 ],
             ),
         )
+
+    def test_relay_ingress_subnet_coverage_valid(self) -> None:
+        """Test that relay prefixes within ingress subnet pass validation.
+
+        With a /12 ingress subnet (10.40.17.1/12 = 10.40.0.0 - 10.47.255.255),
+        relay prefixes in the 10.40-47 range should all be accepted.
+        """
+        from vyos_onecontext.models.relay import PivotConfig, RelayConfig, RelayTarget
+
+        # Should pass validation - all relay prefixes are within 10.40.0.0/12
+        RouterConfig(
+            interfaces=[
+                InterfaceConfig(name="eth1", ip="10.40.17.1", mask="255.240.0.0"),  # /12
+                InterfaceConfig(name="eth2", ip="192.168.100.2", mask="255.255.255.0"),
+                InterfaceConfig(name="eth3", ip="192.168.101.2", mask="255.255.255.0"),
+            ],
+            relay=RelayConfig(
+                ingress_interface="eth1",
+                pivots=[
+                    PivotConfig(
+                        egress_interface="eth2",
+                        targets=[
+                            RelayTarget(
+                                relay_prefix="10.40.5.0/24",
+                                target_prefix="192.168.144.0/24",
+                                gateway="192.168.100.1",
+                            ),
+                            RelayTarget(
+                                relay_prefix="10.41.10.0/24",
+                                target_prefix="192.168.145.0/24",
+                                gateway="192.168.100.1",
+                            ),
+                        ],
+                    ),
+                    PivotConfig(
+                        egress_interface="eth3",
+                        targets=[
+                            RelayTarget(
+                                relay_prefix="10.47.20.0/24",
+                                target_prefix="192.168.146.0/24",
+                                gateway="192.168.101.1",
+                            ),
+                        ],
+                    ),
+                ],
+            ),
+        )
+
+    def test_relay_ingress_subnet_coverage_invalid(self) -> None:
+        """Test that relay prefixes outside ingress subnet are rejected.
+
+        With a /24 ingress subnet (10.40.17.0/24), relay prefixes in other
+        /24 blocks (e.g., 10.41.x.x) should be rejected.
+        """
+        from vyos_onecontext.models.relay import PivotConfig, RelayConfig, RelayTarget
+
+        with pytest.raises(
+            ValidationError,
+            match=r"Relay prefix 10\.41\.10\.0/24 is not covered.*Proxy-ARP requires",
+        ):
+            RouterConfig(
+                interfaces=[
+                    InterfaceConfig(name="eth1", ip="10.40.17.1", mask="255.255.255.0"),  # /24
+                    InterfaceConfig(name="eth2", ip="192.168.100.2", mask="255.255.255.0"),
+                ],
+                relay=RelayConfig(
+                    ingress_interface="eth1",
+                    pivots=[
+                        PivotConfig(
+                            egress_interface="eth2",
+                            targets=[
+                                RelayTarget(
+                                    relay_prefix="10.41.10.0/24",  # outside /24 subnet
+                                    target_prefix="192.168.144.0/24",
+                                    gateway="192.168.100.1",
+                                ),
+                            ],
+                        )
+                    ],
+                ),
+            )
+
+    def test_relay_ingress_subnet_coverage_partially_outside(self) -> None:
+        """Test that relay prefixes partially outside ingress subnet are rejected.
+
+        A relay prefix that overlaps but extends beyond the ingress subnet should
+        be rejected since not all addresses would be covered by proxy-ARP.
+        """
+        from vyos_onecontext.models.relay import PivotConfig, RelayConfig, RelayTarget
+
+        with pytest.raises(
+            ValidationError,
+            match=r"Relay prefix 10\.40\.0\.0/12 is not covered.*Proxy-ARP requires",
+        ):
+            RouterConfig(
+                interfaces=[
+                    InterfaceConfig(name="eth1", ip="10.40.17.1", mask="255.255.255.0"),  # /24
+                    InterfaceConfig(name="eth2", ip="192.168.100.2", mask="255.255.255.0"),
+                ],
+                relay=RelayConfig(
+                    ingress_interface="eth1",
+                    pivots=[
+                        PivotConfig(
+                            egress_interface="eth2",
+                            targets=[
+                                RelayTarget(
+                                    relay_prefix="10.40.0.0/12",  # larger than ingress /24
+                                    target_prefix="192.168.144.0/12",
+                                    gateway="192.168.100.1",
+                                ),
+                            ],
+                        )
+                    ],
+                ),
+            )
 
 
 class TestStartScriptTimeout:

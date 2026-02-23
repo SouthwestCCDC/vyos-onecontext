@@ -429,3 +429,45 @@ class RouterConfig(BaseModel):
                 )
 
         return self
+
+    @model_validator(mode="after")
+    def validate_relay_ingress_subnet_coverage(self) -> "RouterConfig":
+        """Validate that relay prefixes are covered by ingress interface subnet.
+
+        The relay proxy-ARP mechanism relies on relay addresses being within the
+        ingress interface's subnet. If relay prefixes fall outside this subnet,
+        proxy-ARP will not respond correctly and relay traffic will fail.
+        """
+        if self.relay is None:
+            return self
+
+        # Find the ingress interface configuration
+        ingress_iface = next(
+            (iface for iface in self.interfaces if iface.name == self.relay.ingress_interface),
+            None,
+        )
+        if ingress_iface is None:
+            # Interface reference validation is handled by validate_relay_interface_references
+            return self
+
+        # Import IPv4Network here to avoid top-level circular import issues
+        from ipaddress import IPv4Network
+
+        # Construct the ingress interface's subnet
+        ingress_network = IPv4Network(ingress_iface.to_cidr(), strict=False)
+
+        # Check all relay prefixes
+        for pivot in self.relay.pivots:
+            for target in pivot.targets:
+                relay_network = IPv4Network(target.relay_prefix, strict=False)
+
+                # Check if relay prefix is entirely within ingress subnet
+                if not ingress_network.supernet_of(relay_network):
+                    raise ValueError(
+                        f"Relay prefix {target.relay_prefix} is not covered by ingress "
+                        f"interface '{self.relay.ingress_interface}' subnet "
+                        f"{ingress_network}. Proxy-ARP requires all relay addresses "
+                        f"to be within the ingress interface's configured subnet."
+                    )
+
+        return self

@@ -3833,8 +3833,8 @@ class TestGenerateConfigWithRelay:
             interfaces=[
                 InterfaceConfig(
                     name="eth1",
-                    ip=IPv4Address("10.0.1.1"),
-                    mask="255.255.255.0",
+                    ip=IPv4Address("10.40.17.1"),
+                    mask="255.240.0.0",  # /12
                 ),
                 InterfaceConfig(
                     name="eth2",
@@ -3849,7 +3849,7 @@ class TestGenerateConfigWithRelay:
                         egress_interface="eth2",
                         targets=[
                             RelayTarget(
-                                relay_prefix="10.32.5.0/24",
+                                relay_prefix="10.40.5.0/24",  # Within 10.40.0.0/12
                                 target_prefix="192.168.144.0/24",
                                 gateway="192.168.100.1",
                             )
@@ -3905,8 +3905,8 @@ class TestGenerateConfigWithRelay:
             interfaces=[
                 InterfaceConfig(
                     name="eth1",
-                    ip=IPv4Address("10.0.1.1"),
-                    mask="255.255.255.0",
+                    ip=IPv4Address("10.40.17.1"),
+                    mask="255.240.0.0",  # /12
                 ),
                 InterfaceConfig(
                     name="eth2",
@@ -3921,7 +3921,7 @@ class TestGenerateConfigWithRelay:
                         egress_interface="eth2",
                         targets=[
                             RelayTarget(
-                                relay_prefix="10.32.5.0/24",
+                                relay_prefix="10.40.5.0/24",  # Within 10.40.0.0/12
                                 target_prefix="192.168.144.0/24",
                                 gateway="192.168.100.1",
                             )
@@ -3969,8 +3969,8 @@ class TestGenerateConfigWithRelay:
                 ),
                 InterfaceConfig(
                     name="eth1",
-                    ip=IPv4Address("10.0.1.1"),
-                    mask="255.255.255.0",
+                    ip=IPv4Address("10.40.17.1"),
+                    mask="255.240.0.0",  # /12
                 ),
                 InterfaceConfig(
                     name="eth2",
@@ -3985,7 +3985,7 @@ class TestGenerateConfigWithRelay:
                         egress_interface="eth2",
                         targets=[
                             RelayTarget(
-                                relay_prefix="10.32.5.0/24",
+                                relay_prefix="10.40.5.0/24",  # Within 10.40.0.0/12
                                 target_prefix="192.168.144.0/24",
                                 gateway="192.168.100.1",
                             )

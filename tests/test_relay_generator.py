@@ -65,9 +65,8 @@ class TestRelayGenerator:
         assert "set nat source rule 5000 outbound-interface name eth2" in commands
         assert "set nat source rule 5000 translation address masquerade" in commands
 
-        # 5. Proxy-ARP and loopback routes
+        # 5. Proxy-ARP
         assert "set interfaces ethernet eth1 ip enable-proxy-arp" in commands
-        assert "set protocols static route 10.32.5.0/24 interface lo" in commands
 
         # 6. Static routes in VRF
         assert (
@@ -134,13 +133,14 @@ class TestRelayGenerator:
         assert "10.32.5.0/24" in " ".join(dnat_5000)
         assert "10.33.5.0/24" in " ".join(dnat_5010)
 
-        # Proxy-ARP loopback routes: Two routes (one per relay prefix)
+        # Proxy-ARP: Should be enabled on ingress interface
+        assert "set interfaces ethernet eth1 ip enable-proxy-arp" in commands
+
+        # No loopback routes should be generated (relay addresses covered by /12 on eth1)
         proxy_arp_routes = [
             cmd for cmd in commands if "protocols static route" in cmd and "interface lo" in cmd
         ]
-        assert len(proxy_arp_routes) == 2
-        assert "set protocols static route 10.32.5.0/24 interface lo" in commands
-        assert "set protocols static route 10.33.5.0/24 interface lo" in commands
+        assert len(proxy_arp_routes) == 0
 
         # VRF static routes: Two routes (one per target)
         vrf_static_routes = [
@@ -227,15 +227,14 @@ class TestRelayGenerator:
         assert any("rule 5000 outbound-interface name eth2" in cmd for cmd in snat_rules)
         assert any("rule 5010 outbound-interface name eth3" in cmd for cmd in snat_rules)
 
-        # Proxy-ARP loopback routes: Four routes (one per relay prefix)
+        # Proxy-ARP: Should be enabled on ingress interface
+        assert "set interfaces ethernet eth1 ip enable-proxy-arp" in commands
+
+        # No loopback routes should be generated (relay addresses covered by /12 on eth1)
         proxy_arp_routes = [
             cmd for cmd in commands if "protocols static route" in cmd and "interface lo" in cmd
         ]
-        assert len(proxy_arp_routes) == 4
-        assert "set protocols static route 10.32.5.0/24 interface lo" in commands
-        assert "set protocols static route 10.33.5.0/24 interface lo" in commands
-        assert "set protocols static route 10.36.5.0/24 interface lo" in commands
-        assert "set protocols static route 10.36.105.0/25 interface lo" in commands
+        assert len(proxy_arp_routes) == 0
 
         # VRF static routes: Four routes in correct VRFs
         assert (
@@ -297,9 +296,6 @@ class TestRelayGenerator:
         proxy_arp_idx = commands.index(
             "set interfaces ethernet eth1 ip enable-proxy-arp"
         )
-        loopback_route_idx = commands.index(
-            "set protocols static route 10.32.5.0/24 interface lo"
-        )
         vrf_static_route_idx = next(
             i
             for i, cmd in enumerate(commands)
@@ -312,8 +308,7 @@ class TestRelayGenerator:
         assert pbr_rule_idx < dnat_idx, "PBR before NAT"
         assert dnat_idx < snat_idx, "DNAT before SNAT"
         assert snat_idx < proxy_arp_idx, "SNAT before proxy-ARP enable"
-        assert proxy_arp_idx < loopback_route_idx, "Proxy-ARP enable before loopback routes"
-        assert loopback_route_idx < vrf_static_route_idx, "Loopback routes before VRF static routes"
+        assert proxy_arp_idx < vrf_static_route_idx, "Proxy-ARP enable before VRF static routes"
 
     def test_vrf_naming_convention(self):
         """Test VRF naming follows 'relay_{interface}' convention."""

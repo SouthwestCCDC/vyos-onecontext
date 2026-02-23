@@ -671,7 +671,7 @@ CONNTRACK_JSON='{json.dumps(conntrack_data)}'
                     "egress_interface": "eth2",
                     "targets": [
                         {
-                            "relay_prefix": "10.32.5.0/24",
+                            "relay_prefix": "10.40.5.0/24",
                             "target_prefix": "192.168.144.0/24",
                             "gateway": "192.168.100.1",
                         }
@@ -679,9 +679,9 @@ CONNTRACK_JSON='{json.dumps(conntrack_data)}'
                 }
             ],
         }
-        # Need interfaces to satisfy RouterConfig validation
-        content = f"""ETH1_IP="10.0.1.1"
-ETH1_MASK="255.255.255.0"
+        # Need interfaces with proper subnet coverage for relay validation
+        content = f"""ETH1_IP="10.40.17.1"
+ETH1_MASK="255.240.0.0"
 ETH2_IP="192.168.100.2"
 ETH2_MASK="255.255.255.0"
 RELAY_JSON='{json.dumps(relay_data)}'
@@ -695,7 +695,7 @@ RELAY_JSON='{json.dumps(relay_data)}'
         assert len(config.relay.pivots) == 1
         assert config.relay.pivots[0].egress_interface == "eth2"
         assert len(config.relay.pivots[0].targets) == 1
-        assert config.relay.pivots[0].targets[0].relay_prefix == "10.32.5.0/24"
+        assert config.relay.pivots[0].targets[0].relay_prefix == "10.40.5.0/24"
 
     def test_relay_json_not_present(self, tmp_path: Path) -> None:
         """Test that config without RELAY_JSON has relay=None."""
