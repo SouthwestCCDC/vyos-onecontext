@@ -54,7 +54,7 @@ class TestRelayGenerator:
         # 2. Policy-based routing
         assert "set policy route relay-pbr rule 10 destination address 10.32.5.0/24" in commands
         assert "set policy route relay-pbr rule 10 set table 150" in commands
-        assert "set interfaces ethernet eth1 policy route relay-pbr" in commands
+        assert "set policy route relay-pbr interface eth1" in commands
 
         # 3. Destination NAT
         assert "set nat destination rule 5000 inbound-interface name eth1" in commands

@@ -533,7 +533,7 @@ validate_fixture_assertions() {
             assert_command_generated "set policy route relay-pbr rule 10" "PBR rule for relay traffic"
             assert_command_generated "set policy route relay-pbr rule 10 destination address 10.40.5.0/24" "PBR destination match"
             assert_command_generated "set policy route relay-pbr rule 10 set table 150" "PBR table assignment"
-            assert_command_generated "set interfaces ethernet eth1 policy route relay-pbr" "PBR applied to ingress interface"
+            assert_command_generated "set policy route relay-pbr interface eth1" "PBR applied to ingress interface"
             # DNAT (netmap - subnet-to-subnet translation)
             assert_command_generated "set nat destination rule 5000" "Relay DNAT rule"
             assert_command_generated "set nat destination rule 5000 inbound-interface name eth1" "DNAT inbound interface"
