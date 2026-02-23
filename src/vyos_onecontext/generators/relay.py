@@ -253,17 +253,13 @@ class RelayGenerator(BaseGenerator):
         return commands
 
     def _generate_proxy_arp(self) -> list[str]:
-        """Enable proxy-ARP on ingress interface with loopback routes.
+        """Enable proxy-ARP on ingress interface.
 
         Enables proxy-ARP so the router responds to ARP requests for relay
-        address ranges, even though those addresses are not directly configured
-        on the interface.
-
-        Linux proxy-ARP only responds to ARP requests when the destination is
-        routed via a different interface than where the ARP request arrived.
-        To satisfy this requirement, we add static routes pointing each relay
-        prefix to loopback (lo), making the kernel route relay traffic via lo
-        (a different interface), which triggers proxy-ARP responses.
+        address ranges. The relay addresses are covered by the /12 subnet
+        configured on the ingress interface (e.g., 10.40.17.1/12 covers all
+        10.40-47.x addresses), so no additional routes are needed for proxy-ARP
+        to function correctly.
 
         Returns:
             List of VyOS 'set' commands for proxy-ARP configuration
@@ -278,15 +274,6 @@ class RelayGenerator(BaseGenerator):
             f"set interfaces ethernet {self.relay.ingress_interface} "
             f"ip enable-proxy-arp"
         )
-
-        # Static routes to loopback ensure proxy-ARP responds for relay prefixes.
-        # Linux proxy-ARP only responds when the destination is routed via a
-        # different interface than the ARP request arrived on.
-        for pivot in self.relay.pivots:
-            for target in pivot.targets:
-                commands.append(
-                    f"set protocols static route {target.relay_prefix} interface lo"
-                )
 
         return commands
 
