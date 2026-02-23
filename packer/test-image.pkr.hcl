@@ -274,7 +274,7 @@ build {
       # Download uv installer with diagnostics on failure
       <<-INSTALL
       echo "Downloading uv installer..."
-      if ! curl -4 --retry 5 --retry-delay 5 --retry-connrefused -LsSf https://astral.sh/uv/install.sh -o /tmp/uv-install.sh; then
+      if ! curl -4 --retry 5 --retry-delay 5 --retry-all-errors -LsSf https://astral.sh/uv/install.sh -o /tmp/uv-install.sh; then
         echo "ERROR: Failed to download uv installer"
         dns_diag 'CURL DOWNLOAD FAILED'
         exit 1
