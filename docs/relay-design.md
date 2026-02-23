@@ -158,7 +158,7 @@ set policy route relay-pbr rule 30 set table 151
 set policy route relay-pbr rule 30 destination address 10.36.5.0/24
 set policy route relay-pbr rule 40 set table 151
 set policy route relay-pbr rule 40 destination address 10.36.105.0/25
-set interfaces ethernet eth1 policy route relay-pbr
+set policy route relay-pbr interface eth1
 ```
 
 **Rule numbering:** Sequential (10, 20, 30, ...) for each relay_prefix
@@ -786,7 +786,7 @@ If netmap isn't supported, we would need to generate per-IP DNAT rules, which is
 ```
 set policy route relay-pbr rule 10 set table 150
 set policy route relay-pbr rule 10 destination address 10.32.5.0/24
-set interfaces ethernet eth1 policy route relay-pbr
+set policy route relay-pbr interface eth1
 ```
 
 **Expected behavior:** Traffic matching destination address is routed to table 150 (VRF routing table).
