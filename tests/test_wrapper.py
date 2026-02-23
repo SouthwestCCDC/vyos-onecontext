@@ -1,6 +1,6 @@
 """Unit tests for VyOS configuration wrapper."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 import pytest
 
@@ -35,6 +35,7 @@ class TestVyOSConfigSession:
             text=True,
             check=False,
             timeout=30,
+            env=ANY,
         )
         assert session._in_session is True
 
@@ -101,6 +102,7 @@ class TestVyOSConfigSession:
             text=True,
             check=False,
             timeout=30,
+            env=ANY,
         )
         assert session._in_session is False
 
@@ -129,6 +131,7 @@ class TestVyOSConfigSession:
             text=True,
             check=False,
             timeout=30,
+            env=ANY,
         )
 
     @patch("subprocess.run")
@@ -167,6 +170,7 @@ class TestVyOSConfigSession:
             text=True,
             check=False,
             timeout=30,
+            env=ANY,
         )
 
     @patch("subprocess.run")
@@ -200,7 +204,8 @@ class TestVyOSConfigSession:
             capture_output=True,
             text=True,
             check=False,
-            timeout=120,
+            timeout=600,
+            env=ANY,
         )
 
     @patch("subprocess.run")
@@ -258,6 +263,7 @@ class TestVyOSConfigSession:
             text=True,
             check=False,
             timeout=30,
+            env=ANY,
         )
 
     @patch("subprocess.run")
