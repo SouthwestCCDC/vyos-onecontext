@@ -106,9 +106,9 @@ class SshKeyGenerator(BaseGenerator):
                 f"set system login user vyos authentication public-keys {key_id} type {key_type}"
             )
 
-        # Only enable SSH service if we have at least one valid key
+        # Add key configurations if we have at least one valid key
+        # Note: We don't explicitly set SSH port 22 as VyOS defaults to port 22
         if key_configs:
-            commands.append("set service ssh port 22")
             commands.extend(key_configs)
 
         return commands

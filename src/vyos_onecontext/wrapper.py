@@ -124,9 +124,14 @@ class VyOSConfigSession:
         logger.debug("Running wrapper command: %s", " ".join(cmd))
 
         # Set timeout based on command type
-        # 'commit' can take a long time with complex configs
+        # 'commit' can take a long time with complex configs (relay VMs: 700+ commands)
         # Other commands should be fast
-        timeout = 120 if args and args[0] == "commit" else 30
+        timeout = 600 if args and args[0] == "commit" else 30
+
+        # Ensure VyOS validators can be found by setting vyos_validators_dir
+        # This is normally set by sourcing /etc/default/vyatta
+        env = os.environ.copy()
+        env["vyos_validators_dir"] = "/usr/libexec/vyos/validators"
 
         try:
             result = subprocess.run(
@@ -135,6 +140,7 @@ class VyOSConfigSession:
                 text=True,
                 check=False,
                 timeout=timeout,
+                env=env,
             )
         except subprocess.TimeoutExpired as e:
             raise VyOSConfigError(

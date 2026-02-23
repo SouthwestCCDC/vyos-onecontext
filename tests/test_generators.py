@@ -67,16 +67,15 @@ class TestSshKeyGenerator:
         gen = SshKeyGenerator(key)
         commands = gen.generate()
 
-        assert len(commands) == 3
-        assert commands[0] == "set service ssh port 22"
+        assert len(commands) == 2
         # Key identifier is sanitized: @ -> _at_, . -> _
         assert (
             "set system login user vyos authentication public-keys "
             "user_at_host key AAAAB3NzaC1yc2EAAAADAQABAAABAQC..."
-        ) in commands[1]
+        ) in commands[0]
         assert (
             "set system login user vyos authentication public-keys user_at_host type ssh-rsa"
-        ) in commands[2]
+        ) in commands[1]
 
     def test_generate_with_ed25519_key(self):
         """Test SSH key generation with ED25519 key."""
@@ -84,17 +83,16 @@ class TestSshKeyGenerator:
         gen = SshKeyGenerator(key)
         commands = gen.generate()
 
-        assert len(commands) == 3
-        assert commands[0] == "set service ssh port 22"
+        assert len(commands) == 2
         # Key identifier is sanitized: @ -> _at_, . -> _
         assert (
             "set system login user vyos authentication public-keys "
             "admin_at_example_com key AAAAC3NzaC1lZDI1NTE5AAAAI..."
-        ) in commands[1]
+        ) in commands[0]
         assert (
             "set system login user vyos authentication public-keys "
             "admin_at_example_com type ssh-ed25519"
-        ) in commands[2]
+        ) in commands[1]
 
     def test_generate_without_comment(self):
         """Test SSH key generation without comment (uses 'key1' as default)."""
@@ -102,15 +100,14 @@ class TestSshKeyGenerator:
         gen = SshKeyGenerator(key)
         commands = gen.generate()
 
-        assert len(commands) == 3
-        assert commands[0] == "set service ssh port 22"
+        assert len(commands) == 2
         assert (
             "set system login user vyos authentication public-keys "
             "key1 key AAAAB3NzaC1yc2EAAAADAQABAAABAQC..."
-        ) in commands[1]
+        ) in commands[0]
         assert (
             "set system login user vyos authentication public-keys key1 type ssh-rsa"
-        ) in commands[2]
+        ) in commands[1]
 
     def test_generate_with_spaces_in_comment(self):
         """Test SSH key generation with spaces in comment (replaces with underscores)."""
@@ -118,10 +115,9 @@ class TestSshKeyGenerator:
         gen = SshKeyGenerator(key)
         commands = gen.generate()
 
-        assert len(commands) == 3
-        assert commands[0] == "set service ssh port 22"
+        assert len(commands) == 2
+        assert "John_Doe" in commands[0]
         assert "John_Doe" in commands[1]
-        assert "John_Doe" in commands[2]
 
     def test_generate_with_none(self):
         """Test SSH key generation with None."""
@@ -148,14 +144,13 @@ class TestSshKeyGenerator:
         gen = SshKeyGenerator(key)
         commands = gen.generate()
 
-        assert len(commands) == 3
-        assert commands[0] == "set service ssh port 22"
+        assert len(commands) == 2
         # Quotes should be stripped, @ should be replaced with _at_
+        assert "test_at_quotes" in commands[0]
         assert "test_at_quotes" in commands[1]
-        assert "test_at_quotes" in commands[2]
         # Verify no quotes remain in the key identifier
+        assert '"test_at_quotes"' not in commands[0]
         assert '"test_at_quotes"' not in commands[1]
-        assert '"test_at_quotes"' not in commands[2]
 
     def test_generate_multiple_keys(self):
         """Test SSH key generation with multiple newline-separated keys."""
@@ -167,9 +162,8 @@ class TestSshKeyGenerator:
         gen = SshKeyGenerator(keys)
         commands = gen.generate()
 
-        # Should have: 1 SSH service command + 2 keys * 2 commands each = 5 total
-        assert len(commands) == 5
-        assert commands[0] == "set service ssh port 22"
+        # Should have: 2 keys * 2 commands each = 4 total
+        assert len(commands) == 4
 
         # First key should use sanitized comment as identifier
         assert any("user_at_host" in cmd for cmd in commands)
@@ -202,9 +196,8 @@ class TestSshKeyGenerator:
         gen = SshKeyGenerator(keys)
         commands = gen.generate()
 
-        # Should have: 1 SSH service command + 3 keys * 2 commands each = 7 total
-        assert len(commands) == 7
-        assert commands[0] == "set service ssh port 22"
+        # Should have: 3 keys * 2 commands each = 6 total
+        assert len(commands) == 6
 
         # Verify unique identifiers (key1, key2, key3)
         assert any("key1" in cmd for cmd in commands)
@@ -226,9 +219,9 @@ class TestSshKeyGenerator:
         gen = SshKeyGenerator(keys)
         commands = gen.generate()
 
-        # Count SSH service commands
+        # Verify no SSH port commands (VyOS defaults to port 22)
         ssh_service_commands = [cmd for cmd in commands if "set service ssh" in cmd]
-        assert len(ssh_service_commands) == 1, "SSH service should be enabled exactly once"
+        assert len(ssh_service_commands) == 0, "SSH port should not be explicitly configured"
 
     def test_generate_duplicate_key_ids_get_suffix(self):
         """Test that duplicate key IDs get unique suffixes to avoid overwrites."""
@@ -241,8 +234,8 @@ class TestSshKeyGenerator:
         gen = SshKeyGenerator(keys)
         commands = gen.generate()
 
-        # Should have: 1 SSH service + 3 keys * 2 commands = 7 total
-        assert len(commands) == 7
+        # Should have: 3 keys * 2 commands = 6 total
+        assert len(commands) == 6
 
         # First key uses "same_key", subsequent get "_2", "_3" suffixes
         assert any("public-keys same_key key" in cmd for cmd in commands)
@@ -1010,9 +1003,9 @@ class TestGenerateConfig:
         )
         commands = generate_config(config)
 
-        # Should have: hostname + 3 SSH commands (service enable + 2 key commands)
+        # Should have: hostname + 2 SSH commands (2 key commands)
         # + 3 interface commands (2 primary + 1 MTU) + 1 alias
-        assert len(commands) == 8
+        assert len(commands) == 7
         assert "set system host-name router-01" in commands
         assert any("public-keys" in cmd for cmd in commands)
         assert "set interfaces ethernet eth0 address 10.0.1.1/24" in commands
