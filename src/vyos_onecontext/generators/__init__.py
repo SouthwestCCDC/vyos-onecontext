@@ -57,7 +57,7 @@ def generate_config(config: RouterConfig) -> list[str]:
 
     # Relay VRF configuration - must come BEFORE interface IP configuration
     # Creates VRFs and binds egress interfaces to them
-    relay_gen = RelayGenerator(config.relay)
+    relay_gen = RelayGenerator(config.relay, config.interfaces)
     commands.extend(relay_gen.generate_vrf_commands())
 
     # Interfaces (IP addresses, MTU)
