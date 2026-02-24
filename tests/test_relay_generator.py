@@ -8,6 +8,7 @@ NAT (DNAT/SNAT), proxy-ARP, and VRF-scoped static routes.
 from ipaddress import IPv4Address
 
 from vyos_onecontext.generators.relay import RelayGenerator
+from vyos_onecontext.models.interface import InterfaceConfig
 from vyos_onecontext.models.relay import PivotConfig, RelayConfig, RelayTarget
 
 
@@ -16,7 +17,7 @@ class TestRelayGenerator:
 
     def test_generate_with_none_config(self):
         """Test generator returns empty list when relay config is None."""
-        gen = RelayGenerator(None)
+        gen = RelayGenerator(None, [])
         commands = gen.generate()
 
         assert len(commands) == 0
@@ -27,6 +28,20 @@ class TestRelayGenerator:
         This is the simplest relay configuration: single egress interface,
         single target network. Verifies all command types are generated.
         """
+        interfaces = [
+            InterfaceConfig(
+                name="eth1",
+                ip=IPv4Address("10.40.0.1"),
+                mask="255.255.0.0",
+                gateway=IPv4Address("10.40.0.254"),
+            ),
+            InterfaceConfig(
+                name="eth2",
+                ip=IPv4Address("192.168.100.1"),
+                mask="255.255.255.0",
+            ),
+        ]
+
         relay = RelayConfig(
             ingress_interface="eth1",
             pivots=[
@@ -43,7 +58,7 @@ class TestRelayGenerator:
             ],
         )
 
-        gen = RelayGenerator(relay)
+        gen = RelayGenerator(relay, interfaces)
         commands = gen.generate()
 
         # Expected commands (in order):
@@ -53,24 +68,30 @@ class TestRelayGenerator:
         assert "set vrf name relay_eth2 table 150" in commands
         assert "set interfaces ethernet eth2 vrf relay_eth2" in commands
 
-        # 2. Policy-based routing
+        # 2. Ingress VRF default route
+        assert (
+            "set vrf name relay_eth1 protocols static route 0.0.0.0/0 next-hop 10.40.0.254"
+            in commands
+        )
+
+        # 3. Policy-based routing
         assert "set policy route relay-pbr rule 10 destination address 10.32.5.0/24" in commands
         assert "set policy route relay-pbr rule 10 set table 150" in commands
         assert "set policy route relay-pbr interface eth1" in commands
 
-        # 3. Destination NAT
+        # 4. Destination NAT
         assert "set nat destination rule 5000 inbound-interface name eth1" in commands
         assert "set nat destination rule 5000 destination address 10.32.5.0/24" in commands
         assert "set nat destination rule 5000 translation address 192.168.144.0/24" in commands
 
-        # 4. Source NAT (masquerade)
+        # 5. Source NAT (masquerade)
         assert "set nat source rule 5000 outbound-interface name eth2" in commands
         assert "set nat source rule 5000 translation address masquerade" in commands
 
-        # 5. Proxy-ARP
+        # 6. Proxy-ARP
         assert "set interfaces ethernet eth1 ip enable-proxy-arp" in commands
 
-        # 6. Static routes in VRF
+        # 7. Static routes in egress VRF
         assert (
             "set vrf name relay_eth2 protocols static route 192.168.144.0/24 next-hop 192.168.100.1"
             in commands
@@ -86,8 +107,22 @@ class TestRelayGenerator:
         - PBR rules (one per target)
         - DNAT rules (one per target)
         - Static routes (one per target)
-        Additionally verifies ingress VRF is created.
+        Additionally verifies ingress VRF is created with default route.
         """
+        interfaces = [
+            InterfaceConfig(
+                name="eth1",
+                ip=IPv4Address("10.40.0.1"),
+                mask="255.255.0.0",
+                gateway=IPv4Address("10.40.0.254"),
+            ),
+            InterfaceConfig(
+                name="eth2",
+                ip=IPv4Address("192.168.100.1"),
+                mask="255.255.255.0",
+            ),
+        ]
+
         relay = RelayConfig(
             ingress_interface="eth1",
             pivots=[
@@ -109,7 +144,7 @@ class TestRelayGenerator:
             ],
         )
 
-        gen = RelayGenerator(relay)
+        gen = RelayGenerator(relay, interfaces)
         commands = gen.generate()
 
         # VRF: Ingress VRF + one egress VRF for both targets (same pivot)
@@ -117,6 +152,12 @@ class TestRelayGenerator:
         assert "set interfaces ethernet eth1 vrf relay_eth1" in commands
         vrf_commands = [cmd for cmd in commands if cmd.startswith("set vrf name relay_eth2")]
         assert len(vrf_commands) == 3  # 1 VRF creation + 2 static routes
+
+        # Ingress default route
+        assert (
+            "set vrf name relay_eth1 protocols static route 0.0.0.0/0 next-hop 10.40.0.254"
+            in commands
+        )
 
         # SNAT: Only one masquerade rule for both targets (same egress)
         snat_commands = [cmd for cmd in commands if cmd.startswith("set nat source rule")]
@@ -147,11 +188,11 @@ class TestRelayGenerator:
         ]
         assert len(proxy_arp_routes) == 0
 
-        # VRF static routes: Two routes (one per target)
+        # VRF static routes: Ingress default + two egress routes (one per target)
         vrf_static_routes = [
             cmd for cmd in commands if "vrf name" in cmd and "protocols static route" in cmd
         ]
-        assert len(vrf_static_routes) == 2
+        assert len(vrf_static_routes) == 3  # 1 ingress default + 2 egress routes
         assert any("192.168.144.0/24" in cmd for cmd in vrf_static_routes)
         assert any("10.123.105.0/24" in cmd for cmd in vrf_static_routes)
 
@@ -536,3 +577,61 @@ class TestRelayGenerator:
         # Should NOT have proxy-ARP on egress interfaces
         assert not any("eth2 ip enable-proxy-arp" in cmd for cmd in commands)
         assert not any("eth3 ip enable-proxy-arp" in cmd for cmd in commands)
+
+    def test_ingress_vrf_without_gateway(self):
+        """Test that ingress VRF is created even when ingress interface has no gateway.
+
+        When the ingress interface doesn't have a gateway configured, the ingress
+        VRF should still be created but without a default route.
+        """
+        interfaces = [
+            InterfaceConfig(
+                name="eth1",
+                ip=IPv4Address("10.40.0.1"),
+                mask="255.255.0.0",
+                # No gateway configured
+            ),
+            InterfaceConfig(
+                name="eth2",
+                ip=IPv4Address("192.168.100.1"),
+                mask="255.255.255.0",
+            ),
+        ]
+
+        relay = RelayConfig(
+            ingress_interface="eth1",
+            pivots=[
+                PivotConfig(
+                    egress_interface="eth2",
+                    targets=[
+                        RelayTarget(
+                            relay_prefix="10.32.5.0/24",
+                            target_prefix="192.168.144.0/24",
+                            gateway=IPv4Address("192.168.100.254"),
+                        )
+                    ],
+                )
+            ],
+        )
+
+        gen = RelayGenerator(relay, interfaces)
+        commands = gen.generate()
+
+        # Ingress VRF should still be created
+        assert "set vrf name relay_eth1 table 149" in commands
+        assert "set interfaces ethernet eth1 vrf relay_eth1" in commands
+
+        # But no default route in ingress VRF since no gateway
+        ingress_default_route = [
+            cmd
+            for cmd in commands
+            if "vrf name relay_eth1" in cmd and "protocols static route 0.0.0.0/0" in cmd
+        ]
+        assert len(ingress_default_route) == 0
+
+        # Egress VRF and routes should still work
+        assert "set vrf name relay_eth2 table 150" in commands
+        assert (
+            "set vrf name relay_eth2 protocols static route 192.168.144.0/24 "
+            "next-hop 192.168.100.254" in commands
+        )

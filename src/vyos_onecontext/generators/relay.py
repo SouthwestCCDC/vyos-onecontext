@@ -14,6 +14,7 @@ Key components:
 """
 
 from vyos_onecontext.generators.base import BaseGenerator
+from vyos_onecontext.models.interface import InterfaceConfig
 from vyos_onecontext.models.relay import RelayConfig
 
 
@@ -52,24 +53,29 @@ class RelayGenerator(BaseGenerator):
     PBR_RULE_INCREMENT = 10
     NAT_RULE_INCREMENT = 10
 
-    def __init__(self, relay: RelayConfig | None) -> None:
+    def __init__(
+        self, relay: RelayConfig | None, interfaces: list[InterfaceConfig] | None = None
+    ) -> None:
         """Initialize relay generator.
 
         Args:
             relay: Relay configuration (None if relay is not configured)
+            interfaces: List of interface configurations (needed for ingress gateway)
         """
         self.relay = relay
+        self.interfaces = interfaces or []
 
     def generate(self) -> list[str]:
         """Generate all relay configuration commands.
 
         Commands are generated in the correct order for VyOS commit:
         1. VRF creation and interface binding
-        2. Policy-based routing (PBR)
-        3. Destination NAT (DNAT)
-        4. Source NAT (SNAT)
-        5. Proxy-ARP
-        6. Static routes in VRF context
+        2. Ingress VRF default route
+        3. Policy-based routing (PBR)
+        4. Destination NAT (DNAT)
+        5. Source NAT (SNAT)
+        6. Proxy-ARP
+        7. Static routes in egress VRF context
 
         Returns:
             List of VyOS 'set' commands for relay configuration
@@ -81,6 +87,7 @@ class RelayGenerator(BaseGenerator):
             return commands
 
         commands.extend(self._generate_vrfs())
+        commands.extend(self._generate_ingress_default_route())
         commands.extend(self._generate_pbr())
         commands.extend(self._generate_dnat())
         commands.extend(self._generate_snat())
@@ -113,6 +120,7 @@ class RelayGenerator(BaseGenerator):
             return []
 
         commands: list[str] = []
+        commands.extend(self._generate_ingress_default_route())
         commands.extend(self._generate_pbr())
         commands.extend(self._generate_dnat())
         commands.extend(self._generate_snat())
@@ -285,6 +293,56 @@ class RelayGenerator(BaseGenerator):
         commands.append(
             f"set interfaces ethernet {self.relay.ingress_interface} "
             f"ip enable-proxy-arp"
+        )
+
+        return commands
+
+    def _get_ingress_gateway(self) -> str | None:
+        """Get the gateway IP for the ingress interface.
+
+        Looks up the ingress interface in the interfaces list and returns
+        its configured gateway, if present.
+
+        Returns:
+            Gateway IP address as string, or None if not configured
+        """
+        if self.relay is None:
+            return None
+
+        # Find the ingress interface configuration
+        for iface in self.interfaces:
+            if iface.name == self.relay.ingress_interface:
+                if iface.gateway is None:
+                    return None
+                return str(iface.gateway)
+
+        # Ingress interface not found in interfaces list
+        return None
+
+    def _generate_ingress_default_route(self) -> list[str]:
+        """Generate default route in ingress VRF.
+
+        Creates a default route in the ingress VRF pointing to the gateway
+        configured on the ingress interface. This allows return traffic from
+        egress VRFs to reach the scoring engine.
+
+        Returns:
+            List of VyOS 'set' commands for ingress VRF default route
+        """
+        commands: list[str] = []
+
+        # Type narrowing: we know self.relay is not None because generate() checks
+        if self.relay is None:
+            return commands
+
+        gateway = self._get_ingress_gateway()
+        if gateway is None:
+            # No gateway configured on ingress interface - skip default route
+            return commands
+
+        ingress_vrf_name = f"relay_{self.relay.ingress_interface}"
+        commands.append(
+            f"set vrf name {ingress_vrf_name} protocols static route 0.0.0.0/0 next-hop {gateway}"
         )
 
         return commands
