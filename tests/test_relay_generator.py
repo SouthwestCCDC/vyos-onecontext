@@ -74,24 +74,30 @@ class TestRelayGenerator:
             in commands
         )
 
-        # 3. Policy-based routing
+        # 3. Cross-VRF proxy-ARP routes
+        assert (
+            "set vrf name relay_eth1 protocols static route 10.32.5.0/24 "
+            "interface eth2 vrf relay_eth2" in commands
+        )
+
+        # 4. Policy-based routing
         assert "set policy route relay-pbr rule 10 destination address 10.32.5.0/24" in commands
         assert "set policy route relay-pbr rule 10 set table 150" in commands
         assert "set policy route relay-pbr interface eth1" in commands
 
-        # 4. Destination NAT
+        # 5. Destination NAT
         assert "set nat destination rule 5000 inbound-interface name eth1" in commands
         assert "set nat destination rule 5000 destination address 10.32.5.0/24" in commands
         assert "set nat destination rule 5000 translation address 192.168.144.0/24" in commands
 
-        # 5. Source NAT (masquerade)
+        # 6. Source NAT (masquerade)
         assert "set nat source rule 5000 outbound-interface name eth2" in commands
         assert "set nat source rule 5000 translation address masquerade" in commands
 
-        # 6. Proxy-ARP
+        # 7. Proxy-ARP
         assert "set interfaces ethernet eth1 ip enable-proxy-arp" in commands
 
-        # 7. Static routes in egress VRF
+        # 8. Static routes in egress VRF
         assert (
             "set vrf name relay_eth2 protocols static route 192.168.144.0/24 next-hop 192.168.100.1"
             in commands
@@ -151,13 +157,23 @@ class TestRelayGenerator:
         assert "set vrf name relay_eth1 table 149" in commands
         assert "set interfaces ethernet eth1 vrf relay_eth1" in commands
         vrf_commands = [cmd for cmd in commands if cmd.startswith("set vrf name relay_eth2")]
-        assert len(vrf_commands) == 3  # 1 VRF creation + 2 static routes
+        assert len(vrf_commands) == 3  # 1 VRF creation + 2 egress static routes
 
         # Ingress default route
         assert (
             "set vrf name relay_eth1 protocols static route 0.0.0.0/0 next-hop 10.40.0.254"
             in commands
         )
+
+        # Cross-VRF proxy-ARP routes (in ingress VRF)
+        proxy_arp_routes = [
+            cmd for cmd in commands
+            if "vrf name relay_eth1 protocols static route" in cmd
+            and "interface eth2" in cmd
+        ]
+        assert len(proxy_arp_routes) == 2  # One per target
+        assert any("10.32.5.0/24" in cmd for cmd in proxy_arp_routes)
+        assert any("10.33.5.0/24" in cmd for cmd in proxy_arp_routes)
 
         # SNAT: Only one masquerade rule for both targets (same egress)
         snat_commands = [cmd for cmd in commands if cmd.startswith("set nat source rule")]
@@ -182,17 +198,12 @@ class TestRelayGenerator:
         # Proxy-ARP: Should be enabled on ingress interface
         assert "set interfaces ethernet eth1 ip enable-proxy-arp" in commands
 
-        # No loopback routes should be generated (relay addresses covered by /12 on eth1)
-        proxy_arp_routes = [
-            cmd for cmd in commands if "protocols static route" in cmd and "interface lo" in cmd
-        ]
-        assert len(proxy_arp_routes) == 0
-
-        # VRF static routes: Ingress default + two egress routes (one per target)
+        # VRF static routes: Ingress default + proxy-ARP routes + egress routes
         vrf_static_routes = [
             cmd for cmd in commands if "vrf name" in cmd and "protocols static route" in cmd
         ]
-        assert len(vrf_static_routes) == 3  # 1 ingress default + 2 egress routes
+        # 1 ingress default + 2 proxy-ARP routes + 2 egress routes
+        assert len(vrf_static_routes) == 5
         assert any("192.168.144.0/24" in cmd for cmd in vrf_static_routes)
         assert any("10.123.105.0/24" in cmd for cmd in vrf_static_routes)
 
@@ -279,13 +290,27 @@ class TestRelayGenerator:
         # Proxy-ARP: Should be enabled on ingress interface
         assert "set interfaces ethernet eth1 ip enable-proxy-arp" in commands
 
-        # No loopback routes should be generated (relay addresses covered by /12 on eth1)
-        proxy_arp_routes = [
-            cmd for cmd in commands if "protocols static route" in cmd and "interface lo" in cmd
+        # Cross-VRF proxy-ARP routes: Four routes in ingress VRF (one per target)
+        ingress_vrf_routes = [
+            cmd
+            for cmd in commands
+            if "vrf name relay_eth1 protocols static route" in cmd and "interface eth" in cmd
         ]
-        assert len(proxy_arp_routes) == 0
+        assert len(ingress_vrf_routes) == 4
+        assert any(
+            "10.32.5.0/24 interface eth2 vrf relay_eth2" in cmd for cmd in ingress_vrf_routes
+        )
+        assert any(
+            "10.33.5.0/24 interface eth2 vrf relay_eth2" in cmd for cmd in ingress_vrf_routes
+        )
+        assert any(
+            "10.36.5.0/24 interface eth3 vrf relay_eth3" in cmd for cmd in ingress_vrf_routes
+        )
+        assert any(
+            "10.36.105.0/25 interface eth3 vrf relay_eth3" in cmd for cmd in ingress_vrf_routes
+        )
 
-        # VRF static routes: Four routes in correct VRFs
+        # Egress VRF static routes: Four routes in correct VRFs
         assert (
             "set vrf name relay_eth2 protocols static route 192.168.144.0/24 next-hop 192.168.100.1"
             in commands
@@ -347,10 +372,17 @@ class TestRelayGenerator:
         proxy_arp_idx = commands.index(
             "set interfaces ethernet eth1 ip enable-proxy-arp"
         )
-        vrf_static_route_idx = next(
+        proxy_arp_route_idx = next(
             i
             for i, cmd in enumerate(commands)
-            if "vrf name" in cmd and "protocols static route" in cmd
+            if "vrf name relay_eth1" in cmd
+            and "protocols static route" in cmd
+            and "interface eth2" in cmd
+        )
+        egress_vrf_static_route_idx = next(
+            i
+            for i, cmd in enumerate(commands)
+            if "vrf name relay_eth2" in cmd and "protocols static route" in cmd
         )
 
         # Verify ordering constraints
@@ -360,12 +392,19 @@ class TestRelayGenerator:
         assert egress_vrf_create_idx < egress_vrf_bind_idx, (
             "Egress VRF must be created before binding interface"
         )
-        assert ingress_vrf_bind_idx < pbr_rule_idx, "Interface binding before PBR"
-        assert egress_vrf_bind_idx < pbr_rule_idx, "Interface binding before PBR"
+        assert ingress_vrf_bind_idx < proxy_arp_route_idx, (
+            "Interface binding before proxy-ARP routes"
+        )
+        assert egress_vrf_bind_idx < proxy_arp_route_idx, (
+            "Interface binding before proxy-ARP routes"
+        )
+        assert proxy_arp_route_idx < pbr_rule_idx, "Proxy-ARP routes before PBR"
         assert pbr_rule_idx < dnat_idx, "PBR before NAT"
         assert dnat_idx < snat_idx, "DNAT before SNAT"
         assert snat_idx < proxy_arp_idx, "SNAT before proxy-ARP enable"
-        assert proxy_arp_idx < vrf_static_route_idx, "Proxy-ARP enable before VRF static routes"
+        assert proxy_arp_idx < egress_vrf_static_route_idx, (
+            "Proxy-ARP enable before egress VRF static routes"
+        )
 
     def test_vrf_naming_convention(self):
         """Test VRF naming follows 'relay_{interface}' convention."""

@@ -71,11 +71,12 @@ class RelayGenerator(BaseGenerator):
         Commands are generated in the correct order for VyOS commit:
         1. VRF creation and interface binding
         2. Ingress VRF default route
-        3. Policy-based routing (PBR)
-        4. Destination NAT (DNAT)
-        5. Source NAT (SNAT)
-        6. Proxy-ARP
-        7. Static routes in egress VRF context
+        3. Cross-VRF proxy-ARP routes
+        4. Policy-based routing (PBR)
+        5. Destination NAT (DNAT)
+        6. Source NAT (SNAT)
+        7. Proxy-ARP
+        8. Static routes in egress VRF context
 
         Returns:
             List of VyOS 'set' commands for relay configuration
@@ -88,6 +89,7 @@ class RelayGenerator(BaseGenerator):
 
         commands.extend(self._generate_vrfs())
         commands.extend(self._generate_ingress_default_route())
+        commands.extend(self._generate_proxy_arp_routes())
         commands.extend(self._generate_pbr())
         commands.extend(self._generate_dnat())
         commands.extend(self._generate_snat())
@@ -121,6 +123,7 @@ class RelayGenerator(BaseGenerator):
 
         commands: list[str] = []
         commands.extend(self._generate_ingress_default_route())
+        commands.extend(self._generate_proxy_arp_routes())
         commands.extend(self._generate_pbr())
         commands.extend(self._generate_dnat())
         commands.extend(self._generate_snat())
@@ -344,6 +347,45 @@ class RelayGenerator(BaseGenerator):
         commands.append(
             f"set vrf name {ingress_vrf_name} protocols static route 0.0.0.0/0 next-hop {gateway}"
         )
+
+        return commands
+
+    def _generate_proxy_arp_routes(self) -> list[str]:
+        """Generate cross-VRF interface routes for proxy-ARP.
+
+        The kernel only performs proxy-ARP when it has a route to the target
+        via a DIFFERENT interface than where the ARP request arrived. Since all
+        relay addresses fall within the /12 connected subnet on the ingress
+        interface, the kernel sees them as "same interface" routes and won't
+        proxy-ARP.
+
+        Solution: Add cross-VRF interface routes in the ingress VRF pointing
+        to each relay prefix via the egress interface. This gives the kernel
+        a route via a different interface, enabling proxy-ARP.
+
+        For each relay target, generates:
+            set vrf name relay_{ingress} protocols static route {relay_prefix}
+                interface {egress} vrf relay_{egress}
+
+        Returns:
+            List of VyOS 'set' commands for cross-VRF proxy-ARP routes
+        """
+        commands: list[str] = []
+
+        # Type narrowing: we know self.relay is not None because generate() checks
+        if self.relay is None:
+            return commands
+
+        ingress_vrf_name = f"relay_{self.relay.ingress_interface}"
+
+        for pivot in self.relay.pivots:
+            egress_vrf_name = f"relay_{pivot.egress_interface}"
+            for target in pivot.targets:
+                commands.append(
+                    f"set vrf name {ingress_vrf_name} protocols static route "
+                    f"{target.relay_prefix} interface {pivot.egress_interface} "
+                    f"vrf {egress_vrf_name}"
+                )
 
         return commands
 
