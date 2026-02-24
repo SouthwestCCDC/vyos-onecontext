@@ -5,8 +5,8 @@ which enables a single router to handle multiple isolated network pivots using
 Virtual Routing and Forwarding (VRF) tables.
 
 Key components:
-- VRF creation and interface binding (one VRF per egress interface)
-- Policy-Based Routing (PBR) to route relay traffic to correct VRF
+- VRF creation and interface binding (one VRF for ingress, one VRF per egress interface)
+- Policy-Based Routing (PBR) to route relay traffic from ingress VRF to correct egress VRF
 - Destination NAT (DNAT) for subnet-to-subnet translation
 - Source NAT (SNAT) with masquerade on egress interfaces
 - Proxy-ARP on ingress interface
@@ -21,26 +21,30 @@ class RelayGenerator(BaseGenerator):
     """Generate VyOS commands for VRF-based relay configuration.
 
     This generator produces all configuration needed for VRF-based relay routing:
-    - VRF creation with unique table IDs
-    - Interface-to-VRF binding for egress interfaces
-    - Policy-based routing to direct relay traffic to correct VRF
+    - VRF creation with unique table IDs (ingress VRF + egress VRFs)
+    - Interface-to-VRF binding for ingress and egress interfaces
+    - Policy-based routing to direct relay traffic from ingress VRF to correct egress VRF
     - Subnet-to-subnet NAT (DNAT/SNAT) for relay-to-target translation
     - Proxy-ARP on ingress interface
-    - Static routes in VRF context for target networks
+    - Static routes in egress VRF context for target networks
 
     Rule numbering:
-    - VRF table IDs: 150, 151, 152... (sequential per pivot)
+    - Ingress VRF table ID: 149
+    - Egress VRF table IDs: 150, 151, 152... (sequential per pivot)
     - PBR rules: 10, 20, 30... (sequential per target)
     - DNAT rules: 5000, 5010, 5020... (sequential per target)
     - SNAT rules: 5000, 5010, 5020... (sequential per pivot)
 
     Design decisions:
-    - VRF table IDs start at 150 (management VRF uses 100, VyOS max is 200)
+    - Ingress VRF table ID is 149 (just before egress VRFs)
+    - Egress VRF table IDs start at 150 (management VRF uses 100, VyOS max is 200)
     - NAT rules start at 5000 to avoid conflict with standard NAT (100+ range)
     - PBR rules use increment of 10 to allow manual rule insertion if needed
     - SNAT is per-pivot (not per-target) since all targets in a pivot share egress
+    - PBR routes traffic cross-VRF from ingress VRF to egress VRFs
     """
 
+    INGRESS_VRF_TABLE_ID = 149  # Table ID for ingress VRF (one less than BASE_TABLE_ID)
     BASE_TABLE_ID = 150  # Start VRF table IDs at 150 (management VRF uses 100, VyOS max is 200)
     DNAT_RULE_START = 5000  # Avoid conflict with standard NAT (idx*100 scheme)
     SNAT_RULE_START = 5000
@@ -120,8 +124,8 @@ class RelayGenerator(BaseGenerator):
     def _generate_vrfs(self) -> list[str]:
         """Create VRFs and bind interfaces.
 
-        Creates one VRF per pivot (egress interface) with sequential table IDs
-        starting at 150. Binds each egress interface to its corresponding VRF.
+        Creates one VRF for the ingress interface and one VRF per pivot (egress interface).
+        The ingress VRF uses table ID 149, egress VRFs use sequential table IDs starting at 150.
 
         Returns:
             List of VyOS 'set' commands for VRF configuration
@@ -132,6 +136,14 @@ class RelayGenerator(BaseGenerator):
         if self.relay is None:
             return commands
 
+        # Create ingress VRF and bind ingress interface
+        ingress_vrf_name = f"relay_{self.relay.ingress_interface}"
+        commands.append(f"set vrf name {ingress_vrf_name} table {self.INGRESS_VRF_TABLE_ID}")
+        commands.append(
+            f"set interfaces ethernet {self.relay.ingress_interface} vrf {ingress_vrf_name}"
+        )
+
+        # Create egress VRFs and bind egress interfaces
         for idx, pivot in enumerate(self.relay.pivots):
             vrf_name = f"relay_{pivot.egress_interface}"
             table_id = self.BASE_TABLE_ID + idx

@@ -47,7 +47,9 @@ class TestRelayGenerator:
         commands = gen.generate()
 
         # Expected commands (in order):
-        # 1. VRF creation and interface binding
+        # 1. VRF creation and interface binding (ingress + egress)
+        assert "set vrf name relay_eth1 table 149" in commands
+        assert "set interfaces ethernet eth1 vrf relay_eth1" in commands
         assert "set vrf name relay_eth2 table 150" in commands
         assert "set interfaces ethernet eth2 vrf relay_eth2" in commands
 
@@ -78,12 +80,13 @@ class TestRelayGenerator:
         """Test relay config with one pivot and multiple targets.
 
         Verifies that multiple targets on the same pivot share:
-        - Same VRF (one VRF per pivot)
+        - Same egress VRF (one VRF per pivot)
         - Same SNAT rule (one masquerade per pivot)
         But have separate:
         - PBR rules (one per target)
         - DNAT rules (one per target)
         - Static routes (one per target)
+        Additionally verifies ingress VRF is created.
         """
         relay = RelayConfig(
             ingress_interface="eth1",
@@ -109,7 +112,9 @@ class TestRelayGenerator:
         gen = RelayGenerator(relay)
         commands = gen.generate()
 
-        # VRF: Only one VRF for both targets (same pivot)
+        # VRF: Ingress VRF + one egress VRF for both targets (same pivot)
+        assert "set vrf name relay_eth1 table 149" in commands
+        assert "set interfaces ethernet eth1 vrf relay_eth1" in commands
         vrf_commands = [cmd for cmd in commands if cmd.startswith("set vrf name relay_eth2")]
         assert len(vrf_commands) == 3  # 1 VRF creation + 2 static routes
 
@@ -155,7 +160,8 @@ class TestRelayGenerator:
 
         This is the full-featured scenario: multiple egress interfaces,
         each with multiple targets. Verifies:
-        - VRF table IDs are sequential (150, 151, ...)
+        - Ingress VRF table ID is 149
+        - Egress VRF table IDs are sequential (150, 151, ...)
         - PBR rules are sequential across all targets (10, 20, 30, 40)
         - DNAT rules are sequential across all targets (5000, 5010, 5020, 5030)
         - SNAT rules are per-pivot, not per-target
@@ -199,7 +205,9 @@ class TestRelayGenerator:
         gen = RelayGenerator(relay)
         commands = gen.generate()
 
-        # VRF creation: Two VRFs with sequential table IDs
+        # VRF creation: Ingress VRF + two egress VRFs with sequential table IDs
+        assert "set vrf name relay_eth1 table 149" in commands
+        assert "set interfaces ethernet eth1 vrf relay_eth1" in commands
         assert "set vrf name relay_eth2 table 150" in commands
         assert "set vrf name relay_eth3 table 151" in commands
         assert "set interfaces ethernet eth2 vrf relay_eth2" in commands
@@ -284,8 +292,10 @@ class TestRelayGenerator:
         commands = gen.generate()
 
         # Find indices of key commands
-        vrf_create_idx = commands.index("set vrf name relay_eth2 table 150")
-        vrf_bind_idx = commands.index("set interfaces ethernet eth2 vrf relay_eth2")
+        ingress_vrf_create_idx = commands.index("set vrf name relay_eth1 table 149")
+        ingress_vrf_bind_idx = commands.index("set interfaces ethernet eth1 vrf relay_eth1")
+        egress_vrf_create_idx = commands.index("set vrf name relay_eth2 table 150")
+        egress_vrf_bind_idx = commands.index("set interfaces ethernet eth2 vrf relay_eth2")
         pbr_rule_idx = next(
             i for i, cmd in enumerate(commands) if "policy route relay-pbr rule" in cmd
         )
@@ -303,8 +313,14 @@ class TestRelayGenerator:
         )
 
         # Verify ordering constraints
-        assert vrf_create_idx < vrf_bind_idx, "VRF must be created before binding interface"
-        assert vrf_bind_idx < pbr_rule_idx, "Interface binding before PBR"
+        assert ingress_vrf_create_idx < ingress_vrf_bind_idx, (
+            "Ingress VRF must be created before binding interface"
+        )
+        assert egress_vrf_create_idx < egress_vrf_bind_idx, (
+            "Egress VRF must be created before binding interface"
+        )
+        assert ingress_vrf_bind_idx < pbr_rule_idx, "Interface binding before PBR"
+        assert egress_vrf_bind_idx < pbr_rule_idx, "Interface binding before PBR"
         assert pbr_rule_idx < dnat_idx, "PBR before NAT"
         assert dnat_idx < snat_idx, "DNAT before SNAT"
         assert snat_idx < proxy_arp_idx, "SNAT before proxy-ARP enable"
@@ -331,7 +347,9 @@ class TestRelayGenerator:
         gen = RelayGenerator(relay)
         commands = gen.generate()
 
-        # Verify VRF name follows convention
+        # Verify VRF naming follows convention for both ingress and egress
+        assert "set vrf name relay_eth0 table 149" in commands
+        assert "set interfaces ethernet eth0 vrf relay_eth0" in commands
         assert "set vrf name relay_eth5 table 150" in commands
         assert "set interfaces ethernet eth5 vrf relay_eth5" in commands
         assert any("vrf name relay_eth5 protocols static route" in cmd for cmd in commands)
@@ -339,7 +357,8 @@ class TestRelayGenerator:
     def test_rule_number_ranges(self):
         """Test that rule numbers fall in expected ranges.
 
-        - VRF table IDs: 150+
+        - Ingress VRF table ID: 149
+        - Egress VRF table IDs: 150+
         - PBR rules: 10+, increment by 10
         - DNAT rules: 5000+, increment by 10
         - SNAT rules: 5000+, increment by 10
@@ -378,7 +397,8 @@ class TestRelayGenerator:
         gen = RelayGenerator(relay)
         commands = gen.generate()
 
-        # VRF table IDs: 150, 151
+        # VRF table IDs: 149 (ingress), 150, 151 (egress)
+        assert "table 149" in " ".join(commands)
         assert "table 150" in " ".join(commands)
         assert "table 151" in " ".join(commands)
 
