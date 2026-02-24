@@ -103,6 +103,12 @@ class TestRelayGenerator:
             in commands
         )
 
+        # 9. Egress VRF default route (return path)
+        assert (
+            "set vrf name relay_eth2 protocols static route 0.0.0.0/0 "
+            "next-hop 10.40.0.254 vrf relay_eth1" in commands
+        )
+
     def test_generate_single_pivot_multiple_targets(self):
         """Test relay config with one pivot and multiple targets.
 
@@ -157,7 +163,8 @@ class TestRelayGenerator:
         assert "set vrf name relay_eth1 table 149" in commands
         assert "set interfaces ethernet eth1 vrf relay_eth1" in commands
         vrf_commands = [cmd for cmd in commands if cmd.startswith("set vrf name relay_eth2")]
-        assert len(vrf_commands) == 3  # 1 VRF creation + 2 egress static routes
+        # 1 VRF creation + 2 egress static routes + 1 egress default route
+        assert len(vrf_commands) == 4
 
         # Ingress default route
         assert (
@@ -198,14 +205,20 @@ class TestRelayGenerator:
         # Proxy-ARP: Should be enabled on ingress interface
         assert "set interfaces ethernet eth1 ip enable-proxy-arp" in commands
 
-        # VRF static routes: Ingress default + proxy-ARP routes + egress routes
+        # VRF static routes: Ingress default + proxy-ARP routes + egress routes + egress default
         vrf_static_routes = [
             cmd for cmd in commands if "vrf name" in cmd and "protocols static route" in cmd
         ]
-        # 1 ingress default + 2 proxy-ARP routes + 2 egress routes
-        assert len(vrf_static_routes) == 5
+        # 1 ingress default + 2 proxy-ARP routes + 2 egress routes + 1 egress default
+        assert len(vrf_static_routes) == 6
         assert any("192.168.144.0/24" in cmd for cmd in vrf_static_routes)
         assert any("10.123.105.0/24" in cmd for cmd in vrf_static_routes)
+
+        # Egress VRF default route (return path)
+        assert (
+            "set vrf name relay_eth2 protocols static route 0.0.0.0/0 "
+            "next-hop 10.40.0.254 vrf relay_eth1" in commands
+        )
 
     def test_generate_multiple_pivots_multiple_targets(self):
         """Test relay config with multiple pivots and multiple targets.
@@ -327,6 +340,15 @@ class TestRelayGenerator:
             "set vrf name relay_eth3 protocols static route 10.127.105.0/25 next-hop 10.127.105.1"
             in commands
         )
+
+        # Egress VRF default routes (return path) - no gateway, so should NOT be present
+        # Note: This test doesn't configure gateways on ingress interface
+        egress_default_routes = [
+            cmd for cmd in commands
+            if "protocols static route 0.0.0.0/0" in cmd and "vrf relay_eth" in cmd
+        ]
+        # Should be empty because no ingress gateway is configured
+        assert len(egress_default_routes) == 0
 
     def test_command_ordering(self):
         """Test that commands are generated in correct order.

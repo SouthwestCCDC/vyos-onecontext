@@ -77,6 +77,7 @@ class RelayGenerator(BaseGenerator):
         6. Source NAT (SNAT)
         7. Proxy-ARP
         8. Static routes in egress VRF context
+        9. Egress VRF default routes (return path)
 
         Returns:
             List of VyOS 'set' commands for relay configuration
@@ -95,6 +96,7 @@ class RelayGenerator(BaseGenerator):
         commands.extend(self._generate_snat())
         commands.extend(self._generate_proxy_arp())
         commands.extend(self._generate_static_routes())
+        commands.extend(self._generate_egress_default_routes())
 
         return commands
 
@@ -129,6 +131,7 @@ class RelayGenerator(BaseGenerator):
         commands.extend(self._generate_snat())
         commands.extend(self._generate_proxy_arp())
         commands.extend(self._generate_static_routes())
+        commands.extend(self._generate_egress_default_routes())
 
         return commands
 
@@ -386,6 +389,45 @@ class RelayGenerator(BaseGenerator):
                     f"{target.relay_prefix} interface {pivot.egress_interface} "
                     f"vrf {egress_vrf_name}"
                 )
+
+        return commands
+
+    def _generate_egress_default_routes(self) -> list[str]:
+        """Generate cross-VRF default routes in egress VRFs.
+
+        Creates a default route in each egress VRF pointing back to the ingress
+        VRF gateway. This enables return traffic routing: when a reply arrives
+        on an egress interface and conntrack reverses the NAT, the egress VRF
+        needs a route back to the original sender in the ingress VRF.
+
+        For each pivot (egress VRF), generates:
+            set vrf name relay_{egress_interface} protocols static route 0.0.0.0/0
+                next-hop {ingress_gateway} vrf relay_{ingress_interface}
+
+        Only generates routes if a gateway is configured on the ingress interface.
+
+        Returns:
+            List of VyOS 'set' commands for egress VRF default routes
+        """
+        commands: list[str] = []
+
+        # Type narrowing: we know self.relay is not None because generate() checks
+        if self.relay is None:
+            return commands
+
+        gateway = self._get_ingress_gateway()
+        if gateway is None:
+            # No gateway configured on ingress interface - skip default routes
+            return commands
+
+        ingress_vrf_name = f"relay_{self.relay.ingress_interface}"
+
+        for pivot in self.relay.pivots:
+            egress_vrf_name = f"relay_{pivot.egress_interface}"
+            commands.append(
+                f"set vrf name {egress_vrf_name} protocols static route 0.0.0.0/0 "
+                f"next-hop {gateway} vrf {ingress_vrf_name}"
+            )
 
         return commands
 
