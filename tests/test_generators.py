@@ -393,6 +393,92 @@ class TestInterfaceGenerator:
 
         assert len(commands) == 0
 
+    def test_generate_with_bridged_interface(self):
+        """Test that bridged interfaces skip IP address assignment."""
+        interfaces = [
+            InterfaceConfig(
+                name="eth0",
+                ip=IPv4Address("10.0.1.1"),
+                mask="255.255.255.0",
+            ),
+            InterfaceConfig(
+                name="eth1",
+                ip=IPv4Address("172.22.1.254"),
+                mask="255.255.0.0",
+            ),
+        ]
+        # eth1 is a bridge member, so it should not get an IP
+        bridged_interfaces = {"eth1"}
+        gen = InterfaceGenerator(interfaces, [], bridged_interfaces)
+        commands = gen.generate()
+
+        # eth0 should get IP, eth1 should not
+        assert "set interfaces ethernet eth0 address 10.0.1.1/24" in commands
+        assert "set interfaces ethernet eth1 address" not in " ".join(commands)
+
+    def test_generate_with_bridged_interface_and_mtu(self):
+        """Test that bridged interfaces still get MTU configured."""
+        interfaces = [
+            InterfaceConfig(
+                name="eth1",
+                ip=IPv4Address("172.22.1.254"),
+                mask="255.255.0.0",
+                mtu=9000,
+            ),
+        ]
+        bridged_interfaces = {"eth1"}
+        gen = InterfaceGenerator(interfaces, [], bridged_interfaces)
+        commands = gen.generate()
+
+        # Should skip IP but still configure MTU
+        assert "set interfaces ethernet eth1 address" not in " ".join(commands)
+        assert "set interfaces ethernet eth1 mtu 9000" in commands
+
+    def test_generate_with_multiple_bridged_interfaces(self):
+        """Test multiple bridged interfaces."""
+        interfaces = [
+            InterfaceConfig(
+                name="eth0",
+                ip=IPv4Address("10.0.1.1"),
+                mask="255.255.255.0",
+            ),
+            InterfaceConfig(
+                name="eth1",
+                ip=IPv4Address("172.22.1.254"),
+                mask="255.255.0.0",
+            ),
+            InterfaceConfig(
+                name="eth2",
+                ip=IPv4Address("172.22.37.254"),
+                mask="255.255.0.0",
+            ),
+        ]
+        # eth1 and eth2 are bridge members
+        bridged_interfaces = {"eth1", "eth2"}
+        gen = InterfaceGenerator(interfaces, [], bridged_interfaces)
+        commands = gen.generate()
+
+        # Only eth0 should get IP
+        assert "set interfaces ethernet eth0 address 10.0.1.1/24" in commands
+        all_commands = " ".join(commands)
+        assert "set interfaces ethernet eth1 address" not in all_commands
+        assert "set interfaces ethernet eth2 address" not in all_commands
+
+    def test_generate_with_no_bridged_interfaces(self):
+        """Test backward compatibility with empty bridged_interfaces set."""
+        interfaces = [
+            InterfaceConfig(
+                name="eth0",
+                ip=IPv4Address("10.0.1.1"),
+                mask="255.255.255.0",
+            ),
+        ]
+        gen = InterfaceGenerator(interfaces, [], set())
+        commands = gen.generate()
+
+        # Should behave normally
+        assert "set interfaces ethernet eth0 address 10.0.1.1/24" in commands
+
 
 class TestRoutingGenerator:
     """Tests for routing configuration generator."""

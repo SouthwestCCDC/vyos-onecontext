@@ -20,6 +20,7 @@ from vyos_onecontext.models.nat import NatConfig
 from vyos_onecontext.models.relay import RelayConfig
 from vyos_onecontext.models.routing import OspfConfig, RoutesConfig
 from vyos_onecontext.models.system import ConntrackConfig
+from vyos_onecontext.models.vxlan import VxlanConfig
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -68,6 +69,7 @@ class ContextParser:
         firewall = self._parse_firewall()
         conntrack = self._parse_conntrack()
         relay = self._parse_relay()
+        vxlan = self._parse_vxlan()
 
         # Parse operational variables
         hostname = self.variables.get("HOSTNAME")
@@ -93,6 +95,7 @@ class ContextParser:
             firewall=firewall,
             conntrack=conntrack,
             relay=relay,
+            vxlan=vxlan,
             start_config=start_config,
             start_script=start_script,
             start_script_timeout=start_script_timeout,
@@ -510,6 +513,14 @@ class ContextParser:
             RelayConfig or None if not present
         """
         return self._parse_json_variable("RELAY_JSON", RelayConfig)
+
+    def _parse_vxlan(self) -> VxlanConfig | None:
+        """Parse VXLAN_JSON variable.
+
+        Returns:
+            VxlanConfig or None if not present
+        """
+        return self._parse_json_variable("VXLAN_JSON", VxlanConfig)
 
 
 def parse_context(

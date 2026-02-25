@@ -13,6 +13,7 @@ from vyos_onecontext.models.nat import NatConfig
 from vyos_onecontext.models.relay import RelayConfig
 from vyos_onecontext.models.routing import OspfConfig, RoutesConfig
 from vyos_onecontext.models.system import ConntrackConfig
+from vyos_onecontext.models.vxlan import VxlanConfig
 
 
 class OnecontextMode(str, Enum):
@@ -165,6 +166,9 @@ class RouterConfig(BaseModel):
 
     # Relay
     relay: Annotated[RelayConfig | None, Field(None, description="VRF-based relay configuration")]
+
+    # VXLAN and bridges
+    vxlan: Annotated[VxlanConfig | None, Field(None, description="VXLAN and bridge configuration")]
 
     # Escape hatches
     start_config: Annotated[
@@ -427,6 +431,25 @@ class RouterConfig(BaseModel):
                     f"Relay pivot egress_interface '{pivot.egress_interface}' "
                     f"cannot be a management interface"
                 )
+
+        return self
+
+    @model_validator(mode="after")
+    def validate_vxlan_bridge_eth_members(self) -> "RouterConfig":
+        """Validate that bridge ethernet members reference existing interfaces."""
+        if self.vxlan is None:
+            return self
+
+        interface_names = {iface.name for iface in self.interfaces}
+
+        for bridge in self.vxlan.bridges:
+            for member in bridge.members:
+                # Only validate ethN members (vxlanN members are validated within VxlanConfig)
+                if member.startswith("eth") and member not in interface_names:
+                    raise ValueError(
+                        f"Bridge '{bridge.name}' references non-existent "
+                        f"ethernet interface: '{member}'"
+                    )
 
         return self
 

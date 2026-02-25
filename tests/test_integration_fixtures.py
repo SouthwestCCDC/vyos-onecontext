@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 
 from vyos_onecontext.errors import ErrorCollector
+from vyos_onecontext.generators import generate_config
 from vyos_onecontext.parser import ContextParser
 
 # Path to integration test fixtures
@@ -163,6 +164,43 @@ class TestFixturesParsing:
         assert "START_SCRIPT executed" in config.start_script
         assert config.start_script.startswith("#!/bin/bash")
 
+    def test_vxlan_arcade_fixture_parses(self) -> None:
+        """Test vxlan-arcade.env fixture parses with VXLAN_JSON content."""
+        parser = ContextParser(str(FIXTURES_DIR / "vxlan-arcade.env"))
+        config = parser.parse()
+
+        assert config.hostname == "test-vxlan-arcade"
+        assert len(config.interfaces) == 4  # eth0, eth1, eth2, eth3
+
+        # VXLAN config should be present
+        assert config.vxlan is not None
+        assert len(config.vxlan.tunnels) == 2
+        assert len(config.vxlan.bridges) == 1
+
+        # Verify tunnel details
+        tunnel_names = {t.name for t in config.vxlan.tunnels}
+        assert tunnel_names == {"vxlan0", "vxlan1"}
+
+        vxlan0 = next(t for t in config.vxlan.tunnels if t.name == "vxlan0")
+        assert vxlan0.vni == 100
+        assert str(vxlan0.remote) == "100.65.1.37"
+        assert str(vxlan0.source_address) == "100.65.1.36"
+
+        vxlan1 = next(t for t in config.vxlan.tunnels if t.name == "vxlan1")
+        assert vxlan1.vni == 101
+        assert str(vxlan1.remote) == "100.65.1.115"
+        assert str(vxlan1.source_address) == "100.65.1.36"
+
+        # Verify bridge details
+        bridge = config.vxlan.bridges[0]
+        assert bridge.name == "br0"
+        assert bridge.address == "172.22.1.1/16"
+        assert set(bridge.members) == {"eth2", "vxlan0", "vxlan1"}
+
+        # Verify routes are present alongside VXLAN
+        assert config.routes is not None
+        assert len(config.routes.static) == 1
+
     def test_all_fixtures_produce_valid_configs(self) -> None:
         """Test that all .env fixtures in the contexts directory parse successfully.
 
@@ -194,6 +232,148 @@ class TestFixturesParsing:
 
             # Hostname should be set
             assert config.hostname is not None, f"{fixture_path.name} should define a hostname"
+
+
+class TestVxlanFunctionalValidation:
+    """Functional tests for VXLAN configuration generation.
+
+    These tests validate the complete pipeline from fixture file through
+    ContextParser to command generation, verifying that:
+    1. VXLAN tunnels are created with correct parameters
+    2. Bridges are created with correct members
+    3. Bridge gets the IP address (not the physical interface)
+    4. Bridged interfaces do NOT receive IP addresses
+    5. Non-bridged interfaces still receive IP addresses normally
+    6. Command ordering is correct (interfaces → VXLAN → bridges)
+    """
+
+    def test_vxlan_arcade_commands_generation(self) -> None:
+        """Test complete command generation for VXLAN arcade fixture."""
+        parser = ContextParser(str(FIXTURES_DIR / "vxlan-arcade.env"))
+        config = parser.parse()
+        commands = generate_config(config)
+
+        # Convert to set for easier searching
+        commands_set = set(commands)
+
+        # 1. VXLAN tunnel creation
+        assert "set interfaces vxlan vxlan0 vni 100" in commands_set
+        assert "set interfaces vxlan vxlan0 remote 100.65.1.37" in commands_set
+        assert "set interfaces vxlan vxlan0 source-address 100.65.1.36" in commands_set
+        assert (
+            "set interfaces vxlan vxlan0 description 'Tunnel to Store 37'" in commands_set
+        )
+
+        assert "set interfaces vxlan vxlan1 vni 101" in commands_set
+        assert "set interfaces vxlan vxlan1 remote 100.65.1.115" in commands_set
+        assert "set interfaces vxlan vxlan1 source-address 100.65.1.36" in commands_set
+        assert (
+            "set interfaces vxlan vxlan1 description 'Tunnel to Store 114'" in commands_set
+        )
+
+        # 2. Bridge creation with members
+        assert "set interfaces bridge br0 member interface eth2" in commands_set
+        assert "set interfaces bridge br0 member interface vxlan0" in commands_set
+        assert "set interfaces bridge br0 member interface vxlan1" in commands_set
+        assert "set interfaces bridge br0 description 'Arcade network'" in commands_set
+
+        # 3. Bridge gets the IP address
+        assert "set interfaces bridge br0 address 172.22.1.1/16" in commands_set
+
+        # 4. eth2 (bridged interface) should NOT get an IP address
+        # Check that NO command assigns an IP to eth2
+        eth2_ip_commands = [cmd for cmd in commands if "ethernet eth2 address" in cmd]
+        assert len(eth2_ip_commands) == 0, (
+            f"eth2 should not receive IP address (bridged interface), "
+            f"but found: {eth2_ip_commands}"
+        )
+
+        # 5. Non-bridged interfaces should still get IPs normally
+        assert "set interfaces ethernet eth0 address 10.2.6.36/24" in commands_set
+        assert "set interfaces ethernet eth1 address 10.129.17.1/30" in commands_set
+        assert "set interfaces ethernet eth3 address 192.168.1.1/24" in commands_set
+
+        # 6. Management VRF on eth0
+        assert "set interfaces ethernet eth0 vrf management" in commands_set
+
+        # 7. Static routes coexist with VXLAN
+        assert (
+            "set protocols static route 100.65.1.0/24 next-hop 10.129.17.2"
+            in commands_set
+        )
+
+    def test_vxlan_command_ordering(self) -> None:
+        """Test that VXLAN commands appear in correct order.
+
+        VyOS requires:
+        1. Physical interfaces configured first (with VRF, before IPs)
+        2. Interface IP addresses assigned
+        3. VXLAN tunnels created (reference source IPs)
+        4. Bridges created (reference VXLAN and physical interfaces)
+        """
+        parser = ContextParser(str(FIXTURES_DIR / "vxlan-arcade.env"))
+        config = parser.parse()
+        commands = generate_config(config)
+
+        # Find indices of key command types
+        vrf_indices = [
+            i for i, cmd in enumerate(commands) if "ethernet eth0 vrf" in cmd
+        ]
+        interface_ip_indices = [
+            i for i, cmd in enumerate(commands) if "ethernet eth" in cmd and "address" in cmd
+        ]
+        vxlan_indices = [
+            i for i, cmd in enumerate(commands) if "vxlan vxlan" in cmd
+        ]
+        bridge_indices = [
+            i for i, cmd in enumerate(commands) if "bridge br" in cmd
+        ]
+
+        # VRF assignment must come before interface IPs
+        if vrf_indices and interface_ip_indices:
+            assert min(vrf_indices) < min(interface_ip_indices), (
+                "VRF assignment must come before interface IP configuration"
+            )
+
+        # Interface IPs must come before VXLAN tunnels
+        if interface_ip_indices and vxlan_indices:
+            assert max(interface_ip_indices) < min(vxlan_indices), (
+                "Interface IP addresses must be configured before VXLAN tunnels"
+            )
+
+        # VXLAN tunnels must come before bridges
+        if vxlan_indices and bridge_indices:
+            assert max(vxlan_indices) < min(bridge_indices), (
+                "VXLAN tunnels must be created before bridges"
+            )
+
+    def test_vxlan_with_no_ip_conflicts(self) -> None:
+        """Test that bridged interfaces do not have conflicting IP assignments.
+
+        When an interface is a bridge member, it should NOT receive an IP address
+        via the normal interface generator. The bridge itself gets the IP.
+        """
+        parser = ContextParser(str(FIXTURES_DIR / "vxlan-arcade.env"))
+        config = parser.parse()
+        commands = generate_config(config)
+
+        # eth2 is a bridge member in this fixture
+        # It should not have any IP address commands
+        eth2_commands = [cmd for cmd in commands if "ethernet eth2" in cmd]
+
+        # eth2 should not appear in any IP address assignment
+        for cmd in eth2_commands:
+            assert "address" not in cmd, (
+                f"eth2 is bridged and should not have IP address, "
+                f"but found command: {cmd}"
+            )
+
+        # Bridge br0 should have the IP address instead
+        bridge_ip_commands = [
+            cmd for cmd in commands if "bridge br0 address" in cmd
+        ]
+        assert len(bridge_ip_commands) == 1
+        assert "172.22.1.1/16" in bridge_ip_commands[0]
 
 
 class TestIsoCreationScript:

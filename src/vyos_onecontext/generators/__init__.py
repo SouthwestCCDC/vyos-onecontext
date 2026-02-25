@@ -17,6 +17,7 @@ from vyos_onecontext.generators.routing import RoutingGenerator, StaticRoutesGen
 from vyos_onecontext.generators.service import SshServiceGenerator
 from vyos_onecontext.generators.system import ConntrackGenerator, HostnameGenerator, SshKeyGenerator
 from vyos_onecontext.generators.vrf import VRF_NAME, VRF_TABLE_ID, VrfGenerator
+from vyos_onecontext.generators.vxlan import VxlanGenerator
 from vyos_onecontext.models import RouterConfig
 
 
@@ -27,17 +28,18 @@ def generate_config(config: RouterConfig) -> list[str]:
     1. System configuration (hostname, SSH keys)
     2. VRF configuration (must happen BEFORE interface IP configuration)
     3. Relay VRF configuration (if RELAY_JSON present - must come BEFORE interface IP configuration)
-    4. Network interfaces (IP addresses)
-    5. Relay configuration continued (if RELAY_JSON present - PBR, NAT, proxy-ARP, static routes)
-    6. Routing (default gateway selection for non-management interfaces)
-    7. Static routes (ROUTES_JSON; may reference VRFs)
-    8. Services (SSH VRF binding)
-    9. Dynamic routing (OSPF)
-    10. DHCP server
-    11. NAT (source, destination, binat)
-    12. Firewall
-    13. Conntrack timeout rules
-    14. Custom start config (START_CONFIG)
+    4. Network interfaces (IP addresses, MTU) - skips IPs for bridged interfaces
+    5. VXLAN tunnels and bridges (must come AFTER interfaces exist)
+    6. Relay configuration continued (if RELAY_JSON present - PBR, NAT, proxy-ARP, static routes)
+    7. Routing (default gateway selection for non-management interfaces)
+    8. Static routes (ROUTES_JSON; may reference VRFs)
+    9. Services (SSH VRF binding)
+    10. Dynamic routing (OSPF)
+    11. DHCP server
+    12. NAT (source, destination, binat)
+    13. Firewall
+    14. Conntrack timeout rules
+    15. Custom start config (START_CONFIG)
 
     Args:
         config: Complete router configuration
@@ -60,9 +62,26 @@ def generate_config(config: RouterConfig) -> list[str]:
     relay_gen = RelayGenerator(config.relay, config.interfaces)
     commands.extend(relay_gen.generate_vrf_commands())
 
+    # Determine which interfaces are bridged (so we skip IP assignment)
+    bridged_interfaces: set[str] = set()
+    if config.vxlan is not None:
+        for bridge in config.vxlan.bridges:
+            for member in bridge.members:
+                # Only ethernet interfaces should skip IP assignment
+                # (vxlan interfaces never had IPs to begin with)
+                if member.startswith("eth"):
+                    bridged_interfaces.add(member)
+
     # Interfaces (IP addresses, MTU)
     # This comes AFTER VRF assignment to avoid VyOS rejection
-    commands.extend(InterfaceGenerator(config.interfaces, config.aliases).generate())
+    # Skips IP assignment for bridged interfaces
+    commands.extend(
+        InterfaceGenerator(config.interfaces, config.aliases, bridged_interfaces).generate()
+    )
+
+    # VXLAN tunnels and bridges
+    # Must come AFTER interfaces so physical interfaces exist
+    commands.extend(VxlanGenerator(config.vxlan).generate())
 
     # Relay configuration continued - must come AFTER interface IP configuration
     # Generates PBR, NAT, proxy-ARP, and static routes for relay
@@ -117,6 +136,7 @@ __all__ = [
     "StartConfigGenerator",
     "StaticRoutesGenerator",
     "VrfGenerator",
+    "VxlanGenerator",
     "VRF_NAME",
     "VRF_TABLE_ID",
     "generate_config",
