@@ -29,6 +29,7 @@ from vyos_onecontext.models.routing import (
     StaticRoute,
 )
 from vyos_onecontext.models.system import ConntrackConfig, ConntrackTimeoutRule
+from vyos_onecontext.models.vxlan import BridgeConfig, VxlanConfig, VxlanTunnelConfig
 
 __all__ = [
     # config
@@ -65,4 +66,8 @@ __all__ = [
     # system
     "ConntrackConfig",
     "ConntrackTimeoutRule",
+    # vxlan
+    "BridgeConfig",
+    "VxlanConfig",
+    "VxlanTunnelConfig",
 ]
