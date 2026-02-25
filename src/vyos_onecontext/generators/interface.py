@@ -7,15 +7,23 @@ from vyos_onecontext.models import AliasConfig, InterfaceConfig
 class InterfaceGenerator(BaseGenerator):
     """Generate VyOS interface configuration commands."""
 
-    def __init__(self, interfaces: list[InterfaceConfig], aliases: list[AliasConfig]):
+    def __init__(
+        self,
+        interfaces: list[InterfaceConfig],
+        aliases: list[AliasConfig],
+        bridged_interfaces: set[str] | None = None,
+    ):
         """Initialize interface generator.
 
         Args:
             interfaces: List of interface configurations
             aliases: List of NIC alias configurations (secondary IPs)
+            bridged_interfaces: Set of interface names that are bridge members
+                               (IP addresses will not be assigned to these interfaces)
         """
         self.interfaces = interfaces
         self.aliases = aliases
+        self.bridged_interfaces = bridged_interfaces or set()
 
     def generate(self) -> list[str]:
         """Generate interface configuration commands.
@@ -35,10 +43,13 @@ class InterfaceGenerator(BaseGenerator):
 
         # Configure primary interfaces
         for iface in self.interfaces:
-            # Primary IP address in CIDR notation
-            commands.append(f"set interfaces ethernet {iface.name} address {iface.to_cidr()}")
+            # Skip IP address configuration for bridged interfaces
+            # (the IP will be on the bridge interface instead)
+            if iface.name not in self.bridged_interfaces:
+                # Primary IP address in CIDR notation
+                commands.append(f"set interfaces ethernet {iface.name} address {iface.to_cidr()}")
 
-            # MTU (if specified)
+            # MTU (if specified) - always configure even for bridged interfaces
             if iface.mtu is not None:
                 commands.append(f"set interfaces ethernet {iface.name} mtu {iface.mtu}")
 
