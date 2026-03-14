@@ -139,6 +139,8 @@ class FirewallRule(BaseModel):
         """Validate that destination port(s) are valid."""
         if v is None:
             return None
+        if isinstance(v, list) and len(v) == 0:
+            raise ValueError("destination_port list must not be empty")
         ports = [v] if isinstance(v, int) else v
         for port in ports:
             if not 1 <= port <= 65535:
