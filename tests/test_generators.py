@@ -3344,8 +3344,8 @@ class TestFirewallGenerator:
         assert "set firewall ipv4 name GAME-to-SCORING rule 100 protocol tcp_udp" in commands
         assert "set firewall ipv4 name GAME-to-SCORING rule 100 destination port 53" in commands
 
-    def test_generate_policy_with_multiple_inline_ports(self):
-        """Test policy rule with multiple inline destination ports."""
+    def test_generate_policy_with_single_destination_port(self):
+        """Test policy rule with a single destination_port int."""
         firewall = FirewallConfig(
             zones={
                 "GAME": FirewallZone(name="GAME", interfaces=["eth1"], default_action="drop"),
@@ -3359,7 +3359,37 @@ class TestFirewallGenerator:
                         FirewallRule(
                             action="accept",
                             protocol="tcp",
-                            destination_port=[80, 443, 8080],
+                            destination_port=80,
+                        )
+                    ],
+                )
+            ],
+        )
+        gen = FirewallGenerator(firewall)
+        commands = gen.generate()
+
+        assert "set firewall ipv4 name GAME-to-SCORING rule 100 destination port 80" in commands
+
+    def test_generate_policy_with_multiple_inline_ports(self):
+        """Test policy rule with multiple inline destination ports.
+
+        VyOS set on a leaf node overwrites rather than appends, so multiple
+        ports must be expressed as a single comma-separated value.
+        """
+        firewall = FirewallConfig(
+            zones={
+                "GAME": FirewallZone(name="GAME", interfaces=["eth1"], default_action="drop"),
+                "SCORING": FirewallZone(name="SCORING", interfaces=["eth2"], default_action="drop"),
+            },
+            policies=[
+                FirewallPolicy(
+                    from_zone="GAME",
+                    to_zone="SCORING",
+                    rules=[
+                        FirewallRule(
+                            action="accept",
+                            protocol="tcp",
+                            destination_port=[80, 443],
                             description="Allow multiple web ports",
                         )
                     ],
@@ -3369,10 +3399,17 @@ class TestFirewallGenerator:
         gen = FirewallGenerator(firewall)
         commands = gen.generate()
 
-        # Each port should get its own command
-        assert "set firewall ipv4 name GAME-to-SCORING rule 100 destination port 80" in commands
-        assert "set firewall ipv4 name GAME-to-SCORING rule 100 destination port 443" in commands
-        assert "set firewall ipv4 name GAME-to-SCORING rule 100 destination port 8080" in commands
+        # Ports must be in a single comma-separated command, not separate commands
+        port_commands = [
+            c for c in commands
+            if "destination port" in c and "GAME-to-SCORING rule 100" in c
+        ]
+        assert len(port_commands) == 1, (
+            f"Expected exactly one port command, got {len(port_commands)}: {port_commands}"
+        )
+        assert port_commands[0] == (
+            "set firewall ipv4 name GAME-to-SCORING rule 100 destination port 80,443"
+        )
 
     def test_generate_multiple_policies(self):
         """Test multiple inter-zone policies."""

@@ -234,19 +234,17 @@ class FirewallGenerator(BaseGenerator):
 
                 # Destination port filters (inline or port-group)
                 if rule.destination_port is not None:
-                    # Handle both single port and list of ports
+                    # Handle both single port and list of ports.
+                    # VyOS accepts comma-separated values for multiple ports in a
+                    # single `set` command; separate commands would overwrite each other.
                     if isinstance(rule.destination_port, list):
-                        # For multiple ports, generate separate commands for each
-                        for port in rule.destination_port:
-                            commands.append(
-                                f"set firewall ipv4 name {ruleset_name} rule {rule_num} "
-                                f"destination port {port}"
-                            )
+                        port_value = ",".join(str(p) for p in rule.destination_port)
                     else:
-                        commands.append(
-                            f"set firewall ipv4 name {ruleset_name} rule {rule_num} "
-                            f"destination port {rule.destination_port}"
-                        )
+                        port_value = str(rule.destination_port)
+                    commands.append(
+                        f"set firewall ipv4 name {ruleset_name} rule {rule_num} "
+                        f"destination port {port_value}"
+                    )
                 if rule.destination_port_group:
                     commands.append(
                         f"set firewall ipv4 name {ruleset_name} rule {rule_num} "

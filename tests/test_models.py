@@ -749,6 +749,22 @@ class TestValidationEnhancements:
                 destination_port_group="WEB",
             )
 
+    def test_firewall_rule_destination_port_empty_list_rejected(self) -> None:
+        """Test that FirewallRule rejects an empty destination_port list.
+
+        An empty list would cause the generator to emit `destination port ` (no value),
+        which is invalid VyOS syntax.
+        """
+        with pytest.raises(
+            ValidationError,
+            match="destination_port list must not be empty",
+        ):
+            FirewallRule(
+                action="accept",
+                protocol="tcp",
+                destination_port=[],
+            )
+
     def test_firewall_config_invalid_zone_reference(self) -> None:
         """Test that FirewallConfig rejects policies referencing non-existent zones."""
         with pytest.raises(ValidationError, match="non-existent from_zone"):
