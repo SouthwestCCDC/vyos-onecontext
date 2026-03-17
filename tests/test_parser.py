@@ -518,6 +518,31 @@ SYSLOG_HOST="mon.infra.swccdc.com"
 
         assert config.syslog_host == "mon.infra.swccdc.com"
 
+    def test_snmp_community(self, tmp_path: Path) -> None:
+        """Test SNMP_COMMUNITY parsing."""
+        context_file = tmp_path / "one_env"
+        content = """ETH0_IP="10.0.1.1"
+ETH0_MASK="255.255.255.0"
+SNMP_COMMUNITY="sw_monitoring_2026"
+"""
+        context_file.write_text(content)
+
+        config = parse_context(str(context_file))
+
+        assert config.snmp_community == "sw_monitoring_2026"
+
+    def test_snmp_community_absent(self, tmp_path: Path) -> None:
+        """Test that SNMP_COMMUNITY defaults to None when absent."""
+        context_file = tmp_path / "one_env"
+        content = """ETH0_IP="10.0.1.1"
+ETH0_MASK="255.255.255.0"
+"""
+        context_file.write_text(content)
+
+        config = parse_context(str(context_file))
+
+        assert config.snmp_community is None
+
 
 class TestJsonVariables:
     """Tests for JSON variable parsing."""

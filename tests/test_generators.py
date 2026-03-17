@@ -12,6 +12,7 @@ from vyos_onecontext.generators import (
     NatGenerator,
     OspfGenerator,
     RoutingGenerator,
+    SnmpGenerator,
     SshKeyGenerator,
     SshServiceGenerator,
     StartConfigGenerator,
@@ -4221,3 +4222,131 @@ class TestSyslogGenerator:
         commands = generate_config(config)
 
         assert not any("syslog" in cmd for cmd in commands)
+
+
+class TestSnmpGenerator:
+    """Tests for SNMP service configuration generator."""
+
+    def _mgmt_iface(self, ip: str = "10.0.0.1") -> InterfaceConfig:
+        """Return a management InterfaceConfig for the given IP."""
+        return InterfaceConfig(
+            name="eth0",
+            ip=IPv4Address(ip),
+            mask="255.255.255.0",
+            management=True,
+        )
+
+    def _data_iface(self, ip: str = "172.16.0.1") -> InterfaceConfig:
+        """Return a non-management InterfaceConfig for the given IP."""
+        return InterfaceConfig(
+            name="eth1",
+            ip=IPv4Address(ip),
+            mask="255.255.255.0",
+            management=False,
+        )
+
+    def test_generate_basic(self):
+        """Generate two SNMP commands with community and management IP."""
+        gen = SnmpGenerator("public", [self._mgmt_iface("10.0.0.1")])
+        commands = gen.generate()
+
+        assert len(commands) == 2
+        assert commands[0] == "set service snmp community public authorization ro"
+        assert commands[1] == "set service snmp listen-address 10.0.0.1"
+
+    def test_generate_with_underscore_community(self):
+        """Community strings with underscores and digits are accepted."""
+        gen = SnmpGenerator("sw_monitoring_2026", [self._mgmt_iface("192.168.1.5")])
+        commands = gen.generate()
+
+        assert len(commands) == 2
+        assert commands[0] == "set service snmp community sw_monitoring_2026 authorization ro"
+        assert commands[1] == "set service snmp listen-address 192.168.1.5"
+
+    def test_generate_uses_first_management_interface(self):
+        """When multiple management interfaces exist, only the first one is used."""
+        interfaces = [
+            InterfaceConfig(
+                name="eth0",
+                ip=IPv4Address("10.0.0.1"),
+                mask="255.255.255.0",
+                management=True,
+            ),
+            InterfaceConfig(
+                name="eth1",
+                ip=IPv4Address("10.0.1.1"),
+                mask="255.255.255.0",
+                management=True,
+            ),
+        ]
+        gen = SnmpGenerator("public", interfaces)
+        commands = gen.generate()
+
+        assert len(commands) == 2
+        assert "10.0.0.1" in commands[1]
+        assert "10.0.1.1" not in commands[1]
+
+    def test_generate_none_community(self):
+        """No commands emitted when snmp_community is None."""
+        gen = SnmpGenerator(None, [self._mgmt_iface()])
+        commands = gen.generate()
+
+        assert len(commands) == 0
+
+    def test_generate_no_management_interface(self):
+        """No commands and a warning logged when no management interface exists."""
+        gen = SnmpGenerator("public", [self._data_iface()])
+        commands = gen.generate()
+
+        assert len(commands) == 0
+
+    def test_generate_no_management_interface_warning(self, caplog):
+        """Warning is logged when SNMP community is set but no management interface exists."""
+        import logging
+
+        gen = SnmpGenerator("public", [self._data_iface()])
+        with caplog.at_level(logging.WARNING, logger="vyos_onecontext.generators.service"):
+            gen.generate()
+
+        assert any("no management interface" in record.message for record in caplog.records)
+
+    def test_generate_empty_interface_list(self):
+        """No commands emitted when interface list is empty."""
+        gen = SnmpGenerator("public", [])
+        commands = gen.generate()
+
+        assert len(commands) == 0
+
+    def test_generate_config_includes_snmp(self):
+        """generate_config includes SNMP commands when snmp_community is set."""
+        config = RouterConfig(
+            snmp_community="public",
+            interfaces=[
+                InterfaceConfig(
+                    name="eth0",
+                    ip=IPv4Address("10.0.0.1"),
+                    mask="255.255.255.0",
+                    management=True,
+                )
+            ],
+        )
+        commands = generate_config(config)
+
+        assert "set service snmp community public authorization ro" in commands
+        assert "set service snmp listen-address 10.0.0.1" in commands
+
+    def test_generate_config_excludes_snmp_when_unset(self):
+        """generate_config emits no SNMP commands when snmp_community is None."""
+        config = RouterConfig(
+            snmp_community=None,
+            interfaces=[
+                InterfaceConfig(
+                    name="eth0",
+                    ip=IPv4Address("10.0.0.1"),
+                    mask="255.255.255.0",
+                )
+            ],
+        )
+        commands = generate_config(config)
+
+        assert not any("snmp" in cmd for cmd in commands)

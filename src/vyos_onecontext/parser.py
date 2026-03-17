@@ -75,6 +75,7 @@ class ContextParser:
         hostname = self.variables.get("HOSTNAME")
         ssh_public_key = self.variables.get("SSH_PUBLIC_KEY")
         syslog_host = self.variables.get("SYSLOG_HOST")
+        snmp_community = self.variables.get("SNMP_COMMUNITY")
         onecontext_mode = self._parse_onecontext_mode()
 
         # Parse escape hatches
@@ -87,6 +88,7 @@ class ContextParser:
             hostname=hostname,
             ssh_public_key=ssh_public_key,
             syslog_host=syslog_host,
+            snmp_community=snmp_community,
             onecontext_mode=onecontext_mode,
             interfaces=interfaces,
             aliases=aliases,

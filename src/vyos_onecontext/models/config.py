@@ -211,6 +211,50 @@ class RouterConfig(BaseModel):
     conntrack: Annotated[
         ConntrackConfig | None, Field(None, description="Conntrack timeout configuration")
     ]
+    snmp_community: Annotated[
+        str | None, Field(None, description="SNMP community string for read-only access")
+    ]
+
+    @field_validator("snmp_community")
+    @classmethod
+    def validate_snmp_community(cls, v: str | None) -> str | None:
+        """Validate snmp_community is a safe single-token value.
+
+        Performs a safe-character check: rejects values containing whitespace,
+        quotes, or shell-special characters. Allows alphanumeric characters,
+        hyphens, and underscores (common in SNMP community strings such as
+        "sw_monitoring_2026" or "public").
+
+        Note: This is a safe-token check, not an SNMP specification check.
+        Values that pass may still be rejected by VyOS at commit time.
+
+        Args:
+            v: SNMP community string to validate
+
+        Returns:
+            The validated community string (stripped), or None if blank
+
+        Raises:
+            ValueError: If the value contains unsafe characters
+        """
+        if v is None:
+            return None
+
+        v = v.strip()
+        if not v:
+            return None
+
+        # Allow only safe characters: alphanumeric, hyphens, underscores.
+        # No whitespace, quotes, or shell-special characters.
+        pattern = r"^[a-zA-Z0-9_\-]+$"
+        if not re.match(pattern, v):
+            raise ValueError(
+                f"Invalid snmp_community: {v!r} (must contain only alphanumeric characters, "
+                f"hyphens, and underscores; whitespace, quotes, and special characters are "
+                f"not allowed)"
+            )
+
+        return v
 
     # Relay
     relay: Annotated[RelayConfig | None, Field(None, description="VRF-based relay configuration")]
