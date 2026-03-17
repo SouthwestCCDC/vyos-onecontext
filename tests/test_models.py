@@ -1501,6 +1501,66 @@ class TestInputValidation:
         router = RouterConfig(ssh_public_key=None)
         assert router.ssh_public_key is None
 
+    def test_syslog_host_valid_ipv4(self) -> None:
+        """Test valid IPv4 syslog host."""
+        router = RouterConfig(syslog_host="192.168.1.10")
+        assert router.syslog_host == "192.168.1.10"
+
+    def test_syslog_host_valid_ipv6_bare(self) -> None:
+        """Test valid bare IPv6 syslog host."""
+        router = RouterConfig(syslog_host="2001:db8::1")
+        assert router.syslog_host == "2001:db8::1"
+
+    def test_syslog_host_valid_ipv6_bracketed(self) -> None:
+        """Test valid bracketed IPv6 syslog host."""
+        router = RouterConfig(syslog_host="[2001:db8::1]")
+        assert router.syslog_host == "[2001:db8::1]"
+
+    def test_syslog_host_valid_fqdn(self) -> None:
+        """Test valid FQDN syslog host."""
+        router = RouterConfig(syslog_host="mon.infra.swccdc.com")
+        assert router.syslog_host == "mon.infra.swccdc.com"
+
+    def test_syslog_host_invalid_shell_injection(self) -> None:
+        """Test that shell injection is rejected."""
+        with pytest.raises(ValidationError, match="Invalid syslog_host"):
+            RouterConfig(syslog_host="192.168.1.1; rm -rf /")
+
+    def test_syslog_host_invalid_space(self) -> None:
+        """Test that space in syslog host is rejected."""
+        with pytest.raises(ValidationError, match="Invalid syslog_host"):
+            RouterConfig(syslog_host="host name")
+
+    def test_syslog_host_invalid_newline(self) -> None:
+        """Test that newline in syslog host is rejected."""
+        with pytest.raises(ValidationError, match="Invalid syslog_host"):
+            RouterConfig(syslog_host="host\nname")
+
+    def test_syslog_host_invalid_pipe(self) -> None:
+        """Test that pipe character in syslog host is rejected."""
+        with pytest.raises(ValidationError, match="Invalid syslog_host"):
+            RouterConfig(syslog_host="host|pipe")
+
+    def test_syslog_host_invalid_quote(self) -> None:
+        """Test that single quote in syslog host is rejected."""
+        with pytest.raises(ValidationError, match="Invalid syslog_host"):
+            RouterConfig(syslog_host="host'quote")
+
+    def test_syslog_host_empty_string_becomes_none(self) -> None:
+        """Test that empty string syslog host becomes None."""
+        router = RouterConfig(syslog_host="")
+        assert router.syslog_host is None
+
+    def test_syslog_host_whitespace_only_becomes_none(self) -> None:
+        """Test that whitespace-only syslog host becomes None."""
+        router = RouterConfig(syslog_host="  ")
+        assert router.syslog_host is None
+
+    def test_syslog_host_none_passthrough(self) -> None:
+        """Test that None syslog host passes through unchanged."""
+        router = RouterConfig(syslog_host=None)
+        assert router.syslog_host is None
+
     def test_interface_name_valid_eth0(self) -> None:
         """Test valid eth0 interface name."""
         iface = InterfaceConfig(name="eth0", ip="10.0.1.1", mask="255.255.255.0")

@@ -74,6 +74,7 @@ class ContextParser:
         # Parse operational variables
         hostname = self.variables.get("HOSTNAME")
         ssh_public_key = self.variables.get("SSH_PUBLIC_KEY")
+        syslog_host = self.variables.get("SYSLOG_HOST")
         onecontext_mode = self._parse_onecontext_mode()
 
         # Parse escape hatches
@@ -85,6 +86,7 @@ class ContextParser:
         return RouterConfig(
             hostname=hostname,
             ssh_public_key=ssh_public_key,
+            syslog_host=syslog_host,
             onecontext_mode=onecontext_mode,
             interfaces=interfaces,
             aliases=aliases,

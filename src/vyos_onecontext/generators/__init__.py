@@ -15,7 +15,12 @@ from vyos_onecontext.generators.ospf import OspfGenerator
 from vyos_onecontext.generators.relay import RelayGenerator
 from vyos_onecontext.generators.routing import RoutingGenerator, StaticRoutesGenerator
 from vyos_onecontext.generators.service import SshServiceGenerator
-from vyos_onecontext.generators.system import ConntrackGenerator, HostnameGenerator, SshKeyGenerator
+from vyos_onecontext.generators.system import (
+    ConntrackGenerator,
+    HostnameGenerator,
+    SshKeyGenerator,
+    SyslogGenerator,
+)
 from vyos_onecontext.generators.vrf import VRF_NAME, VRF_TABLE_ID, VrfGenerator
 from vyos_onecontext.generators.vxlan import VxlanGenerator
 from vyos_onecontext.models import RouterConfig
@@ -25,7 +30,7 @@ def generate_config(config: RouterConfig) -> list[str]:
     """Generate all VyOS commands from a RouterConfig.
 
     Generates commands in the correct order for VyOS commit:
-    1. System configuration (hostname, SSH keys)
+    1. System configuration (hostname, SSH keys, syslog forwarding host)
     2. VRF configuration (must happen BEFORE interface IP configuration)
     3. Relay VRF configuration (if RELAY_JSON present - must come BEFORE interface IP configuration)
     4. Network interfaces (IP addresses, MTU) - skips IPs for bridged interfaces
@@ -52,6 +57,7 @@ def generate_config(config: RouterConfig) -> list[str]:
     # System config first
     commands.extend(HostnameGenerator(config.hostname).generate())
     commands.extend(SshKeyGenerator(config.ssh_public_key).generate())
+    commands.extend(SyslogGenerator(config.syslog_host).generate())
 
     # VRF configuration (management VRF) - must come BEFORE interface IP configuration
     # VyOS requires VRF assignment on bare interfaces (no IPs configured yet)
@@ -114,9 +120,6 @@ def generate_config(config: RouterConfig) -> list[str]:
     # Custom config (START_CONFIG) - executed last, before commit
     commands.extend(StartConfigGenerator(config.start_config).generate())
 
-    # Future generators will be added here in later phases:
-    # - DNS service (recursive resolver, forwarding)
-
     return commands
 
 
@@ -135,6 +138,7 @@ __all__ = [
     "SshServiceGenerator",
     "StartConfigGenerator",
     "StaticRoutesGenerator",
+    "SyslogGenerator",
     "VrfGenerator",
     "VxlanGenerator",
     "VRF_NAME",

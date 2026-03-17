@@ -130,6 +130,54 @@ class RouterConfig(BaseModel):
 
         return v
 
+    syslog_host: Annotated[
+        str | None,
+        Field(None, description="Remote syslog host (IP or hostname) for log forwarding"),
+    ]
+
+    @field_validator("syslog_host")
+    @classmethod
+    def validate_syslog_host(cls, v: str | None) -> str | None:
+        """Validate syslog_host is a safe single-token host value.
+
+        Performs a safe-character check: rejects values containing whitespace,
+        quotes, or shell-special characters that could alter the argument vector
+        when the generated command is later tokenized with shlex.split(). Allows
+        only alphanumeric characters, dots, hyphens, colons (IPv6), and square
+        brackets (bracketed IPv6 notation).
+
+        Note: This is a safe-token check rather than strict RFC 1123 or IP
+        address validation. Values that pass may still be rejected by VyOS at
+        commit time if they are not valid hostnames or IP addresses.
+
+        Args:
+            v: Syslog host value to validate
+
+        Returns:
+            The validated syslog host (stripped), or None if blank
+
+        Raises:
+            ValueError: If the value contains unsafe characters
+        """
+        if v is None:
+            return None
+
+        v = v.strip()
+        if not v:
+            return None
+
+        # Allow only safe characters: alphanumeric, dots, hyphens, colons (IPv6),
+        # and square brackets (IPv6 with brackets). No whitespace, quotes, or
+        # shell-special characters.
+        pattern = r"^[a-zA-Z0-9.\-:\[\]]+$"
+        if not re.match(pattern, v):
+            raise ValueError(
+                f"Invalid syslog_host: {v!r} (must be a hostname or IP address; "
+                f"whitespace, quotes, and special characters are not allowed)"
+            )
+
+        return v
+
     # Operational mode
     onecontext_mode: Annotated[
         OnecontextMode,

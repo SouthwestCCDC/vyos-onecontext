@@ -15,6 +15,7 @@ from vyos_onecontext.generators import (
     SshKeyGenerator,
     SshServiceGenerator,
     StartConfigGenerator,
+    SyslogGenerator,
     VrfGenerator,
     generate_config,
 )
@@ -4138,3 +4139,85 @@ class TestGenerateConfigWithRelay:
         # Both VRFs MUST come before interface IPs
         assert mgmt_vrf_idx < interface_ip_idx
         assert relay_vrf_idx < interface_ip_idx
+
+
+class TestSyslogGenerator:
+    """Tests for syslog forwarding configuration generator."""
+
+    def test_generate_with_hostname(self):
+        """Test syslog configuration with a hostname."""
+        gen = SyslogGenerator("mon.infra.swccdc.com")
+        commands = gen.generate()
+
+        assert len(commands) == 1
+        assert commands[0] == "set system syslog host mon.infra.swccdc.com facility all level info"
+
+    def test_generate_with_ip_address(self):
+        """Test syslog configuration with an IP address."""
+        gen = SyslogGenerator("192.168.1.10")
+        commands = gen.generate()
+
+        assert len(commands) == 1
+        assert commands[0] == "set system syslog host 192.168.1.10 facility all level info"
+
+    def test_generate_with_ipv6_bare(self):
+        """Test syslog configuration with a bare IPv6 address."""
+        gen = SyslogGenerator("2001:db8::1")
+        commands = gen.generate()
+
+        assert len(commands) == 1
+        assert commands[0] == "set system syslog host 2001:db8::1 facility all level info"
+
+    def test_generate_with_ipv6_bracketed(self):
+        """Test syslog configuration with a bracketed IPv6 address."""
+        gen = SyslogGenerator("[2001:db8::1]")
+        commands = gen.generate()
+
+        assert len(commands) == 1
+        assert commands[0] == "set system syslog host [2001:db8::1] facility all level info"
+
+    def test_generate_without_syslog_host(self):
+        """Test that no commands are emitted when syslog_host is None."""
+        gen = SyslogGenerator(None)
+        commands = gen.generate()
+
+        assert len(commands) == 0
+
+    def test_generate_config_includes_syslog(self):
+        """Test that generate_config includes syslog command when syslog_host is set."""
+        config = RouterConfig(
+            hostname=None,
+            ssh_public_key=None,
+            syslog_host="mon.infra.swccdc.com",
+            interfaces=[
+                InterfaceConfig(
+                    name="eth0",
+                    ip=IPv4Address("10.0.0.1"),
+                    mask="255.255.255.0",
+                )
+            ],
+        )
+        commands = generate_config(config)
+
+        assert any(
+            "set system syslog host mon.infra.swccdc.com facility all level info" in cmd
+            for cmd in commands
+        )
+
+    def test_generate_config_no_syslog_when_unset(self):
+        """Test that generate_config emits no syslog command when syslog_host is None."""
+        config = RouterConfig(
+            hostname=None,
+            ssh_public_key=None,
+            syslog_host=None,
+            interfaces=[
+                InterfaceConfig(
+                    name="eth0",
+                    ip=IPv4Address("10.0.0.1"),
+                    mask="255.255.255.0",
+                )
+            ],
+        )
+        commands = generate_config(config)
+
+        assert not any("syslog" in cmd for cmd in commands)
