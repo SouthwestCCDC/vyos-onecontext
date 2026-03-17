@@ -1501,6 +1501,20 @@ class TestInputValidation:
         router = RouterConfig(ssh_public_key=None)
         assert router.ssh_public_key is None
 
+    def test_ssh_key_empty_string_coerced_to_none(self) -> None:
+        """Test that empty string SSH key is coerced to None.
+
+        OpenNebula passes empty string (not null) when a user has no
+        SSH_PUBLIC_KEY configured. This must not crash contextualization.
+        """
+        router = RouterConfig(ssh_public_key="")
+        assert router.ssh_public_key is None
+
+    def test_ssh_key_whitespace_only_coerced_to_none(self) -> None:
+        """Test that whitespace-only SSH key is coerced to None."""
+        router = RouterConfig(ssh_public_key="   ")
+        assert router.ssh_public_key is None
+
     def test_interface_name_valid_eth0(self) -> None:
         """Test valid eth0 interface name."""
         iface = InterfaceConfig(name="eth0", ip="10.0.1.1", mask="255.255.255.0")
