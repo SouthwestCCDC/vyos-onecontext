@@ -4160,6 +4160,22 @@ class TestSyslogGenerator:
         assert len(commands) == 1
         assert commands[0] == "set system syslog host 192.168.1.10 facility all level info"
 
+    def test_generate_with_ipv6_bare(self):
+        """Test syslog configuration with a bare IPv6 address."""
+        gen = SyslogGenerator("2001:db8::1")
+        commands = gen.generate()
+
+        assert len(commands) == 1
+        assert commands[0] == "set system syslog host 2001:db8::1 facility all level info"
+
+    def test_generate_with_ipv6_bracketed(self):
+        """Test syslog configuration with a bracketed IPv6 address."""
+        gen = SyslogGenerator("[2001:db8::1]")
+        commands = gen.generate()
+
+        assert len(commands) == 1
+        assert commands[0] == "set system syslog host [2001:db8::1] facility all level info"
+
     def test_generate_without_syslog_host(self):
         """Test that no commands are emitted when syslog_host is None."""
         gen = SyslogGenerator(None)

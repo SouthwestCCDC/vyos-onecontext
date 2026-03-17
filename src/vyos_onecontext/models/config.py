@@ -138,21 +138,26 @@ class RouterConfig(BaseModel):
     @field_validator("syslog_host")
     @classmethod
     def validate_syslog_host(cls, v: str | None) -> str | None:
-        """Validate syslog_host is a safe hostname or IP address.
+        """Validate syslog_host is a safe single-token host value.
 
-        Rejects values containing whitespace, quotes, or special characters that
-        could alter the argument vector when the generated command is parsed with
-        shlex.split(). Accepts RFC 1123 hostnames (including FQDNs) and IPv4/IPv6
-        addresses.
+        Performs a safe-character check: rejects values containing whitespace,
+        quotes, or shell-special characters that could alter the argument vector
+        when the generated command is later tokenized with shlex.split(). Allows
+        only alphanumeric characters, dots, hyphens, colons (IPv6), and square
+        brackets (bracketed IPv6 notation).
+
+        Note: This is a safe-token check rather than strict RFC 1123 or IP
+        address validation. Values that pass may still be rejected by VyOS at
+        commit time if they are not valid hostnames or IP addresses.
 
         Args:
             v: Syslog host value to validate
 
         Returns:
-            The validated syslog host, or None
+            The validated syslog host (stripped), or None if blank
 
         Raises:
-            ValueError: If the value contains unsafe characters or is invalid
+            ValueError: If the value contains unsafe characters
         """
         if v is None:
             return None
