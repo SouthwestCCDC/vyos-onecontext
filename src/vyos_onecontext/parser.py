@@ -305,6 +305,9 @@ class ContextParser:
                 raise ValueError(f"Interface {prefix} has IP but no MASK")
 
             gateway = self.variables.get(f"{prefix}_GATEWAY")
+            ignore_gateway = self.variables.get(f"{prefix}_IGNORE_GATEWAY", "")
+            if ignore_gateway.strip().lower() == "yes":
+                gateway = None
             dns = self.variables.get(f"{prefix}_DNS")
             mtu_str = self.variables.get(f"{prefix}_MTU")
             management_str = self.variables.get(f"{prefix}_VROUTER_MANAGEMENT")

@@ -1381,3 +1381,93 @@ ETH0_MASK="255.255.255.0"
         iface = config.interfaces[0]
         assert iface.gateway is None
         assert iface.dns is None
+
+
+class TestIgnoreGateway:
+    """Tests for ETHx_IGNORE_GATEWAY suppression."""
+
+    def test_ignore_gateway_yes_suppresses_gateway(self, tmp_path: Path) -> None:
+        """ETH1_IGNORE_GATEWAY=yes suppresses gateway even when ETH1_GATEWAY is set."""
+        context_file = tmp_path / "one_env"
+        content = """ETH1_IP="192.168.1.1"
+ETH1_MASK="255.255.255.0"
+ETH1_GATEWAY="192.168.1.254"
+ETH1_IGNORE_GATEWAY="yes"
+"""
+        context_file.write_text(content)
+
+        config = parse_context(str(context_file))
+
+        assert len(config.interfaces) == 1
+        iface = config.interfaces[0]
+        assert iface.name == "eth1"
+        assert iface.gateway is None
+
+    def test_ignore_gateway_uppercase_suppresses_gateway(self, tmp_path: Path) -> None:
+        """ETH1_IGNORE_GATEWAY=YES (uppercase) also suppresses gateway."""
+        context_file = tmp_path / "one_env"
+        content = """ETH1_IP="192.168.1.1"
+ETH1_MASK="255.255.255.0"
+ETH1_GATEWAY="192.168.1.254"
+ETH1_IGNORE_GATEWAY="YES"
+"""
+        context_file.write_text(content)
+
+        config = parse_context(str(context_file))
+
+        assert len(config.interfaces) == 1
+        iface = config.interfaces[0]
+        assert iface.gateway is None
+
+    def test_ignore_gateway_no_does_not_suppress(self, tmp_path: Path) -> None:
+        """ETH1_IGNORE_GATEWAY=no does NOT suppress the gateway."""
+        context_file = tmp_path / "one_env"
+        content = """ETH1_IP="192.168.1.1"
+ETH1_MASK="255.255.255.0"
+ETH1_GATEWAY="192.168.1.254"
+ETH1_IGNORE_GATEWAY="no"
+"""
+        context_file.write_text(content)
+
+        config = parse_context(str(context_file))
+
+        assert len(config.interfaces) == 1
+        iface = config.interfaces[0]
+        assert str(iface.gateway) == "192.168.1.254"
+
+    def test_without_ignore_gateway_gateway_parsed_normally(self, tmp_path: Path) -> None:
+        """Without ETH1_IGNORE_GATEWAY, gateway is still parsed normally."""
+        context_file = tmp_path / "one_env"
+        content = """ETH1_IP="192.168.1.1"
+ETH1_MASK="255.255.255.0"
+ETH1_GATEWAY="192.168.1.254"
+"""
+        context_file.write_text(content)
+
+        config = parse_context(str(context_file))
+
+        assert len(config.interfaces) == 1
+        iface = config.interfaces[0]
+        assert str(iface.gateway) == "192.168.1.254"
+
+    def test_ignore_gateway_only_affects_specified_interface(self, tmp_path: Path) -> None:
+        """ETH1_IGNORE_GATEWAY=yes only suppresses eth1; eth0 still gets its gateway."""
+        context_file = tmp_path / "one_env"
+        content = """ETH0_IP="10.0.0.1"
+ETH0_MASK="255.255.255.0"
+ETH0_GATEWAY="10.0.0.254"
+
+ETH1_IP="192.168.1.1"
+ETH1_MASK="255.255.255.0"
+ETH1_GATEWAY="192.168.1.254"
+ETH1_IGNORE_GATEWAY="yes"
+"""
+        context_file.write_text(content)
+
+        config = parse_context(str(context_file))
+
+        assert len(config.interfaces) == 2
+        eth0 = next(i for i in config.interfaces if i.name == "eth0")
+        eth1 = next(i for i in config.interfaces if i.name == "eth1")
+        assert str(eth0.gateway) == "10.0.0.254"
+        assert eth1.gateway is None
