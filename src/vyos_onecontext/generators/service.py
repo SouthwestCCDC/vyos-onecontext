@@ -45,7 +45,8 @@ class SnmpGenerator(BaseGenerator):
     """Generate SNMP service configuration.
 
     Configures SNMP with a read-only community string, bound to the first
-    management interface IP address.
+    management interface IP address. When a management VRF exists, also
+    binds SNMP to the VRF so the daemon runs in the correct network namespace.
     """
 
     def __init__(self, snmp_community: str | None, interfaces: list[InterfaceConfig]):
@@ -61,9 +62,13 @@ class SnmpGenerator(BaseGenerator):
     def generate(self) -> list[str]:
         """Generate SNMP service commands.
 
-        Emits two VyOS commands: one to configure a read-only community and one
-        to bind SNMP to the first management interface IP. If no management
-        interface is found, logs a warning and returns an empty list.
+        Emits VyOS commands to configure a read-only community and bind SNMP
+        to the first management interface IP. When a management VRF exists,
+        also emits a VRF binding so snmpd runs in the correct namespace
+        (without this, SNMP is unreachable on VRF-bound interfaces).
+
+        If no management interface is found, logs a warning and returns
+        an empty list.
 
         Returns:
             List of VyOS 'set' commands for SNMP service configuration
@@ -86,7 +91,16 @@ class SnmpGenerator(BaseGenerator):
 
         mgmt_ip = str(mgmt_iface.ip)
 
-        return [
+        commands = [
             f"set service snmp community {self.snmp_community} authorization ro",
             f"set service snmp listen-address {mgmt_ip}",
         ]
+
+        # Bind SNMP to management VRF so snmpd runs in the correct namespace.
+        # Without this, snmpd in the default VRF cannot receive traffic on
+        # VRF-bound interfaces (see VyOS T2321, T5340).
+        has_management_vrf = any(iface.management for iface in self.interfaces)
+        if has_management_vrf:
+            commands.append(f"set service snmp vrf {VRF_NAME}")
+
+        return commands

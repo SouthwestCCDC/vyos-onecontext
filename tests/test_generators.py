@@ -4246,22 +4246,24 @@ class TestSnmpGenerator:
         )
 
     def test_generate_basic(self):
-        """Generate two SNMP commands with community and management IP."""
+        """Generate SNMP commands with community, listen-address, and VRF."""
         gen = SnmpGenerator("public", [self._mgmt_iface("10.0.0.1")])
         commands = gen.generate()
 
-        assert len(commands) == 2
+        assert len(commands) == 3
         assert commands[0] == "set service snmp community public authorization ro"
         assert commands[1] == "set service snmp listen-address 10.0.0.1"
+        assert commands[2] == "set service snmp vrf management"
 
     def test_generate_with_underscore_community(self):
         """Community strings with underscores and digits are accepted."""
         gen = SnmpGenerator("sw_monitoring_2026", [self._mgmt_iface("192.168.1.5")])
         commands = gen.generate()
 
-        assert len(commands) == 2
+        assert len(commands) == 3
         assert commands[0] == "set service snmp community sw_monitoring_2026 authorization ro"
         assert commands[1] == "set service snmp listen-address 192.168.1.5"
+        assert commands[2] == "set service snmp vrf management"
 
     def test_generate_uses_first_management_interface(self):
         """When multiple management interfaces exist, only the first one is used."""
@@ -4282,7 +4284,7 @@ class TestSnmpGenerator:
         gen = SnmpGenerator("public", interfaces)
         commands = gen.generate()
 
-        assert len(commands) == 2
+        assert len(commands) == 3
         assert "10.0.0.1" in commands[1]
         assert "10.0.1.1" not in commands[1]
 
@@ -4334,6 +4336,7 @@ class TestSnmpGenerator:
 
         assert "set service snmp community public authorization ro" in commands
         assert "set service snmp listen-address 10.0.0.1" in commands
+        assert "set service snmp vrf management" in commands
 
     def test_generate_config_excludes_snmp_when_unset(self):
         """generate_config emits no SNMP commands when snmp_community is None."""
