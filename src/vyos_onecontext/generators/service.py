@@ -80,7 +80,7 @@ class SnmpGenerator(BaseGenerator):
         if mgmt_iface is None:
             logger.warning(
                 "SNMP_COMMUNITY is set but no management interface found; "
-                "skipping SNMP listen-address configuration"
+                "skipping SNMP configuration entirely"
             )
             return []
 
