@@ -5,6 +5,7 @@ and converts shell variable assignments into validated Pydantic models.
 """
 
 import json
+import logging
 import re
 from pathlib import Path
 from typing import TypeVar
@@ -21,6 +22,8 @@ from vyos_onecontext.models.relay import RelayConfig
 from vyos_onecontext.models.routing import OspfConfig, RoutesConfig
 from vyos_onecontext.models.system import ConntrackConfig
 from vyos_onecontext.models.vxlan import VxlanConfig
+
+logger = logging.getLogger(__name__)
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -82,6 +85,9 @@ class ContextParser:
         start_config = self.variables.get("START_CONFIG")
         start_script = self.variables.get("START_SCRIPT")
         start_script_timeout = self._parse_start_script_timeout()
+
+        # Apply GATEWAY_IFACE post-processing: suppress gateways on non-gateway interfaces
+        interfaces = self._apply_gateway_iface(interfaces)
 
         # Build and validate complete configuration
         return RouterConfig(
@@ -305,6 +311,9 @@ class ContextParser:
                 raise ValueError(f"Interface {prefix} has IP but no MASK")
 
             gateway = self.variables.get(f"{prefix}_GATEWAY")
+            ignore_gateway = self.variables.get(f"{prefix}_IGNORE_GATEWAY", "")
+            if ignore_gateway.strip().lower() == "yes":
+                gateway = None
             dns = self.variables.get(f"{prefix}_DNS")
             mtu_str = self.variables.get(f"{prefix}_MTU")
             management_str = self.variables.get(f"{prefix}_VROUTER_MANAGEMENT")
@@ -339,6 +348,39 @@ class ContextParser:
             )
 
         return interfaces
+
+    def _apply_gateway_iface(self, interfaces: list[InterfaceConfig]) -> list[InterfaceConfig]:
+        """Apply GATEWAY_IFACE post-processing to suppress gateways.
+
+        If GATEWAY_IFACE is set to an integer index N, only eth{N} keeps its
+        gateway; all other interfaces have their gateway nulled out.
+
+        Args:
+            interfaces: List of parsed interface configurations
+
+        Returns:
+            Updated list with gateways nulled on non-gateway interfaces
+        """
+        gateway_iface_str = self.variables.get("GATEWAY_IFACE")
+        if gateway_iface_str is None:
+            return interfaces
+
+        try:
+            gateway_index = int(gateway_iface_str)
+        except ValueError:
+            logger.warning(
+                "GATEWAY_IFACE=%r is not a valid integer; leaving all gateways unchanged",
+                gateway_iface_str,
+            )
+            return interfaces
+
+        gateway_iface_name = f"eth{gateway_index}"
+        return [
+            iface
+            if iface.name == gateway_iface_name
+            else iface.model_copy(update={"gateway": None})
+            for iface in interfaces
+        ]
 
     def _parse_aliases(self, interfaces: list[InterfaceConfig]) -> list[AliasConfig]:
         """Parse ETHx_ALIASy_* variables into AliasConfig objects.

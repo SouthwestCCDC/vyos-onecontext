@@ -1,6 +1,7 @@
 """Tests for context file parser."""
 
 import json
+import logging
 from pathlib import Path
 
 import pytest
@@ -1381,3 +1382,184 @@ ETH0_MASK="255.255.255.0"
         iface = config.interfaces[0]
         assert iface.gateway is None
         assert iface.dns is None
+
+
+class TestIgnoreGateway:
+    """Tests for ETHx_IGNORE_GATEWAY suppression."""
+
+    def test_ignore_gateway_yes_suppresses_gateway(self, tmp_path: Path) -> None:
+        """ETH1_IGNORE_GATEWAY=yes suppresses gateway even when ETH1_GATEWAY is set."""
+        context_file = tmp_path / "one_env"
+        content = """ETH1_IP="192.168.1.1"
+ETH1_MASK="255.255.255.0"
+ETH1_GATEWAY="192.168.1.254"
+ETH1_IGNORE_GATEWAY="yes"
+"""
+        context_file.write_text(content)
+
+        config = parse_context(str(context_file))
+
+        assert len(config.interfaces) == 1
+        iface = config.interfaces[0]
+        assert iface.name == "eth1"
+        assert iface.gateway is None
+
+    def test_ignore_gateway_uppercase_suppresses_gateway(self, tmp_path: Path) -> None:
+        """ETH1_IGNORE_GATEWAY=YES (uppercase) also suppresses gateway."""
+        context_file = tmp_path / "one_env"
+        content = """ETH1_IP="192.168.1.1"
+ETH1_MASK="255.255.255.0"
+ETH1_GATEWAY="192.168.1.254"
+ETH1_IGNORE_GATEWAY="YES"
+"""
+        context_file.write_text(content)
+
+        config = parse_context(str(context_file))
+
+        assert len(config.interfaces) == 1
+        iface = config.interfaces[0]
+        assert iface.gateway is None
+
+    def test_ignore_gateway_no_does_not_suppress(self, tmp_path: Path) -> None:
+        """ETH1_IGNORE_GATEWAY=no does NOT suppress the gateway."""
+        context_file = tmp_path / "one_env"
+        content = """ETH1_IP="192.168.1.1"
+ETH1_MASK="255.255.255.0"
+ETH1_GATEWAY="192.168.1.254"
+ETH1_IGNORE_GATEWAY="no"
+"""
+        context_file.write_text(content)
+
+        config = parse_context(str(context_file))
+
+        assert len(config.interfaces) == 1
+        iface = config.interfaces[0]
+        assert str(iface.gateway) == "192.168.1.254"
+
+    def test_without_ignore_gateway_gateway_parsed_normally(self, tmp_path: Path) -> None:
+        """Without ETH1_IGNORE_GATEWAY, gateway is still parsed normally."""
+        context_file = tmp_path / "one_env"
+        content = """ETH1_IP="192.168.1.1"
+ETH1_MASK="255.255.255.0"
+ETH1_GATEWAY="192.168.1.254"
+"""
+        context_file.write_text(content)
+
+        config = parse_context(str(context_file))
+
+        assert len(config.interfaces) == 1
+        iface = config.interfaces[0]
+        assert str(iface.gateway) == "192.168.1.254"
+
+    def test_ignore_gateway_only_affects_specified_interface(self, tmp_path: Path) -> None:
+        """ETH1_IGNORE_GATEWAY=yes only suppresses eth1; eth0 still gets its gateway."""
+        context_file = tmp_path / "one_env"
+        content = """ETH0_IP="10.0.0.1"
+ETH0_MASK="255.255.255.0"
+ETH0_GATEWAY="10.0.0.254"
+
+ETH1_IP="192.168.1.1"
+ETH1_MASK="255.255.255.0"
+ETH1_GATEWAY="192.168.1.254"
+ETH1_IGNORE_GATEWAY="yes"
+"""
+        context_file.write_text(content)
+
+        config = parse_context(str(context_file))
+
+        assert len(config.interfaces) == 2
+        eth0 = next(i for i in config.interfaces if i.name == "eth0")
+        eth1 = next(i for i in config.interfaces if i.name == "eth1")
+        assert str(eth0.gateway) == "10.0.0.254"
+        assert eth1.gateway is None
+
+
+class TestGatewayIface:
+    """Tests for GATEWAY_IFACE default-route selection."""
+
+    def test_gateway_iface_1_preserves_eth1_suppresses_eth0(self, tmp_path: Path) -> None:
+        """GATEWAY_IFACE=1 keeps eth1 gateway and nulls eth0 gateway."""
+        context_file = tmp_path / "one_env"
+        content = """ETH0_IP="10.0.0.1"
+ETH0_MASK="255.255.255.0"
+ETH0_GATEWAY="10.0.0.254"
+ETH1_IP="192.168.1.1"
+ETH1_MASK="255.255.255.0"
+ETH1_GATEWAY="192.168.1.254"
+GATEWAY_IFACE="1"
+"""
+        context_file.write_text(content)
+
+        config = parse_context(str(context_file))
+
+        assert len(config.interfaces) == 2
+        eth0 = next(i for i in config.interfaces if i.name == "eth0")
+        eth1 = next(i for i in config.interfaces if i.name == "eth1")
+        assert eth0.gateway is None
+        assert str(eth1.gateway) == "192.168.1.254"
+
+    def test_gateway_iface_0_preserves_eth0_suppresses_eth1(self, tmp_path: Path) -> None:
+        """GATEWAY_IFACE=0 keeps eth0 gateway and nulls eth1 gateway."""
+        context_file = tmp_path / "one_env"
+        content = """ETH0_IP="10.0.0.1"
+ETH0_MASK="255.255.255.0"
+ETH0_GATEWAY="10.0.0.254"
+ETH1_IP="192.168.1.1"
+ETH1_MASK="255.255.255.0"
+ETH1_GATEWAY="192.168.1.254"
+GATEWAY_IFACE="0"
+"""
+        context_file.write_text(content)
+
+        config = parse_context(str(context_file))
+
+        assert len(config.interfaces) == 2
+        eth0 = next(i for i in config.interfaces if i.name == "eth0")
+        eth1 = next(i for i in config.interfaces if i.name == "eth1")
+        assert str(eth0.gateway) == "10.0.0.254"
+        assert eth1.gateway is None
+
+    def test_gateway_iface_invalid_logs_warning_leaves_gateways_unchanged(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """GATEWAY_IFACE=foo logs a warning and leaves all gateways unchanged."""
+        context_file = tmp_path / "one_env"
+        content = """ETH0_IP="10.0.0.1"
+ETH0_MASK="255.255.255.0"
+ETH0_GATEWAY="10.0.0.254"
+ETH1_IP="192.168.1.1"
+ETH1_MASK="255.255.255.0"
+ETH1_GATEWAY="192.168.1.254"
+GATEWAY_IFACE="foo"
+"""
+        context_file.write_text(content)
+
+        with caplog.at_level(logging.WARNING, logger="vyos_onecontext.parser"):
+            config = parse_context(str(context_file))
+
+        assert len(config.interfaces) == 2
+        eth0 = next(i for i in config.interfaces if i.name == "eth0")
+        eth1 = next(i for i in config.interfaces if i.name == "eth1")
+        assert str(eth0.gateway) == "10.0.0.254"
+        assert str(eth1.gateway) == "192.168.1.254"
+        assert any("GATEWAY_IFACE" in record.message for record in caplog.records)
+
+    def test_gateway_iface_absent_leaves_gateways_unchanged(self, tmp_path: Path) -> None:
+        """Without GATEWAY_IFACE, all interface gateways are preserved as-is."""
+        context_file = tmp_path / "one_env"
+        content = """ETH0_IP="10.0.0.1"
+ETH0_MASK="255.255.255.0"
+ETH0_GATEWAY="10.0.0.254"
+ETH1_IP="192.168.1.1"
+ETH1_MASK="255.255.255.0"
+ETH1_GATEWAY="192.168.1.254"
+"""
+        context_file.write_text(content)
+
+        config = parse_context(str(context_file))
+
+        assert len(config.interfaces) == 2
+        eth0 = next(i for i in config.interfaces if i.name == "eth0")
+        eth1 = next(i for i in config.interfaces if i.name == "eth1")
+        assert str(eth0.gateway) == "10.0.0.254"
+        assert str(eth1.gateway) == "192.168.1.254"
