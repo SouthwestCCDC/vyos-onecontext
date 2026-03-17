@@ -138,8 +138,12 @@ class SyslogGenerator(BaseGenerator):
         if self.syslog_host is None:
             return []
 
+        host = self.syslog_host.strip()
+        if not host:
+            return []
+
         return [
-            f"set system syslog host {self.syslog_host} facility all level info"
+            f"set system syslog host {host} facility all level info"
         ]
 
 
