@@ -1561,6 +1561,68 @@ class TestInputValidation:
         router = RouterConfig(syslog_host=None)
         assert router.syslog_host is None
 
+    # --- snmp_community validator tests ---
+
+    def test_snmp_community_valid_simple(self) -> None:
+        """Test that a simple community string like 'public' is accepted."""
+        router = RouterConfig(snmp_community="public")
+        assert router.snmp_community == "public"
+
+    def test_snmp_community_valid_alphanumeric(self) -> None:
+        """Test that an alphanumeric community string is accepted."""
+        router = RouterConfig(snmp_community="monitoring2026")
+        assert router.snmp_community == "monitoring2026"
+
+    def test_snmp_community_valid_with_underscores(self) -> None:
+        """Test that underscores are permitted in community strings."""
+        router = RouterConfig(snmp_community="sw_monitoring_2026")
+        assert router.snmp_community == "sw_monitoring_2026"
+
+    def test_snmp_community_valid_with_hyphens(self) -> None:
+        """Test that hyphens are permitted in community strings."""
+        router = RouterConfig(snmp_community="mon-2026")
+        assert router.snmp_community == "mon-2026"
+
+    def test_snmp_community_invalid_shell_injection(self) -> None:
+        """Test that shell injection characters are rejected."""
+        with pytest.raises(ValidationError, match="Invalid snmp_community"):
+            RouterConfig(snmp_community="public; rm -rf /")
+
+    def test_snmp_community_invalid_whitespace(self) -> None:
+        """Test that embedded whitespace is rejected."""
+        with pytest.raises(ValidationError, match="Invalid snmp_community"):
+            RouterConfig(snmp_community="my community")
+
+    def test_snmp_community_invalid_single_quote(self) -> None:
+        """Test that single quote is rejected."""
+        with pytest.raises(ValidationError, match="Invalid snmp_community"):
+            RouterConfig(snmp_community="pub'lic")
+
+    def test_snmp_community_invalid_double_quote(self) -> None:
+        """Test that double quote is rejected."""
+        with pytest.raises(ValidationError, match="Invalid snmp_community"):
+            RouterConfig(snmp_community='pub"lic')
+
+    def test_snmp_community_invalid_pipe(self) -> None:
+        """Test that pipe character is rejected."""
+        with pytest.raises(ValidationError, match="Invalid snmp_community"):
+            RouterConfig(snmp_community="pub|lic")
+
+    def test_snmp_community_empty_string_becomes_none(self) -> None:
+        """Test that empty string becomes None."""
+        router = RouterConfig(snmp_community="")
+        assert router.snmp_community is None
+
+    def test_snmp_community_whitespace_only_becomes_none(self) -> None:
+        """Test that whitespace-only string becomes None."""
+        router = RouterConfig(snmp_community="   ")
+        assert router.snmp_community is None
+
+    def test_snmp_community_none_passthrough(self) -> None:
+        """Test that None passes through unchanged."""
+        router = RouterConfig(snmp_community=None)
+        assert router.snmp_community is None
+
     def test_interface_name_valid_eth0(self) -> None:
         """Test valid eth0 interface name."""
         iface = InterfaceConfig(name="eth0", ip="10.0.1.1", mask="255.255.255.0")

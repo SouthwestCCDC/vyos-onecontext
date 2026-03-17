@@ -14,7 +14,7 @@ from vyos_onecontext.generators.nat import NatGenerator
 from vyos_onecontext.generators.ospf import OspfGenerator
 from vyos_onecontext.generators.relay import RelayGenerator
 from vyos_onecontext.generators.routing import RoutingGenerator, StaticRoutesGenerator
-from vyos_onecontext.generators.service import SshServiceGenerator
+from vyos_onecontext.generators.service import SnmpGenerator, SshServiceGenerator
 from vyos_onecontext.generators.system import (
     ConntrackGenerator,
     HostnameGenerator,
@@ -38,7 +38,7 @@ def generate_config(config: RouterConfig) -> list[str]:
     6. Relay configuration continued (if RELAY_JSON present - PBR, NAT, proxy-ARP, static routes)
     7. Routing (default gateway selection for non-management interfaces)
     8. Static routes (ROUTES_JSON; may reference VRFs)
-    9. Services (SSH VRF binding)
+    9. Services (SSH VRF binding, SNMP)
     10. Dynamic routing (OSPF)
     11. DHCP server
     12. NAT (source, destination, binat)
@@ -99,8 +99,9 @@ def generate_config(config: RouterConfig) -> list[str]:
     # Static routes (ROUTES_JSON) - must come AFTER VRF since routes can reference VRFs
     commands.extend(StaticRoutesGenerator(config.routes).generate())
 
-    # Services (SSH VRF binding)
+    # Services (SSH VRF binding, SNMP)
     commands.extend(SshServiceGenerator(config.interfaces).generate())
+    commands.extend(SnmpGenerator(config.snmp_community, config.interfaces).generate())
 
     # OSPF dynamic routing
     commands.extend(OspfGenerator(config.ospf).generate())
@@ -134,6 +135,7 @@ __all__ = [
     "OspfGenerator",
     "RelayGenerator",
     "RoutingGenerator",
+    "SnmpGenerator",
     "SshKeyGenerator",
     "SshServiceGenerator",
     "StartConfigGenerator",
