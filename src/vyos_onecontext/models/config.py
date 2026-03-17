@@ -44,6 +44,10 @@ class RouterConfig(BaseModel):
     # Identity
     hostname: Annotated[str | None, Field(None, description="System hostname")]
     ssh_public_key: Annotated[str | None, Field(None, description="SSH public key for vyos user")]
+    syslog_host: Annotated[
+        str | None,
+        Field(None, description="Remote syslog host (IP or hostname) for log forwarding"),
+    ]
 
     @field_validator("hostname")
     @classmethod

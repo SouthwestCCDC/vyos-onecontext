@@ -1,4 +1,4 @@
-"""System configuration generators (hostname, SSH keys, conntrack)."""
+"""System configuration generators (hostname, SSH keys, conntrack, syslog)."""
 
 import re
 
@@ -112,6 +112,35 @@ class SshKeyGenerator(BaseGenerator):
             commands.extend(key_configs)
 
         return commands
+
+
+class SyslogGenerator(BaseGenerator):
+    """Generate VyOS syslog forwarding configuration commands."""
+
+    def __init__(self, syslog_host: str | None):
+        """Initialize syslog generator.
+
+        Args:
+            syslog_host: Remote syslog host (IP or hostname) to forward logs to,
+                         or None to skip syslog configuration
+        """
+        self.syslog_host = syslog_host
+
+    def generate(self) -> list[str]:
+        """Generate syslog host forwarding configuration command.
+
+        Emits a single VyOS command that forwards all facilities at info level
+        or above to the specified remote host via UDP 514.
+
+        Returns:
+            List with syslog command if syslog_host is set, empty list otherwise
+        """
+        if self.syslog_host is None:
+            return []
+
+        return [
+            f"set system syslog host {self.syslog_host} facility all level info"
+        ]
 
 
 class ConntrackGenerator(BaseGenerator):
