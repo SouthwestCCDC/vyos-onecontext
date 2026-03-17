@@ -30,7 +30,7 @@ def generate_config(config: RouterConfig) -> list[str]:
     """Generate all VyOS commands from a RouterConfig.
 
     Generates commands in the correct order for VyOS commit:
-    1. System configuration (hostname, SSH keys, syslog)
+    1. System configuration (hostname, SSH keys, syslog forwarding host)
     2. VRF configuration (must happen BEFORE interface IP configuration)
     3. Relay VRF configuration (if RELAY_JSON present - must come BEFORE interface IP configuration)
     4. Network interfaces (IP addresses, MTU) - skips IPs for bridged interfaces

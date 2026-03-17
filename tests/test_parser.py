@@ -505,6 +505,19 @@ ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITest3 user3@host3"
 
         assert config.onecontext_mode == OnecontextMode.STATELESS
 
+    def test_syslog_host(self, tmp_path: Path) -> None:
+        """Test SYSLOG_HOST parsing."""
+        context_file = tmp_path / "one_env"
+        content = """ETH0_IP="10.0.1.1"
+ETH0_MASK="255.255.255.0"
+SYSLOG_HOST="mon.infra.swccdc.com"
+"""
+        context_file.write_text(content)
+
+        config = parse_context(str(context_file))
+
+        assert config.syslog_host == "mon.infra.swccdc.com"
+
 
 class TestJsonVariables:
     """Tests for JSON variable parsing."""

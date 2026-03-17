@@ -44,48 +44,6 @@ class RouterConfig(BaseModel):
     # Identity
     hostname: Annotated[str | None, Field(None, description="System hostname")]
     ssh_public_key: Annotated[str | None, Field(None, description="SSH public key for vyos user")]
-    syslog_host: Annotated[
-        str | None,
-        Field(None, description="Remote syslog host (IP or hostname) for log forwarding"),
-    ]
-
-    @field_validator("syslog_host")
-    @classmethod
-    def validate_syslog_host(cls, v: str | None) -> str | None:
-        """Validate syslog_host is a safe hostname or IP address.
-
-        Rejects values containing whitespace, quotes, or special characters that
-        could alter the argument vector when the generated command is parsed with
-        shlex.split(). Accepts RFC 1123 hostnames (including FQDNs) and IPv4/IPv6
-        addresses.
-
-        Args:
-            v: Syslog host value to validate
-
-        Returns:
-            The validated syslog host, or None
-
-        Raises:
-            ValueError: If the value contains unsafe characters or is invalid
-        """
-        if v is None:
-            return None
-
-        v = v.strip()
-        if not v:
-            return None
-
-        # Allow only safe characters: alphanumeric, dots, hyphens, colons (IPv6),
-        # and square brackets (IPv6 with brackets). No whitespace, quotes, or
-        # shell-special characters.
-        pattern = r"^[a-zA-Z0-9.\-:\[\]]+$"
-        if not re.match(pattern, v):
-            raise ValueError(
-                f"Invalid syslog_host: {v!r} (must be a hostname or IP address; "
-                f"whitespace, quotes, and special characters are not allowed)"
-            )
-
-        return v
 
     @field_validator("hostname")
     @classmethod
@@ -169,6 +127,49 @@ class RouterConfig(BaseModel):
         MIN_SSH_KEY_DATA_LENGTH = 16
         if len(key_data) < MIN_SSH_KEY_DATA_LENGTH:
             raise ValueError("SSH key data is too short")
+
+        return v
+
+    syslog_host: Annotated[
+        str | None,
+        Field(None, description="Remote syslog host (IP or hostname) for log forwarding"),
+    ]
+
+    @field_validator("syslog_host")
+    @classmethod
+    def validate_syslog_host(cls, v: str | None) -> str | None:
+        """Validate syslog_host is a safe hostname or IP address.
+
+        Rejects values containing whitespace, quotes, or special characters that
+        could alter the argument vector when the generated command is parsed with
+        shlex.split(). Accepts RFC 1123 hostnames (including FQDNs) and IPv4/IPv6
+        addresses.
+
+        Args:
+            v: Syslog host value to validate
+
+        Returns:
+            The validated syslog host, or None
+
+        Raises:
+            ValueError: If the value contains unsafe characters or is invalid
+        """
+        if v is None:
+            return None
+
+        v = v.strip()
+        if not v:
+            return None
+
+        # Allow only safe characters: alphanumeric, dots, hyphens, colons (IPv6),
+        # and square brackets (IPv6 with brackets). No whitespace, quotes, or
+        # shell-special characters.
+        pattern = r"^[a-zA-Z0-9.\-:\[\]]+$"
+        if not re.match(pattern, v):
+            raise ValueError(
+                f"Invalid syslog_host: {v!r} (must be a hostname or IP address; "
+                f"whitespace, quotes, and special characters are not allowed)"
+            )
 
         return v
 
