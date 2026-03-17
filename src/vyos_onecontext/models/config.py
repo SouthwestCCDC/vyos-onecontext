@@ -89,7 +89,7 @@ class RouterConfig(BaseModel):
         Raises:
             ValueError: If SSH key format is invalid
         """
-        if v is None:
+        if v is None or v.strip() == "":
             return None
 
         # SSH key format: type key [comment]
