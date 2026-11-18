@@ -2189,13 +2189,17 @@ class TestDhcpGenerator:
         gen = DhcpGenerator(dhcp)
         commands = gen.generate()
 
-        # Should have commands for both pools (no subnet-id in Sagitta)
+        # Should have commands for both pools, each with a unique subnet-id
         # Pool 1 (eth1)
         prefix1 = "set service dhcp-server shared-network-name dhcp-eth1 subnet 10.1.1.0/24"
+        assert f"{prefix1} subnet-id 1" in commands
         assert f"{prefix1} range 0 start 10.1.1.100" in commands
         # Pool 2 (eth2)
         prefix2 = "set service dhcp-server shared-network-name dhcp-eth2 subnet 192.168.1.0/24"
+        assert f"{prefix2} subnet-id 2" in commands
         assert f"{prefix2} range 0 start 192.168.1.100" in commands
+        subnet_ids = [c.rsplit(" ", 1)[1] for c in commands if " subnet-id " in c]
+        assert subnet_ids == ["1", "2"]
 
     def test_dhcp_pool_missing_subnet_raises_error(self):
         """Test that pool without subnet raises error."""
