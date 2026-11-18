@@ -912,11 +912,11 @@ set firewall group port-group WEB port 80
 set firewall group port-group WEB port 443
 
 # Zones
-set firewall zone WAN interface eth0
+set firewall zone WAN member interface eth0
 set firewall zone WAN default-action drop
-set firewall zone GAME interface eth1
+set firewall zone GAME member interface eth1
 set firewall zone GAME default-action drop
-set firewall zone SCORING interface eth2
+set firewall zone SCORING member interface eth2
 set firewall zone SCORING default-action drop
 
 # Policy: GAME to SCORING

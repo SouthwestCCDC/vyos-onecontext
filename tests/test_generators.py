@@ -3016,7 +3016,7 @@ class TestFirewallGenerator:
         gen = FirewallGenerator(firewall)
         commands = gen.generate()
 
-        assert "set firewall zone WAN interface eth0" in commands
+        assert "set firewall zone WAN member interface eth0" in commands
         assert "set firewall zone WAN default-action drop" in commands
 
     def test_generate_zone_with_multiple_interfaces(self):
@@ -3033,9 +3033,9 @@ class TestFirewallGenerator:
         gen = FirewallGenerator(firewall)
         commands = gen.generate()
 
-        assert "set firewall zone GAME interface eth1" in commands
-        assert "set firewall zone GAME interface eth2" in commands
-        assert "set firewall zone GAME interface eth3" in commands
+        assert "set firewall zone GAME member interface eth1" in commands
+        assert "set firewall zone GAME member interface eth2" in commands
+        assert "set firewall zone GAME member interface eth3" in commands
         assert "set firewall zone GAME default-action drop" in commands
 
     def test_generate_multiple_zones(self):
@@ -3062,11 +3062,11 @@ class TestFirewallGenerator:
         gen = FirewallGenerator(firewall)
         commands = gen.generate()
 
-        assert "set firewall zone WAN interface eth0" in commands
+        assert "set firewall zone WAN member interface eth0" in commands
         assert "set firewall zone WAN default-action drop" in commands
-        assert "set firewall zone GAME interface eth1" in commands
+        assert "set firewall zone GAME member interface eth1" in commands
         assert "set firewall zone GAME default-action reject" in commands
-        assert "set firewall zone SCORING interface eth2" in commands
+        assert "set firewall zone SCORING member interface eth2" in commands
         assert "set firewall zone SCORING default-action drop" in commands
 
     # Policy Tests
@@ -3509,9 +3509,9 @@ class TestFirewallGenerator:
         assert "set firewall group port-group WEB port 80" in commands
 
         # Should have zones
-        assert "set firewall zone WAN interface eth0" in commands
-        assert "set firewall zone GAME interface eth1" in commands
-        assert "set firewall zone SCORING interface eth2" in commands
+        assert "set firewall zone WAN member interface eth0" in commands
+        assert "set firewall zone GAME member interface eth1" in commands
+        assert "set firewall zone SCORING member interface eth2" in commands
 
         # Should have policies
         assert (
@@ -4156,7 +4156,9 @@ class TestSyslogGenerator:
         commands = gen.generate()
 
         assert len(commands) == 1
-        assert commands[0] == "set system syslog host mon.infra.swccdc.com facility all level info"
+        assert commands[0] == (
+            "set system syslog remote mon.infra.swccdc.com facility all level info"
+        )
 
     def test_generate_with_ip_address(self):
         """Test syslog configuration with an IP address."""
@@ -4164,7 +4166,7 @@ class TestSyslogGenerator:
         commands = gen.generate()
 
         assert len(commands) == 1
-        assert commands[0] == "set system syslog host 192.168.1.10 facility all level info"
+        assert commands[0] == "set system syslog remote 192.168.1.10 facility all level info"
 
     def test_generate_with_ipv6_bare(self):
         """Test syslog configuration with a bare IPv6 address."""
@@ -4172,7 +4174,7 @@ class TestSyslogGenerator:
         commands = gen.generate()
 
         assert len(commands) == 1
-        assert commands[0] == "set system syslog host 2001:db8::1 facility all level info"
+        assert commands[0] == "set system syslog remote 2001:db8::1 facility all level info"
 
     def test_generate_with_ipv6_bracketed(self):
         """Test syslog configuration with a bracketed IPv6 address."""
@@ -4180,7 +4182,7 @@ class TestSyslogGenerator:
         commands = gen.generate()
 
         assert len(commands) == 1
-        assert commands[0] == "set system syslog host [2001:db8::1] facility all level info"
+        assert commands[0] == "set system syslog remote [2001:db8::1] facility all level info"
 
     def test_generate_without_syslog_host(self):
         """Test that no commands are emitted when syslog_host is None."""
@@ -4206,7 +4208,7 @@ class TestSyslogGenerator:
         commands = generate_config(config)
 
         assert any(
-            "set system syslog host mon.infra.swccdc.com facility all level info" in cmd
+            "set system syslog remote mon.infra.swccdc.com facility all level info" in cmd
             for cmd in commands
         )
 

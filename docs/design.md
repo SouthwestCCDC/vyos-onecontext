@@ -619,7 +619,7 @@ fi
 
 ## Circinus Syntax Notes
 
-VyOS 1.5 (Circinus) changes the DHCP server syntax from 1.4 (Sagitta):
+VyOS 1.5 (Circinus) changes these command paths from 1.4 (Sagitta):
 
 | Feature | Sagitta | Circinus |
 |---------|---------|----------|
@@ -628,6 +628,8 @@ VyOS 1.5 (Circinus) changes the DHCP server syntax from 1.4 (Sagitta):
 | DNS | `subnet X name-server Y` | `subnet X option name-server Y` |
 | Domain | `subnet X domain-name Y` | `subnet X option domain-name Y` |
 | Static mapping MAC | `static-mapping N mac-address M` | `static-mapping N mac M` |
+| Firewall zone interface | `firewall zone Z interface I` | `firewall zone Z member interface I` |
+| Remote syslog | `system syslog host H ...` | `system syslog remote H ...` |
 
 The DHCP generator numbers subnets by pool order, starting at 1.
 
@@ -760,9 +762,9 @@ set firewall group port-group WEB port 443
 
 3. **Zone definitions:**
 ```
-set firewall zone WAN interface eth0
+set firewall zone WAN member interface eth0
 set firewall zone WAN default-action drop
-set firewall zone GAME interface eth1
+set firewall zone GAME member interface eth1
 set firewall zone GAME default-action drop
 ```
 

@@ -145,7 +145,7 @@ class FirewallGenerator(BaseGenerator):
         for zone_name, zone in self.firewall.zones.items():
             # Add interfaces to zone
             for interface in zone.interfaces:
-                commands.append(f"set firewall zone {zone_name} interface {interface}")
+                commands.append(f"set firewall zone {zone_name} member interface {interface}")
 
             # Set default action for zone
             commands.append(f"set firewall zone {zone_name} default-action {zone.default_action}")
