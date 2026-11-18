@@ -1999,7 +1999,7 @@ class TestCheckDhcpPool:
                 "set service dhcp-server shared-network-name dhcp-eth1 "
                 "subnet 10.1.1.0/24 range 0 stop 10.1.1.200\n"
                 "set service dhcp-server shared-network-name dhcp-eth1 "
-                "subnet 10.1.1.0/24 default-router 10.1.1.1\n"
+                "subnet 10.1.1.0/24 option default-router 10.1.1.1\n"
             )
         )
 
@@ -2098,11 +2098,11 @@ class TestCheckDhcpOptions:
                 "set service dhcp-server shared-network-name dhcp-eth1 "
                 "subnet 10.1.1.0/24 range 0 start 10.1.1.100\n"
                 "set service dhcp-server shared-network-name dhcp-eth1 "
-                "subnet 10.1.1.0/24 default-router 10.1.1.1\n"
+                "subnet 10.1.1.0/24 option default-router 10.1.1.1\n"
                 "set service dhcp-server shared-network-name dhcp-eth1 "
-                "subnet 10.1.1.0/24 name-server 10.63.4.101\n"
+                "subnet 10.1.1.0/24 option name-server 10.63.4.101\n"
                 "set service dhcp-server shared-network-name dhcp-eth1 "
-                "subnet 10.1.1.0/24 name-server 8.8.8.8\n"
+                "subnet 10.1.1.0/24 option name-server 8.8.8.8\n"
             )
         )
 
@@ -2122,7 +2122,7 @@ class TestCheckDhcpOptions:
         mock_ssh = Mock(
             return_value=(
                 "set service dhcp-server shared-network-name dhcp-eth1 "
-                "subnet 10.1.1.0/24 default-router 10.1.1.1\n"
+                "subnet 10.1.1.0/24 option default-router 10.1.1.1\n"
             )
         )
 
@@ -2136,7 +2136,7 @@ class TestCheckDhcpOptions:
         mock_ssh = Mock(
             return_value=(
                 "set service dhcp-server shared-network-name dhcp-eth1 "
-                "subnet 10.1.1.0/24 name-server 8.8.8.8\n"
+                "subnet 10.1.1.0/24 option name-server 8.8.8.8\n"
             )
         )
 
@@ -2152,7 +2152,7 @@ class TestCheckDhcpOptions:
                 "set service dhcp-server shared-network-name dhcp-eth1 "
                 "subnet 10.1.1.0/24 range 0 start 10.1.1.100\n"
                 "set service dhcp-server shared-network-name dhcp-eth1 "
-                "subnet 10.1.1.0/24 name-server 8.8.8.8\n"
+                "subnet 10.1.1.0/24 option name-server 8.8.8.8\n"
             )
         )
 
@@ -2167,7 +2167,7 @@ class TestCheckDhcpOptions:
         mock_ssh = Mock(
             return_value=(
                 "set service dhcp-server shared-network-name dhcp-eth1 "
-                "subnet 10.1.1.0/24 default-router 10.1.1.1\n"
+                "subnet 10.1.1.0/24 option default-router 10.1.1.1\n"
             )
         )
 
@@ -2183,7 +2183,7 @@ class TestCheckDhcpOptions:
         mock_ssh = Mock(
             return_value=(
                 "set service dhcp-server shared-network-name dhcp-eth2 "
-                "subnet 10.2.1.0/24 default-router 10.2.1.1\n"
+                "subnet 10.2.1.0/24 option default-router 10.2.1.1\n"
             )
         )
 
@@ -2222,7 +2222,7 @@ class TestCheckDhcpOptions:
         mock_ssh = Mock(
             return_value=(
                 "set service dhcp-server shared-network-name dhcp-eth1 "
-                "subnet 10.1.1.0/24 name-server 10.1.1.1\n"
+                "subnet 10.1.1.0/24 option name-server 10.1.1.1\n"
             )
         )
 

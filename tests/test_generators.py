@@ -2046,14 +2046,15 @@ class TestDhcpGenerator:
         gen = DhcpGenerator(dhcp)
         commands = gen.generate()
 
-        # Should have: range start/stop, default-router, name-server (no subnet-id in Sagitta)
-        assert len(commands) == 4
+        # Should have: subnet-id, range start/stop, default-router, name-server
+        assert len(commands) == 5
         # Use prefix variable to avoid long lines
         prefix = "set service dhcp-server shared-network-name dhcp-eth1 subnet 10.1.1.0/24"
+        assert f"{prefix} subnet-id 1" in commands
         assert f"{prefix} range 0 start 10.1.1.100" in commands
         assert f"{prefix} range 0 stop 10.1.1.200" in commands
-        assert f"{prefix} default-router 10.1.1.1" in commands
-        assert f"{prefix} name-server 10.1.1.1" in commands
+        assert f"{prefix} option default-router 10.1.1.1" in commands
+        assert f"{prefix} option name-server 10.1.1.1" in commands
 
     def test_dhcp_pool_with_multiple_dns(self):
         """Test DHCP pool with multiple DNS servers."""
@@ -2077,8 +2078,8 @@ class TestDhcpGenerator:
 
         # Should have two name-server commands
         prefix = "set service dhcp-server shared-network-name dhcp-eth1 subnet 10.1.1.0/24"
-        assert f"{prefix} name-server 10.1.1.1" in commands
-        assert f"{prefix} name-server 8.8.8.8" in commands
+        assert f"{prefix} option name-server 10.1.1.1" in commands
+        assert f"{prefix} option name-server 8.8.8.8" in commands
 
     def test_dhcp_pool_with_lease_time(self):
         """Test DHCP pool with custom lease time."""
@@ -2126,7 +2127,7 @@ class TestDhcpGenerator:
         commands = gen.generate()
 
         prefix = "set service dhcp-server shared-network-name dhcp-eth1 subnet 10.1.1.0/24"
-        assert f"{prefix} domain-name example.local" in commands
+        assert f"{prefix} option domain-name example.local" in commands
 
     def test_dhcp_pool_with_all_options(self):
         """Test DHCP pool with all optional fields."""
@@ -2154,11 +2155,11 @@ class TestDhcpGenerator:
         prefix = "set service dhcp-server shared-network-name dhcp-eth1 subnet 10.1.1.0/24"
         assert f"{prefix} range 0 start 10.1.1.100" in commands
         assert f"{prefix} range 0 stop 10.1.1.200" in commands
-        assert f"{prefix} default-router 10.1.1.1" in commands
-        assert f"{prefix} name-server 10.1.1.1" in commands
-        assert f"{prefix} name-server 8.8.8.8" in commands
+        assert f"{prefix} option default-router 10.1.1.1" in commands
+        assert f"{prefix} option name-server 10.1.1.1" in commands
+        assert f"{prefix} option name-server 8.8.8.8" in commands
         assert f"{prefix} lease 86400" in commands
-        assert f"{prefix} domain-name example.local" in commands
+        assert f"{prefix} option domain-name example.local" in commands
 
     def test_dhcp_multiple_pools(self):
         """Test DHCP with multiple pools on different interfaces."""
@@ -2250,7 +2251,7 @@ class TestDhcpGenerator:
 
         # Should have pool commands + reservation commands
         prefix = "set service dhcp-server shared-network-name dhcp-eth1 subnet 10.1.1.0/24"
-        assert f"{prefix} static-mapping server01 mac-address 00:11:22:33:44:55" in commands
+        assert f"{prefix} static-mapping server01 mac 00:11:22:33:44:55" in commands
         assert f"{prefix} static-mapping server01 ip-address 10.1.1.50" in commands
 
     def test_dhcp_reservation_without_hostname(self):
@@ -2284,7 +2285,7 @@ class TestDhcpGenerator:
         # Should use MAC-based name
         prefix = "set service dhcp-server shared-network-name dhcp-eth1 subnet 10.1.1.0/24"
         mapping = "host-00-11-22-33-44-55"
-        assert f"{prefix} static-mapping {mapping} mac-address 00:11:22:33:44:55" in commands
+        assert f"{prefix} static-mapping {mapping} mac 00:11:22:33:44:55" in commands
         assert f"{prefix} static-mapping {mapping} ip-address 10.1.1.50" in commands
 
     def test_dhcp_reservation_no_matching_pool_raises_error(self):
@@ -2355,9 +2356,9 @@ class TestDhcpGenerator:
 
         # Should have both reservations
         prefix = "set service dhcp-server shared-network-name dhcp-eth1 subnet 10.1.1.0/24"
-        assert f"{prefix} static-mapping server01 mac-address 00:11:22:33:44:55" in commands
+        assert f"{prefix} static-mapping server01 mac 00:11:22:33:44:55" in commands
         assert f"{prefix} static-mapping server01 ip-address 10.1.1.50" in commands
-        assert f"{prefix} static-mapping server02 mac-address 00:11:22:33:44:66" in commands
+        assert f"{prefix} static-mapping server02 mac 00:11:22:33:44:66" in commands
         assert f"{prefix} static-mapping server02 ip-address 10.1.1.51" in commands
 
     def test_dhcp_empty_config(self):
