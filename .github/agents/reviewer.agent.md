@@ -20,7 +20,7 @@ Before reviewing, read these guidelines:
 - [Review Checklist](../../.ai/context/review-checklist.md) - What to check
 - [PR Comment Handling](../../.ai/context/pr-comment-handling.md) - Comment categories and responses
 
-Also read `../copilot-instructions.md` for VyOS Sagitta syntax rules.
+Also read `../copilot-instructions.md` for VyOS Circinus syntax rules.
 
 ## Mode 1: PR Review
 
@@ -33,7 +33,7 @@ gh pr diff {N}
 
 ### Special Attention
 
-- Correct VyOS Sagitta syntax (not Equuleus)
+- Correct VyOS Circinus syntax (not Sagitta or Equuleus)
 - Proper error handling for missing context fields
 - Test coverage for new functionality
 

@@ -1,6 +1,6 @@
 # vyos-onecontext
 
-OpenNebula contextualization for VyOS Sagitta (1.4.x) router images.
+OpenNebula contextualization for VyOS Circinus (1.5.x) router images.
 
 ## Project Context
 
@@ -16,7 +16,8 @@ context on every boot.
 
 ## Branches
 
-- **sagitta** - VyOS Sagitta (1.4.x LTS) - active development
+- **circinus** - VyOS Circinus (1.5.x) - active development
+- **sagitta** - VyOS Sagitta (1.4.x LTS) - current production images
 - **legacy/equuleus** - VyOS Equuleus (1.3.x) - maintenance only
 
 ## Documentation
@@ -27,7 +28,12 @@ context on every boot.
 
 ## VyOS Version
 
-Target version: **Sagitta 1.4.x LTS**
+Target version: **Circinus 1.5.x**
+
+Key syntax differences from Sagitta:
+- DHCP server (Kea): every subnet needs a unique `subnet-id`
+- DHCP options go under `option` (`option default-router`, `option name-server`, `option domain-name`)
+- DHCP static mappings use `mac` (not `mac-address`)
 
 Key syntax differences from Equuleus (interface-based config preferred in Sagitta):
 - NAT interface: `outbound-interface name 'eth0'` (not `outbound-interface eth0`)
@@ -48,7 +54,7 @@ just check           # Run all checks
 
 ## Related Repos
 
-- **deployment** - Packer image builds (submodule at `packer/opennebula-context/vyos-sagitta`)
+- **deployment** - Packer image builds (submodule at `packer/opennebula-context/vyos-circinus`)
 - **scoring** - Uses vrouter-relay images for scoring infrastructure
 
 ## Code Review Guidelines
@@ -65,7 +71,7 @@ Categorize findings by severity:
 
 ### Confidence Threshold
 
-Only comment when HIGH CONFIDENCE (>80%) an issue exists. VyOS syntax can be subtle - if unsure whether something is correct for Sagitta, ask rather than assume.
+Only comment when HIGH CONFIDENCE (>80%) an issue exists. VyOS syntax can be subtle - if unsure whether something is correct for Circinus, ask rather than assume.
 
 ### What CI Already Checks
 
@@ -79,8 +85,8 @@ Our CI pipeline handles:
 
 ### VyOS-Specific Review Points
 
-- **Sagitta syntax**: Verify commands use Sagitta 1.4.x syntax (see syntax differences in project docs)
-- **Sagitta interface syntax**: NAT uses `outbound-interface name 'eth0'`, routes use `route X interface Y`
+- **Circinus syntax**: Verify commands use Circinus 1.5.x syntax (see syntax differences in project docs)
+- **Interface syntax**: NAT uses `outbound-interface name 'eth0'`, routes use `route X interface Y`
 - **Stateless routers**: All config derives from context - no persistent state assumptions
 - **Test fixtures**: New context patterns need corresponding test fixtures
 

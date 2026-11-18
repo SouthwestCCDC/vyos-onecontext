@@ -1,5 +1,5 @@
 #!/bin/sh
-# VyOS Sagitta OpenNebula Contextualization Boot Script
+# VyOS Circinus OpenNebula Contextualization Boot Script
 #
 # This script is invoked by vyos-postconfig-bootup.script to apply OpenNebula
 # context to the VyOS router configuration.

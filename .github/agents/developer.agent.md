@@ -22,7 +22,7 @@ Before starting, read these guidelines:
 - [Commit Conventions](../../.ai/context/commit-conventions.md) - Message format and AI disclosure
 - [PR Comment Handling](../../.ai/context/pr-comment-handling.md) - Responding to review feedback
 
-Also read `../copilot-instructions.md` for VyOS Sagitta syntax and project conventions.
+Also read `../copilot-instructions.md` for VyOS Circinus syntax and project conventions.
 
 ## Key References
 
@@ -39,7 +39,7 @@ Also read `../copilot-instructions.md` for VyOS Sagitta syntax and project conve
 
 ## VyOS Notes
 
-- Target **Sagitta** syntax, NOT Equuleus
+- Target **Circinus** syntax, NOT Sagitta or Equuleus
 - Test generated commands against actual VyOS if possible
 - Follow existing generator patterns in `src/`
 

@@ -21,13 +21,13 @@ All implementation work happens in isolated git worktrees, never in the main rep
 # From main repo directory
 git fetch origin
 git worktree add ../vyos-onecontext-worktrees/issue-{N}-$(date +%s) \
-  -b issue-{N}-$(date +%s) origin/sagitta
+  -b issue-{N}-$(date +%s) origin/circinus
 
 # Navigate to worktree
 cd ../vyos-onecontext-worktrees/issue-{N}-*
 ```
 
-**Note**: The default branch is `sagitta`, not `main` or `default`.
+**Note**: The default branch is `sagitta`; Circinus (1.5.x) work targets `circinus`.
 
 ## Naming Convention
 

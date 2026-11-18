@@ -1,4 +1,4 @@
-"""VyOS Sagitta contextualization for OpenNebula."""
+"""VyOS Circinus contextualization for OpenNebula."""
 
 from vyos_onecontext.parser import ContextParser, parse_context
 from vyos_onecontext.wrapper import VyOSConfigError, VyOSConfigSession

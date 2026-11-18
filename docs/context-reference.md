@@ -1,6 +1,6 @@
 # Context Variable Reference
 
-This document defines all context variables supported by VyOS Sagitta contextualization.
+This document defines all context variables supported by VyOS Circinus contextualization.
 
 ## Standard OpenNebula Variables
 
@@ -204,7 +204,7 @@ set vrf name management protocols static route 192.168.0.0/16 next-hop 10.0.1.25
 
 ### OSPF_JSON
 
-OSPF dynamic routing configuration using interface-based syntax (Sagitta best practice).
+OSPF dynamic routing configuration using interface-based syntax (Sagitta and later best practice).
 
 **Schema:**
 

@@ -1,7 +1,7 @@
 [project]
 name = "vyos-onecontext"
 version = "0.1.0"
-description = "VyOS Sagitta contextualization for OpenNebula"
+description = "VyOS Circinus contextualization for OpenNebula"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }

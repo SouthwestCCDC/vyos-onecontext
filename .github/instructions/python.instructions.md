@@ -18,7 +18,7 @@ applyTo: "**/*.py"
 - Generators in `src/vyos_onecontext/generators/`
 - Each generator handles one aspect of VyOS config
 - Generators output VyOS command strings; Python applies them via the VyOS config session
-- Commands must be valid VyOS Sagitta 1.4.x syntax
+- Commands must be valid VyOS Circinus 1.5.x syntax
 
 ## Testing
 - Test fixtures represent real OpenNebula context scenarios
