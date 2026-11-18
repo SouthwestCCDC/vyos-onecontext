@@ -16,6 +16,7 @@ class DhcpGenerator(BaseGenerator):
 
     Design decisions:
     - Shared-network name derived from interface: dhcp-eth1
+    - subnet-id is the 1-based pool index (Kea requires a unique ID per subnet)
     - Multiple ranges per subnet not implemented in v1 (ONE schema limitation)
     - Each pool gets its own shared-network for clarity
     """
@@ -35,7 +36,7 @@ class DhcpGenerator(BaseGenerator):
         - Shared-network definitions (one per pool)
         - Subnet configuration with CIDR
         - Address ranges (range 0 by default)
-        - DHCP options (default-router, name-server, domain-name, lease)
+        - Subnet IDs and DHCP options (default-router, name-server, domain-name, lease)
         - Static-mapping for reservations
 
         Returns:
@@ -48,18 +49,20 @@ class DhcpGenerator(BaseGenerator):
             return commands
 
         # Generate pool configurations
-        for pool in self.dhcp.pools:
+        for subnet_id, pool in enumerate(self.dhcp.pools, start=1):
             shared_network = f"dhcp-{pool.interface}"
 
-            # Subnet must be specified in the pool for VyOS Sagitta
+            # Subnet must be specified in the pool
             if pool.subnet is None:
                 raise ValueError(
                     f"DHCP pool for {pool.interface} missing required 'subnet' field. "
-                    "VyOS Sagitta requires explicit subnet specification."
+                    "VyOS requires explicit subnet specification."
                 )
 
-            # Shared-network and subnet definition (no subnet-id in Sagitta)
-            # Note: subnet-id is not valid in VyOS Sagitta - removed
+            commands.append(
+                f"set service dhcp-server shared-network-name {shared_network} "
+                f"subnet {pool.subnet} subnet-id {subnet_id}"
+            )
 
             # Range configuration (range 0 is the default/first range)
             commands.append(
@@ -71,17 +74,17 @@ class DhcpGenerator(BaseGenerator):
                 f"subnet {pool.subnet} range 0 stop {pool.range_end}"
             )
 
-            # Default gateway (no 'option' prefix in Sagitta)
+            # Default gateway
             commands.append(
                 f"set service dhcp-server shared-network-name {shared_network} "
-                f"subnet {pool.subnet} default-router {pool.gateway}"
+                f"subnet {pool.subnet} option default-router {pool.gateway}"
             )
 
-            # DNS servers (no 'option' prefix in Sagitta)
+            # DNS servers
             for dns in pool.dns:
                 commands.append(
                     f"set service dhcp-server shared-network-name {shared_network} "
-                    f"subnet {pool.subnet} name-server {dns}"
+                    f"subnet {pool.subnet} option name-server {dns}"
                 )
 
             # Optional: Lease time
@@ -91,11 +94,11 @@ class DhcpGenerator(BaseGenerator):
                     f"subnet {pool.subnet} lease {pool.lease_time}"
                 )
 
-            # Optional: Domain name (no 'option' prefix in Sagitta)
+            # Optional: Domain name
             if pool.domain is not None:
                 commands.append(
                     f"set service dhcp-server shared-network-name {shared_network} "
-                    f"subnet {pool.subnet} domain-name {pool.domain}"
+                    f"subnet {pool.subnet} option domain-name {pool.domain}"
                 )
 
         # Generate static reservations
@@ -125,10 +128,9 @@ class DhcpGenerator(BaseGenerator):
             # Static-mapping uses hostname as the mapping name
             mapping_name = reservation.hostname or f"host-{reservation.mac.replace(':', '-')}"
 
-            # Use 'mac-address' instead of 'mac' in Sagitta
             commands.append(
                 f"set service dhcp-server shared-network-name {shared_network} "
-                f"subnet {subnet} static-mapping {mapping_name} mac-address {reservation.mac}"
+                f"subnet {subnet} static-mapping {mapping_name} mac {reservation.mac}"
             )
             commands.append(
                 f"set service dhcp-server shared-network-name {shared_network} "

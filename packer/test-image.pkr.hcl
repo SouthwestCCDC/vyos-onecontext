@@ -5,10 +5,10 @@
 #
 # Usage:
 #   packer init .
-#   packer build -var "base_image=vyos-sagitta-base.qcow2" .
+#   packer build -var "base_image=vyos-circinus-base.qcow2" .
 #
 # Prerequisites:
-#   - Base VyOS Sagitta qcow2 with SSH enabled (from artifacts server)
+#   - Base VyOS Circinus qcow2 with SSH enabled (from artifacts server)
 #   - KVM support (/dev/kvm)
 
 packer {
@@ -26,7 +26,7 @@ packer {
 
 variable "base_image" {
   type        = string
-  description = "Path to VyOS Sagitta base image"
+  description = "Path to VyOS Circinus base image"
 }
 
 variable "vyos_password" {

@@ -7,10 +7,10 @@ concurrency:
 on:
   push:
     branches:
-      - sagitta
+      - circinus
   pull_request:
     branches:
-      - sagitta
+      - circinus
 
 jobs:
   check:
@@ -34,7 +34,7 @@ jobs:
 
   integration:
     # Integration tests require KVM - run on self-hosted runners
-    # Only run on push to sagitta or PRs from the same repo (not forks)
+    # Only run on push to circinus or PRs from the same repo (not forks)
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, amd64, kvm]
     needs: check  # Only run if lint/unit tests pass
@@ -71,7 +71,7 @@ jobs:
       - name: Download base VyOS image
         run: |
           curl -fsSL -o vyos-base.qcow2 \
-            https://artifacts.swccdc.com/iso/vyos-sagitta-base-5733700.qcow2
+            https://magpie.swccdc.com/artifacts/builds/vyos/circinus/base.qcow2/latest
           echo "Downloaded base image:"
           ls -lh vyos-base.qcow2
 
@@ -90,8 +90,8 @@ jobs:
 
           # Determine base ref for comparison
           if [ "${{ github.event_name }}" = "push" ]; then
-            # On push to sagitta: always run all fixtures
-            echo "EVENT: push to sagitta - running ALL fixtures"
+            # On push to circinus: always run all fixtures
+            echo "EVENT: push to circinus - running ALL fixtures"
             echo "fixtures=all" >> $GITHUB_OUTPUT
           else
             # On PR: run only affected fixtures

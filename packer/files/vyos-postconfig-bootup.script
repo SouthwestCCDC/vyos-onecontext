@@ -1,5 +1,5 @@
 #!/bin/sh
-# VyOS Sagitta Post-Config Bootup Script
+# VyOS Circinus Post-Config Bootup Script
 #
 # This script runs from /config/scripts/vyos-postconfig-bootup.script
 # after VyOS configuration is fully applied. It mounts the OpenNebula
