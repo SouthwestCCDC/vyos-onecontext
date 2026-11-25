@@ -81,7 +81,7 @@ These scenarios validate that:
 
 ## CI Integration
 
-In CI, these tests run on self-hosted KVM runners with selective testing based on
+In CI, these tests run on GitHub-hosted runners with KVM enabled, with selective testing based on
 changed files:
 
 - **On pull requests**: Only affected test fixtures are run based on which source
