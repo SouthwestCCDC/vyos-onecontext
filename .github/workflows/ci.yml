@@ -71,7 +71,7 @@ jobs:
       - name: Download base VyOS image
         run: |
           curl -fsSL -o vyos-base.qcow2 \
-            https://artifacts.swccdc.com/iso/vyos-sagitta-base-5733700.qcow2
+            https://magpie.swccdc.com/artifacts/builds/vyos/sagitta/base.qcow2/latest
           echo "Downloaded base image:"
           ls -lh vyos-base.qcow2
 
