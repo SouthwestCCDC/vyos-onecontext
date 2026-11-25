@@ -1,6 +1,6 @@
 # Context Variable Reference
 
-This document defines all context variables supported by VyOS Sagitta contextualization.
+This document defines all context variables supported by VyOS Circinus contextualization.
 
 ## Standard OpenNebula Variables
 
@@ -204,7 +204,7 @@ set vrf name management protocols static route 192.168.0.0/16 next-hop 10.0.1.25
 
 ### OSPF_JSON
 
-OSPF dynamic routing configuration using interface-based syntax (Sagitta best practice).
+OSPF dynamic routing configuration using interface-based syntax (Sagitta and later best practice).
 
 **Schema:**
 
@@ -912,11 +912,11 @@ set firewall group port-group WEB port 80
 set firewall group port-group WEB port 443
 
 # Zones
-set firewall zone WAN interface eth0
+set firewall zone WAN member interface eth0
 set firewall zone WAN default-action drop
-set firewall zone GAME interface eth1
+set firewall zone GAME member interface eth1
 set firewall zone GAME default-action drop
-set firewall zone SCORING interface eth2
+set firewall zone SCORING member interface eth2
 set firewall zone SCORING default-action drop
 
 # Policy: GAME to SCORING

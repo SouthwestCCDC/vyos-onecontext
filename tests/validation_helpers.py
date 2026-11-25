@@ -1707,9 +1707,9 @@ def check_dhcp_options(
         show configuration commands | grep dhcp-server
         Returns output like:
             set service dhcp-server shared-network-name dhcp-eth1 subnet 10.1.1.0/24 \
-                default-router 10.1.1.1
+                option default-router 10.1.1.1
             set service dhcp-server shared-network-name dhcp-eth1 subnet 10.1.1.0/24 \
-                name-server 10.63.4.101
+                option name-server 10.63.4.101
 
     Args:
         ssh: SSH connection callable from ssh_connection fixture
@@ -1744,7 +1744,7 @@ def check_dhcp_options(
     # Check default-router if provided
     if default_router is not None:
         router_pattern = re.compile(
-            rf"shared-network-name\s+{re.escape(network_name)}\s+subnet\s+\S+\s+default-router\s+{re.escape(default_router)}"
+            rf"shared-network-name\s+{re.escape(network_name)}\s+subnet\s+\S+\s+option\s+default-router\s+{re.escape(default_router)}"
         )
         if not router_pattern.search(output):
             failures.append(f"default-router '{default_router}' not found")
@@ -1753,7 +1753,7 @@ def check_dhcp_options(
     if dns_servers is not None:
         for dns in dns_servers:
             dns_pattern = re.compile(
-                rf"shared-network-name\s+{re.escape(network_name)}\s+subnet\s+\S+\s+name-server\s+{re.escape(dns)}"
+                rf"shared-network-name\s+{re.escape(network_name)}\s+subnet\s+\S+\s+option\s+name-server\s+{re.escape(dns)}"
             )
             if not dns_pattern.search(output):
                 failures.append(f"name-server '{dns}' not found")

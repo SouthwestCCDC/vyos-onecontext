@@ -1,8 +1,8 @@
-# VyOS Sagitta Contextualization: Design Document
+# VyOS Circinus Contextualization: Design Document
 
 ## Overview
 
-This document describes the design for VyOS Sagitta (1.4.x) contextualization scripts
+This document describes the design for VyOS Circinus (1.5.x) contextualization scripts
 used with OpenNebula. These scripts configure VyOS routers at boot time based on
 context variables provided by OpenNebula.
 
@@ -617,6 +617,22 @@ fi
 | Reproducible | Same wheel + dependencies every build |
 | Testable | Exact same code runs in dev and production |
 
+## Circinus Syntax Notes
+
+VyOS 1.5 (Circinus) changes these command paths from 1.4 (Sagitta):
+
+| Feature | Sagitta | Circinus |
+|---------|---------|----------|
+| Subnet ID | not supported | `subnet X subnet-id N` (required, unique) |
+| Gateway | `subnet X default-router Y` | `subnet X option default-router Y` |
+| DNS | `subnet X name-server Y` | `subnet X option name-server Y` |
+| Domain | `subnet X domain-name Y` | `subnet X option domain-name Y` |
+| Static mapping MAC | `static-mapping N mac-address M` | `static-mapping N mac M` |
+| Firewall zone interface | `firewall zone Z interface I` | `firewall zone Z member interface I` |
+| Remote syslog | `system syslog host H ...` | `system syslog remote H ...` |
+
+The DHCP generator numbers subnets by pool order, starting at 1.
+
 ## Sagitta Syntax Notes
 
 VyOS 1.4 (Sagitta) has syntax changes from 1.3 (Equuleus):
@@ -746,9 +762,9 @@ set firewall group port-group WEB port 443
 
 3. **Zone definitions:**
 ```
-set firewall zone WAN interface eth0
+set firewall zone WAN member interface eth0
 set firewall zone WAN default-action drop
-set firewall zone GAME interface eth1
+set firewall zone GAME member interface eth1
 set firewall zone GAME default-action drop
 ```
 
@@ -796,9 +812,9 @@ These items are not in v1 scope but are documented for future consideration:
 
 **External:**
 
-- [VyOS 1.4 Documentation](https://docs.vyos.io/en/sagitta/)
+- [VyOS 1.5 Documentation](https://docs.vyos.io/en/1.5/)
 - [OpenNebula Contextualization](https://docs.opennebula.io/6.8/management_and_operations/references/template.html#context-section)
-- [VyOS Cloud-Init](https://docs.vyos.io/en/sagitta/automation/cloud-init.html)
+- [VyOS Cloud-Init](https://docs.vyos.io/en/1.5/automation/cloud-init.html)
 
 ---
 

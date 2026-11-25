@@ -1,8 +1,8 @@
 # vyos-onecontext
 
-[![CI](https://github.com/SouthwestCCDC/vyos-onecontext/actions/workflows/ci.yml/badge.svg?branch=sagitta)](https://github.com/SouthwestCCDC/vyos-onecontext/actions/workflows/ci.yml)
+[![CI](https://github.com/SouthwestCCDC/vyos-onecontext/actions/workflows/ci.yml/badge.svg?branch=circinus)](https://github.com/SouthwestCCDC/vyos-onecontext/actions/workflows/ci.yml)
 
-OpenNebula contextualization for VyOS Sagitta (1.4.x) router images.
+OpenNebula contextualization for VyOS Circinus (1.5.x) router images.
 
 ## Overview
 
@@ -35,7 +35,7 @@ state without drift.
 - START_CONFIG (raw VyOS commands)
 - Management VRF interface placement
 - Static routing with VRF support
-- OSPF dynamic routing (interface-based, Sagitta syntax)
+- OSPF dynamic routing (interface-based syntax)
 - DHCP server (pools and reservations)
 - Source NAT (masquerading)
 - Destination NAT (port forwarding)
@@ -173,12 +173,13 @@ See [Context Variable Reference](docs/context-reference.md) for all supported va
 
 ## Branches
 
-- **sagitta** - VyOS Sagitta (1.4.x LTS) - active development
+- **circinus** - VyOS Circinus (1.5.x) - active development
+- **sagitta** - VyOS Sagitta (1.4.x LTS) - current production images
 - **legacy/equuleus** - VyOS Equuleus (1.3.x) - maintenance only, EOL upstream
 
 ## Related
 
-- [VyOS Sagitta Documentation](https://docs.vyos.io/en/sagitta/)
+- [VyOS Circinus Documentation](https://docs.vyos.io/en/1.5/)
 - [OpenNebula Contextualization](https://docs.opennebula.io/6.8/management_and_operations/references/template.html#context-section)
 
 ---

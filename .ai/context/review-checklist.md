@@ -11,8 +11,8 @@ Use this checklist when reviewing PRs or pre-commit changes.
 
 ## VyOS Specific
 
-- [ ] Correct VyOS Sagitta syntax (NOT Equuleus)
-- [ ] Commands tested against actual VyOS Sagitta
+- [ ] Correct VyOS Circinus syntax (NOT Sagitta or Equuleus)
+- [ ] Commands tested against actual VyOS Circinus
 - [ ] No deprecated VyOS features used
 - [ ] Configuration paths match VyOS hierarchy
 

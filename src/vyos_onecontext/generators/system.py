@@ -138,7 +138,7 @@ class SyslogGenerator(BaseGenerator):
         if self.syslog_host is None:
             return []
 
-        return [f"set system syslog host {self.syslog_host} facility all level info"]
+        return [f"set system syslog remote {self.syslog_host} facility all level info"]
 
 
 class ConntrackGenerator(BaseGenerator):

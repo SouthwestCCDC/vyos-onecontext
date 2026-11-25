@@ -10,7 +10,7 @@ tests miss (like the quote bug in #40).
 
 ## Requirements
 
-- **VyOS image**: A VyOS Sagitta (1.4.x) qcow2 image with vyos-onecontext installed
+- **VyOS image**: A VyOS Circinus (1.5.x) qcow2 image with vyos-onecontext installed
 - **QEMU/KVM**: For running the VM
 - **genisoimage or mkisofs**: For creating context ISOs
 - **sshpass**: Required for SSH-based validation
@@ -81,12 +81,12 @@ These scenarios validate that:
 
 ## CI Integration
 
-In CI, these tests run on self-hosted KVM runners with selective testing based on
-changed files:
+In CI, these tests run on GitHub-hosted runners with KVM enabled, with selective testing based on
+changed files. They're skipped on PRs from forks, which can't read the private base image:
 
 - **On pull requests**: Only affected test fixtures are run based on which source
   files changed (see `.github/test-mapping.yml` for the mapping)
-- **On push to sagitta**: All test fixtures run to ensure comprehensive coverage
+- **On push to circinus**: All test fixtures run to ensure comprehensive coverage
 
 This selective testing approach reduces CI time for typical PRs from 25-30 minutes
 to 2-6 minutes, while maintaining full coverage on the main branch.

@@ -13,7 +13,7 @@ Usage:
     select-fixtures.py <base-ref> <head-ref>
 
 Arguments:
-    base-ref: Git reference for the base (e.g., origin/sagitta)
+    base-ref: Git reference for the base (e.g., origin/circinus)
     head-ref: Git reference for the head (e.g., HEAD)
 
 Outputs:
@@ -262,7 +262,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Select integration test fixtures based on changed files"
     )
-    parser.add_argument("base_ref", help="Base git reference (e.g., origin/sagitta)")
+    parser.add_argument("base_ref", help="Base git reference (e.g., origin/circinus)")
     parser.add_argument(
         "head_ref", help="Head git reference (e.g., HEAD)", nargs="?", default="HEAD"
     )

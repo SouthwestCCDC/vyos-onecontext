@@ -2046,14 +2046,15 @@ class TestDhcpGenerator:
         gen = DhcpGenerator(dhcp)
         commands = gen.generate()
 
-        # Should have: range start/stop, default-router, name-server (no subnet-id in Sagitta)
-        assert len(commands) == 4
+        # Should have: subnet-id, range start/stop, default-router, name-server
+        assert len(commands) == 5
         # Use prefix variable to avoid long lines
         prefix = "set service dhcp-server shared-network-name dhcp-eth1 subnet 10.1.1.0/24"
+        assert f"{prefix} subnet-id 1" in commands
         assert f"{prefix} range 0 start 10.1.1.100" in commands
         assert f"{prefix} range 0 stop 10.1.1.200" in commands
-        assert f"{prefix} default-router 10.1.1.1" in commands
-        assert f"{prefix} name-server 10.1.1.1" in commands
+        assert f"{prefix} option default-router 10.1.1.1" in commands
+        assert f"{prefix} option name-server 10.1.1.1" in commands
 
     def test_dhcp_pool_with_multiple_dns(self):
         """Test DHCP pool with multiple DNS servers."""
@@ -2077,8 +2078,8 @@ class TestDhcpGenerator:
 
         # Should have two name-server commands
         prefix = "set service dhcp-server shared-network-name dhcp-eth1 subnet 10.1.1.0/24"
-        assert f"{prefix} name-server 10.1.1.1" in commands
-        assert f"{prefix} name-server 8.8.8.8" in commands
+        assert f"{prefix} option name-server 10.1.1.1" in commands
+        assert f"{prefix} option name-server 8.8.8.8" in commands
 
     def test_dhcp_pool_with_lease_time(self):
         """Test DHCP pool with custom lease time."""
@@ -2126,7 +2127,7 @@ class TestDhcpGenerator:
         commands = gen.generate()
 
         prefix = "set service dhcp-server shared-network-name dhcp-eth1 subnet 10.1.1.0/24"
-        assert f"{prefix} domain-name example.local" in commands
+        assert f"{prefix} option domain-name example.local" in commands
 
     def test_dhcp_pool_with_all_options(self):
         """Test DHCP pool with all optional fields."""
@@ -2154,11 +2155,11 @@ class TestDhcpGenerator:
         prefix = "set service dhcp-server shared-network-name dhcp-eth1 subnet 10.1.1.0/24"
         assert f"{prefix} range 0 start 10.1.1.100" in commands
         assert f"{prefix} range 0 stop 10.1.1.200" in commands
-        assert f"{prefix} default-router 10.1.1.1" in commands
-        assert f"{prefix} name-server 10.1.1.1" in commands
-        assert f"{prefix} name-server 8.8.8.8" in commands
+        assert f"{prefix} option default-router 10.1.1.1" in commands
+        assert f"{prefix} option name-server 10.1.1.1" in commands
+        assert f"{prefix} option name-server 8.8.8.8" in commands
         assert f"{prefix} lease 86400" in commands
-        assert f"{prefix} domain-name example.local" in commands
+        assert f"{prefix} option domain-name example.local" in commands
 
     def test_dhcp_multiple_pools(self):
         """Test DHCP with multiple pools on different interfaces."""
@@ -2188,13 +2189,17 @@ class TestDhcpGenerator:
         gen = DhcpGenerator(dhcp)
         commands = gen.generate()
 
-        # Should have commands for both pools (no subnet-id in Sagitta)
+        # Should have commands for both pools, each with a unique subnet-id
         # Pool 1 (eth1)
         prefix1 = "set service dhcp-server shared-network-name dhcp-eth1 subnet 10.1.1.0/24"
+        assert f"{prefix1} subnet-id 1" in commands
         assert f"{prefix1} range 0 start 10.1.1.100" in commands
         # Pool 2 (eth2)
         prefix2 = "set service dhcp-server shared-network-name dhcp-eth2 subnet 192.168.1.0/24"
+        assert f"{prefix2} subnet-id 2" in commands
         assert f"{prefix2} range 0 start 192.168.1.100" in commands
+        subnet_ids = [c.rsplit(" ", 1)[1] for c in commands if " subnet-id " in c]
+        assert subnet_ids == ["1", "2"]
 
     def test_dhcp_pool_missing_subnet_raises_error(self):
         """Test that pool without subnet raises error."""
@@ -2250,7 +2255,7 @@ class TestDhcpGenerator:
 
         # Should have pool commands + reservation commands
         prefix = "set service dhcp-server shared-network-name dhcp-eth1 subnet 10.1.1.0/24"
-        assert f"{prefix} static-mapping server01 mac-address 00:11:22:33:44:55" in commands
+        assert f"{prefix} static-mapping server01 mac 00:11:22:33:44:55" in commands
         assert f"{prefix} static-mapping server01 ip-address 10.1.1.50" in commands
 
     def test_dhcp_reservation_without_hostname(self):
@@ -2284,7 +2289,7 @@ class TestDhcpGenerator:
         # Should use MAC-based name
         prefix = "set service dhcp-server shared-network-name dhcp-eth1 subnet 10.1.1.0/24"
         mapping = "host-00-11-22-33-44-55"
-        assert f"{prefix} static-mapping {mapping} mac-address 00:11:22:33:44:55" in commands
+        assert f"{prefix} static-mapping {mapping} mac 00:11:22:33:44:55" in commands
         assert f"{prefix} static-mapping {mapping} ip-address 10.1.1.50" in commands
 
     def test_dhcp_reservation_no_matching_pool_raises_error(self):
@@ -2355,9 +2360,9 @@ class TestDhcpGenerator:
 
         # Should have both reservations
         prefix = "set service dhcp-server shared-network-name dhcp-eth1 subnet 10.1.1.0/24"
-        assert f"{prefix} static-mapping server01 mac-address 00:11:22:33:44:55" in commands
+        assert f"{prefix} static-mapping server01 mac 00:11:22:33:44:55" in commands
         assert f"{prefix} static-mapping server01 ip-address 10.1.1.50" in commands
-        assert f"{prefix} static-mapping server02 mac-address 00:11:22:33:44:66" in commands
+        assert f"{prefix} static-mapping server02 mac 00:11:22:33:44:66" in commands
         assert f"{prefix} static-mapping server02 ip-address 10.1.1.51" in commands
 
     def test_dhcp_empty_config(self):
@@ -3011,7 +3016,7 @@ class TestFirewallGenerator:
         gen = FirewallGenerator(firewall)
         commands = gen.generate()
 
-        assert "set firewall zone WAN interface eth0" in commands
+        assert "set firewall zone WAN member interface eth0" in commands
         assert "set firewall zone WAN default-action drop" in commands
 
     def test_generate_zone_with_multiple_interfaces(self):
@@ -3028,9 +3033,9 @@ class TestFirewallGenerator:
         gen = FirewallGenerator(firewall)
         commands = gen.generate()
 
-        assert "set firewall zone GAME interface eth1" in commands
-        assert "set firewall zone GAME interface eth2" in commands
-        assert "set firewall zone GAME interface eth3" in commands
+        assert "set firewall zone GAME member interface eth1" in commands
+        assert "set firewall zone GAME member interface eth2" in commands
+        assert "set firewall zone GAME member interface eth3" in commands
         assert "set firewall zone GAME default-action drop" in commands
 
     def test_generate_multiple_zones(self):
@@ -3057,11 +3062,11 @@ class TestFirewallGenerator:
         gen = FirewallGenerator(firewall)
         commands = gen.generate()
 
-        assert "set firewall zone WAN interface eth0" in commands
+        assert "set firewall zone WAN member interface eth0" in commands
         assert "set firewall zone WAN default-action drop" in commands
-        assert "set firewall zone GAME interface eth1" in commands
+        assert "set firewall zone GAME member interface eth1" in commands
         assert "set firewall zone GAME default-action reject" in commands
-        assert "set firewall zone SCORING interface eth2" in commands
+        assert "set firewall zone SCORING member interface eth2" in commands
         assert "set firewall zone SCORING default-action drop" in commands
 
     # Policy Tests
@@ -3504,9 +3509,9 @@ class TestFirewallGenerator:
         assert "set firewall group port-group WEB port 80" in commands
 
         # Should have zones
-        assert "set firewall zone WAN interface eth0" in commands
-        assert "set firewall zone GAME interface eth1" in commands
-        assert "set firewall zone SCORING interface eth2" in commands
+        assert "set firewall zone WAN member interface eth0" in commands
+        assert "set firewall zone GAME member interface eth1" in commands
+        assert "set firewall zone SCORING member interface eth2" in commands
 
         # Should have policies
         assert (
@@ -4151,7 +4156,9 @@ class TestSyslogGenerator:
         commands = gen.generate()
 
         assert len(commands) == 1
-        assert commands[0] == "set system syslog host mon.infra.swccdc.com facility all level info"
+        assert commands[0] == (
+            "set system syslog remote mon.infra.swccdc.com facility all level info"
+        )
 
     def test_generate_with_ip_address(self):
         """Test syslog configuration with an IP address."""
@@ -4159,7 +4166,7 @@ class TestSyslogGenerator:
         commands = gen.generate()
 
         assert len(commands) == 1
-        assert commands[0] == "set system syslog host 192.168.1.10 facility all level info"
+        assert commands[0] == "set system syslog remote 192.168.1.10 facility all level info"
 
     def test_generate_with_ipv6_bare(self):
         """Test syslog configuration with a bare IPv6 address."""
@@ -4167,7 +4174,7 @@ class TestSyslogGenerator:
         commands = gen.generate()
 
         assert len(commands) == 1
-        assert commands[0] == "set system syslog host 2001:db8::1 facility all level info"
+        assert commands[0] == "set system syslog remote 2001:db8::1 facility all level info"
 
     def test_generate_with_ipv6_bracketed(self):
         """Test syslog configuration with a bracketed IPv6 address."""
@@ -4175,7 +4182,7 @@ class TestSyslogGenerator:
         commands = gen.generate()
 
         assert len(commands) == 1
-        assert commands[0] == "set system syslog host [2001:db8::1] facility all level info"
+        assert commands[0] == "set system syslog remote [2001:db8::1] facility all level info"
 
     def test_generate_without_syslog_host(self):
         """Test that no commands are emitted when syslog_host is None."""
@@ -4201,7 +4208,7 @@ class TestSyslogGenerator:
         commands = generate_config(config)
 
         assert any(
-            "set system syslog host mon.infra.swccdc.com facility all level info" in cmd
+            "set system syslog remote mon.infra.swccdc.com facility all level info" in cmd
             for cmd in commands
         )
 
