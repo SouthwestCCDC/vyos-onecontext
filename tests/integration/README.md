@@ -82,7 +82,7 @@ These scenarios validate that:
 ## CI Integration
 
 In CI, these tests run on GitHub-hosted runners with KVM enabled, with selective testing based on
-changed files:
+changed files. They're skipped on PRs from forks, which can't read the private base image:
 
 - **On pull requests**: Only affected test fixtures are run based on which source
   files changed (see `.github/test-mapping.yml` for the mapping)
