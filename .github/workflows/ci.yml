@@ -33,10 +33,13 @@ jobs:
         run: just check
 
   integration:
-    # Integration tests require KVM - run on self-hosted runners
-    # Only run on push to sagitta or PRs from the same repo (not forks)
+    # Integration tests run on GitHub-hosted runners (KVM enabled below) against the
+    # base image in the private SouthwestCCDC/vyos-ci-images repo. Fork PRs don't get
+    # the app secret that reads it, so they only run on push to sagitta or same-repo PRs.
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, amd64, kvm]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     needs: check  # Only run if lint/unit tests pass
 
     steps:
@@ -45,9 +48,17 @@ jobs:
         with:
           fetch-depth: 0  # Need full history for git diff
 
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          sudo udevadm settle
+
       - name: Verify KVM access
         run: |
-          if [ ! -e /dev/kvm ]; then
+          if [ ! -w /dev/kvm ]; then
             echo "ERROR: /dev/kvm not available"
             exit 1
           fi
@@ -68,10 +79,22 @@ jobs:
           # Install Python dependencies for pytest integration tests
           uv sync --group dev
 
+      - name: Create base image token
+        id: images-token
+        uses: actions/create-github-app-token@v3.3.0
+        with:
+          client-id: ${{ vars.VYOS_CI_IMAGES_APP_CLIENT_ID }}
+          private-key: ${{ secrets.VYOS_CI_IMAGES_APP_PRIVATE_KEY }}
+          owner: SouthwestCCDC
+          repositories: vyos-ci-images
+          permission-contents: read
+
       - name: Download base VyOS image
+        env:
+          GH_TOKEN: ${{ steps.images-token.outputs.token }}
         run: |
-          curl -fsSL -o vyos-base.qcow2 \
-            https://magpie.swccdc.com/artifacts/builds/vyos/sagitta/base.qcow2/latest
+          # Published by SouthwestCCDC/deployment packer/images/base/vyos-sagitta
+          gh release download sagitta -R SouthwestCCDC/vyos-ci-images -p base.qcow2 -O vyos-base.qcow2
           echo "Downloaded base image:"
           ls -lh vyos-base.qcow2
 
