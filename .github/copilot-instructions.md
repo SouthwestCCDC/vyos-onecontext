@@ -79,7 +79,7 @@ Our CI pipeline handles:
 - Python linting (`ruff`)
 - Type checking (`mypy`)
 - Unit tests (`pytest`)
-- Packer build and QEMU integration tests (runs on eligible self-hosted runners)
+- Packer build and QEMU integration tests (runs on GitHub-hosted runners with KVM; base image from the private SouthwestCCDC/vyos-ci-images repo)
 
 **Do not duplicate feedback** on issues these tools catch. Focus on VyOS command correctness, context variable handling, and router configuration logic.
 
